@@ -63,7 +63,7 @@ uv run uvicorn app.factory:create_app --host 0.0.0.0 --port 8000 --reload
 | 版本管理 | 每次改前自动快照，误改一键回滚 |
 | 标签治理 | 同义合并 / 别名映射 / 词云 / 智能推荐 |
 | 内容质检 | 可读性 + SEO + 近似重复检测，一键出报告 |
-| MCP Server | 16 个 Tool，stdio + SSE，对接 Claude Code / Cursor / Windsurf |
+| MCP Server | 23 个 Tool，stdio + SSE，对接 Claude Code / Cursor / Windsurf |
 | Webhook | 任务完成/失败/等人工 10 种事件，HMAC 签名，自动禁僵尸 |
 | SSE 实时流 | 前端 EventSource 长连接，任务进度实时推送 |
 

@@ -187,28 +187,28 @@ SQLite 单文件，WAL 模式 + 30s busy_timeout。
 
 ## 7. REST API 路径总览
 
-> 所有长任务返回 `task_id`，轮询 `GET /api/hub/tasks/{task_id}` 获取进度。
+> 所有长任务返回 `task_id`，轮询 `GET /api/v1/hub/tasks/{task_id}` 获取进度。
 
 | 域 | 端点 |
 |---|---|
-| **总览** | `GET /api/hub/status` · `GET /api/hub/platforms` · `GET /api/hub/metrics` |
-| **文章** | `GET/POST /api/hub/articles` · `GET/PUT /api/hub/articles/{id}` · `GET /api/hub/articles/search/{kw}` |
-| **发布** | `POST /api/hub/articles/{id}/publish` · `POST /api/hub/articles/{id}/update` · `POST /api/hub/sync/pending` |
-| **任务** | `GET /api/hub/tasks` · `GET /api/hub/tasks/{id}` · `POST /api/hub/tasks/{id}/resume` |
-| **账号** | `GET /api/hub/accounts` · `GET /api/hub/accounts/{p}/check` · `POST /api/hub/accounts/{p}/login` · `DELETE /api/hub/accounts/{p}` |
-| **账号+** | `GET /api/hub/accounts/{p}/diagnose` · `POST /api/hub/accounts/{p}/solve-captcha` · `POST /api/hub/accounts/{p}/assist` · `POST /api/hub/refresh/{p}` |
-| **AI** | `POST /api/hub/ai/write` · `POST /api/hub/articles/{id}/ai-rewrite` · `POST /api/hub/articles/{id}/ai-polish` · `GET /api/hub/ai/status` · `GET /api/hub/ai/gate` |
-| **AI增强** | `POST /api/hub/articles/{id}/ai-translate` · `GET /api/hub/articles/{id}/ai-image-prompts` · `GET /api/hub/articles/{id}/ai-outline` · `GET /api/hub/articles/{id}/ai-seo` · `POST /api/hub/articles/{id}/clone` · `GET /api/hub/ai/templates` |
-| **版本** | `GET /api/hub/articles/{id}/versions` · `GET /api/hub/articles/{id}/versions/{vid}` · `GET /api/hub/articles/{id}/versions/diff` · `POST /api/hub/articles/{id}/versions/{vid}/rollback` |
-| **定时** | `GET/POST /api/hub/schedules` · `GET/PUT /api/hub/schedules/{sid}` · `POST /api/hub/schedules/{sid}/pause` · `POST /api/hub/schedules/{sid}/resume` · `POST /api/hub/schedules/{sid}/trigger` · `DELETE /api/hub/schedules/{sid}` |
-| **标签** | `GET /api/hub/tags` · `GET /api/hub/tags/trending` · `POST /api/hub/tags/sync` · `POST /api/hub/tags/rename` · `POST /api/hub/tags/merge` · `POST /api/hub/tags/alias` · `POST /api/hub/tags/suggest` |
-| **AI模型** | `GET /api/hub/ai/providers`（多 Provider 列表 + 模型 + 价格级别 + 冷却状态） |
-| **质检** | `POST /api/hub/articles/{id}/qa` · `POST /api/hub/qa/analyze`（可读性 + SEO + 重复度 0-100 评分） |
-| **Webhook** | `GET/POST /api/hub/webhooks` · `PUT/DELETE /api/hub/webhooks/{id}` · `POST /api/hub/webhooks/{id}/test` |
-| **通知** | `GET /api/hub/notifications`（环形缓冲最近事件） |
-| **发布实例** | `GET /api/hub/publications` · `GET /api/hub/pending-human` |
+| **总览** | `GET /api/v1/hub/status` · `GET /api/v1/hub/platforms` · `GET /api/v1/hub/metrics` |
+| **文章** | `GET/POST /api/v1/hub/articles` · `GET/PUT /api/v1/hub/articles/{id}` · `GET /api/v1/hub/articles/search/{kw}` |
+| **发布** | `POST /api/v1/hub/articles/{id}/publish` · `POST /api/v1/hub/articles/{id}/update` · `POST /api/v1/hub/sync/pending` |
+| **任务** | `GET /api/v1/hub/tasks` · `GET /api/v1/hub/tasks/{id}` · `POST /api/v1/hub/tasks/{id}/resume` |
+| **账号** | `GET /api/v1/hub/accounts` · `GET /api/v1/hub/accounts/{p}/check` · `POST /api/v1/hub/accounts/{p}/login` · `DELETE /api/v1/hub/accounts/{p}` |
+| **账号+** | `GET /api/v1/hub/accounts/{p}/diagnose` · `POST /api/v1/hub/accounts/{p}/solve-captcha` · `POST /api/v1/hub/accounts/{p}/assist` · `POST /api/v1/hub/refresh/{p}` |
+| **AI** | `POST /api/v1/hub/ai/write` · `POST /api/v1/hub/articles/{id}/ai-rewrite` · `POST /api/v1/hub/articles/{id}/ai-polish` · `GET /api/v1/hub/ai/status` · `GET /api/v1/hub/ai/gate` |
+| **AI增强** | `POST /api/v1/hub/articles/{id}/ai-translate` · `GET /api/v1/hub/articles/{id}/ai-image-prompts` · `GET /api/v1/hub/articles/{id}/ai-outline` · `GET /api/v1/hub/articles/{id}/ai-seo` · `POST /api/v1/hub/articles/{id}/clone` · `GET /api/v1/hub/ai/templates` |
+| **版本** | `GET /api/v1/hub/articles/{id}/versions` · `GET /api/v1/hub/articles/{id}/versions/{vid}` · `GET /api/v1/hub/articles/{id}/versions/diff` · `POST /api/v1/hub/articles/{id}/versions/{vid}/rollback` |
+| **定时** | `GET/POST /api/v1/hub/schedules` · `GET/PUT /api/v1/hub/schedules/{sid}` · `POST /api/v1/hub/schedules/{sid}/pause` · `POST /api/v1/hub/schedules/{sid}/resume` · `POST /api/v1/hub/schedules/{sid}/trigger` · `DELETE /api/v1/hub/schedules/{sid}` |
+| **标签** | `GET /api/v1/hub/tags` · `GET /api/v1/hub/tags/trending` · `POST /api/v1/hub/tags/sync` · `POST /api/v1/hub/tags/rename` · `POST /api/v1/hub/tags/merge` · `POST /api/v1/hub/tags/alias` · `POST /api/v1/hub/tags/suggest` |
+| **AI模型** | `GET /api/v1/hub/ai/providers`（多 Provider 列表 + 模型 + 价格级别 + 冷却状态） |
+| **质检** | `POST /api/v1/hub/articles/{id}/qa` · `POST /api/v1/hub/qa/analyze`（可读性 + SEO + 重复度 0-100 评分） |
+| **Webhook** | `GET/POST /api/v1/hub/webhooks` · `PUT/DELETE /api/v1/hub/webhooks/{id}` · `POST /api/v1/hub/webhooks/{id}/test` |
+| **通知** | `GET /api/v1/hub/notifications`（环形缓冲最近事件） |
+| **发布实例** | `GET /api/v1/hub/publications` · `GET /api/v1/hub/pending-human` |
 
-交互式文档：`GET /api/hub/docs`（Swagger UI）/ `GET /api/hub/redoc`。
+交互式文档：`GET /api/v1/hub/docs`（Swagger UI）/ `GET /api/v1/hub/redoc`。
 
 ## 8. 设计决策（ADR）
 

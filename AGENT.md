@@ -110,7 +110,7 @@ content-harbor/
 │   ├── check_all.ps1            # 一键门禁（Windows）
 │   ├── check_all.sh             # 一键门禁（Linux/macOS）
 │   └── backup_data.py           # 数据备份（在线一致性快照）
-├── mcp_server.py                # MCP Server（16 Tool，stdio + SSE）
+├── mcp_server.py                # MCP Server（23 Tool，stdio + SSE）
 ├── deploy/                      # Docker 部署
 └── docs/
     ├── architecture/ARCHITECTURE.md

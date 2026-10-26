@@ -136,20 +136,20 @@ cd backed && uv run python -m backed.cli publish --id 5 --platforms cnblogs,juej
 
 | 端点 | 方法 | 用途 |
 |------|------|------|
-| `/api/hub/health` | GET | 服务健康检查（db/events_log/ai_ready） |
-| `/api/hub/platforms` | GET | 列出 9 个平台适配器 |
-| `/api/hub/articles` | POST | 新建文章 |
-| `/api/hub/articles/{id}/publish` | POST | 发布 `{"platforms":["cnblogs"],"draft_only":false}` |
-| `/api/hub/ai/write` | POST | AI 写稿 `{"topic":"...","words":3000}` |
-| `/api/hub/ai/gate` | POST | 合规门禁检查 |
-| `/api/hub/metrics` | GET | Prometheus 格式指标 |
-| `/api/hub/jobs` | GET | 发布任务列表 |
+| `/api/v1/hub/health` | GET | 服务健康检查（db/events_log/ai_ready） |
+| `/api/v1/hub/platforms` | GET | 列出 10 个平台适配器 |
+| `/api/v1/hub/articles` | POST | 新建文章 |
+| `/api/v1/hub/articles/{id}/publish` | POST | 发布 `{"platforms":["cnblogs"],"draft_only":false}` |
+| `/api/v1/hub/ai/write` | POST | AI 写稿 `{"topic":"...","words":3000}` |
+| `/api/v1/hub/ai/gate` | POST | 合规门禁检查 |
+| `/api/v1/hub/metrics` | GET | Prometheus 格式指标 |
+| `/api/v1/hub/jobs` | GET | 发布任务列表 |
 
 ---
 
 ## 五、当前状态
 
-- 服务在 `127.0.0.1:8800` 运行中，`/api/hub/health` 全绿
+- 服务在 `127.0.0.1:8800` 运行中，`/api/v1/hub/health` 全绿
 - `config.json` 里 cnblogs 三项还是**模板占位符**，需填入真实值才能发布
 - 浏览器平台均未扫码登录，需先 `login --headed` 各做一次
-- AI API 已配置（Agnes 3.0-flash），`/api/hub/ai/status` 返回 ready
+- AI API 已配置（Agnes 3.0-flash），`/api/v1/hub/ai/status` 返回 ready

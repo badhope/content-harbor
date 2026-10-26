@@ -35,7 +35,7 @@ start.bat           # Windows
 cd backed && uv sync && uv run uvicorn app.factory:create_app --host 0.0.0.0 --port 8000 --reload
 ```
 
-- API docs: http://localhost:8000/api/hub/docs
+- API docs: http://localhost:8000/api/v1/hub/docs
 - Deployment: see `deploy/` (docker-compose + Dockerfile + Nginx reverse proxy)
 
 Web UI: build the frontend once (`cd web && pnpm install && pnpm build`, output goes to `server/static/`), then the backend serves it at the root URL.
@@ -74,21 +74,21 @@ All long-running tasks (publish / update / login / sync / refresh) go into a sin
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/hub/status` | Overview |
-| GET | `/api/hub/platforms` | List supported platforms |
-| GET/POST | `/api/hub/articles` | List / create articles |
-| GET/PUT | `/api/hub/articles/{id}` | Read / update article |
-| POST | `/api/hub/articles/{id}/publish` | Publish (returns `task_id`, poll async) |
-| POST | `/api/hub/articles/{id}/update` | In-place update (returns `task_id`) |
-| POST | `/api/hub/sync/pending` | Push all pending updates (returns `task_id`) |
-| POST | `/api/hub/refresh/{platform}` | Fetch platform articles (returns `task_id`) |
-| GET/PUT | `/api/hub/tasks` / `/api/hub/tasks/{task_id}` | Task list / detail |
-| POST | `/api/hub/tasks/{task_id}/resume` | Resume a `waiting_human` task |
-| GET/POST | `/api/hub/accounts` | Account status and login |
-| GET/POST | `/api/hub/ai/write` | AI draft + auto-publish |
-| GET | `/api/hub/metrics` | Real-time counters and histograms |
+| GET | `/api/v1/hub/status` | Overview |
+| GET | `/api/v1/hub/platforms` | List supported platforms |
+| GET/POST | `/api/v1/hub/articles` | List / create articles |
+| GET/PUT | `/api/v1/hub/articles/{id}` | Read / update article |
+| POST | `/api/v1/hub/articles/{id}/publish` | Publish (returns `task_id`, poll async) |
+| POST | `/api/v1/hub/articles/{id}/update` | In-place update (returns `task_id`) |
+| POST | `/api/v1/hub/sync/pending` | Push all pending updates (returns `task_id`) |
+| POST | `/api/v1/hub/refresh/{platform}` | Fetch platform articles (returns `task_id`) |
+| GET/PUT | `/api/v1/hub/tasks` / `/api/v1/hub/tasks/{task_id}` | Task list / detail |
+| POST | `/api/v1/hub/tasks/{task_id}/resume` | Resume a `waiting_human` task |
+| GET/POST | `/api/v1/hub/accounts` | Account status and login |
+| GET/POST | `/api/v1/hub/ai/write` | AI draft + auto-publish |
+| GET | `/api/v1/hub/metrics` | Real-time counters and histograms |
 
-Interactive API docs: http://localhost:8000/api/hub/docs
+Interactive API docs: http://localhost:8000/api/v1/hub/docs
 
 ## AI Writing
 
@@ -98,7 +98,7 @@ export AI_BASE_URL=https://api.deepseek.com/v1
 export AI_MODEL=deepseek-chat
 
 # Draft + publish in one shot
-curl -X POST http://localhost:8000/api/hub/ai/write \
+curl -X POST http://localhost:8000/api/v1/hub/ai/write \
   -H 'Content-Type: application/json' \
   -d '{"topic":"How to build an AI content pipeline","words":2000}'
 ```
