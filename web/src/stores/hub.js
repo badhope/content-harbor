@@ -95,6 +95,8 @@ export const useHubStore = defineStore('hub', {
     },
 
     newArticle() { return useArticleStore().newArticle() },
+    markDirty() { useArticleStore().markDirty() },
+
     async save() { return await useArticleStore().save() },
     async open(id) { return await useArticleStore().open(id) },
     async loadPubs() { return await useArticleStore().loadPubs() },
@@ -116,7 +118,8 @@ export const useHubStore = defineStore('hub', {
       const article = useArticleStore()
       const account = useAccountStore()
       if (!platforms.length) return null
-      if (!article.currentId) await article.save()
+      // 审计 B2：已有文章改过也必须先保存，否则发布会发旧稿
+      if (!article.currentId || article.dirty) await article.save()
       if (!article.currentId) return null
 
       this.publishing = true
@@ -198,7 +201,7 @@ export const useHubStore = defineStore('hub', {
 
     async assistOpen(platform, url) {
       if (!url) { ElMessage.warning('没有可打开的平台页地址'); return }
-      const t = await api.assistOpen(platform, url)
+      await api.assistOpen(platform, url)
       ElMessage.success('已在内置浏览器打开平台页（带登录态）——完成操作后任务自动结束')
     },
 

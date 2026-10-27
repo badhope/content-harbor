@@ -77,7 +77,6 @@ export const useTaskStore = defineStore('task', {
     // 轮询任务到终态（兜底路径；SSE 可用时由 connectSSE 处理增量推送）
     async _waitTask(taskId, deadlineMs = 600000) {
       const deadline = Date.now() + deadlineMs
-      const { ElMessage } = await import('element-plus')
       while (Date.now() < deadline) {
         const t = await api.task(taskId)
         if (t.status === 'ok' || t.status === 'failed' || t.status === 'waiting_human') return t

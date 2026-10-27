@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { api } from '@/api'
+import { useHubStore } from './hub'
 
 /** 文章 CRUD、版本管理、AI 增强 */
 export const useArticleStore = defineStore('article', {
@@ -75,6 +76,8 @@ export const useArticleStore = defineStore('article', {
       this.publications = []
       this.dirty = true
     },
+
+    markDirty() { this.dirty = true },
 
     async save() {
       if (!this.current) return

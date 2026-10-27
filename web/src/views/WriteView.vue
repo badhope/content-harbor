@@ -20,7 +20,7 @@
       :show-library="!listDocked"
       @open-library="listDrawer = true"
       @save="hub.save()"
-      @touch="hub.dirty = true"
+      @touch="hub.markDirty()"
       @publish="onPublish"
       @sync-update="hub.updateRemote(hub.updatable)"
       @ai-rewrite="onRewrite"

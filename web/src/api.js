@@ -24,16 +24,17 @@ http.interceptors.request.use(config => {
 
 // 重试配置：网络错误 / 5xx 时自动重试
 const RETRYABLE = [408, 429, 500, 502, 503, 504]
-let _retryCount = 0
 const MAX_RETRIES = 3
 
 http.interceptors.response.use(
-  r => { _retryCount = 0; return r.data },
+  r => r.data,
   async err => {
     const cfg = err.config
     const status = err.response?.status
-    // 可重试错误且未超次数：指数退避重试
-    if (RETRYABLE.includes(status) && (!cfg._retry || cfg._retry < MAX_RETRIES)) {
+    // 审计 B3：只有幂等的 GET 允许自动重试；POST（发布/登录/同步）重试会重复建任务
+    const method = (cfg.method || 'get').toLowerCase()
+    const retryable = method === 'get' && RETRYABLE.includes(status)
+    if (retryable && (!cfg._retry || cfg._retry < MAX_RETRIES)) {
       cfg._retry = (cfg._retry || 0) + 1
       await new Promise(r => setTimeout(r, 500 * cfg._retry))
       return http(cfg)
@@ -46,7 +47,6 @@ http.interceptors.response.use(
     const d = err.response?.data
     const msg = d?.message || d?.detail || err.message || '请求失败'
     ElMessage.error(typeof msg === 'string' ? msg : JSON.stringify(msg))
-    _retryCount = 0
     return Promise.reject(err)
   }
 )

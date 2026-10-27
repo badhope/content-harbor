@@ -42,22 +42,19 @@
 <script setup>
 import { Plus } from '@element-plus/icons-vue'
 import EmptyState from './EmptyState.vue'
+import { fmtShort } from '@/utils/format'
 
-const props = defineProps({
+defineProps({
   articles: { type: Array, default: () => [] },
   currentId: [Number, null],
   loading: Boolean
 })
-const emit = defineEmits(['open', 'new-article'])
+defineEmits(['open', 'new-article'])
 
 const statusText = s => ({ draft: '草稿', published: '已发布', review: '待审', archived: '归档' }[s] || s)
 const tagType = s => ({ draft: 'warning', published: 'success', review: 'primary', archived: 'info' }[s] || 'info')
 
-function fmt(ts) {
-  if (!ts) return ''
-  const d = new Date(ts * 1000)
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
+const fmt = (ts) => fmtShort(ts)
 </script>
 
 <style scoped>
