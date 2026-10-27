@@ -1,4 +1,4 @@
-# 港 Harbor —— 桌面 + Web 双形态 AI 内容发布中枢
+# 港 Harbour —— 桌面 + Web 双形态 AI 内容发布中枢
 
 一个后台管所有内容平台：知乎 / 掘金 / CSDN / B站 / 博客园 / 头条 / 开源中国 / SegmentFault / 51CTO / MetaWeblog。
 AI 写稿、一键多投、原地更新、定时发布、AIGC 合规门禁、人工兜底——全在这里。
@@ -31,7 +31,7 @@ pnpm run tauri dev
 cd web
 pnpm run tauri build
 ```
-产物：`web/src-tauri/target/release/content-harbor.exe`（单文件双击即用）。
+产物：`web/src-tauri/target/release/harbour.exe`（单文件双击即用）。
 
 ### Web 开发
 
@@ -73,8 +73,8 @@ uv run uvicorn app.factory:create_app --host 0.0.0.0 --port 8000 --reload
 
 | 变量 | 说明 | 默认 |
 |---|---|---|
-| `HARBOR_API_TOKEN` | REST 鉴权 Token | 自动生成 UUID |
-| `HARBOR_SECRET_KEY` | 签名密钥（生产必设） | 开发随机 |
+| `HARBOUR_API_TOKEN` | REST 鉴权 Token（优先于 config.json） | 未配置时首启自动生成 UUID 并落盘 |
+| `HARBOUR_SECRET_KEY` | 签名密钥（生产必设） | 开发随机 |
 | `TRUSTED_NETS` | 受信代理网段（XFF 校验） | 127.0.0.0/8,::1/128 |
 | `CORS_ORIGINS` | 跨域白名单 | 同源 |
 | `DEMO=1` | 演示模式（不开浏览器不调外部 API） | 0 |
@@ -126,7 +126,7 @@ uv run ruff check .                  # 静态
 
 ```bash
 cd backed
-uv run python ../scripts/backup_data.py              # 到 ~/harbor-backups
+uv run python ../scripts/backup_data.py              # 到 ~/harbour-backups
 uv run python ../scripts/backup_data.py --dry-run    # 只看计划
 ```
 走 `sqlite3.Connection.backup()` 做在线一致性快照，不用停服务。

@@ -22,18 +22,38 @@ ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 _api_token_cache: Optional[tuple[float, str]] = None
 
 
+def _resolve_token() -> str:
+    """Token 解析：HARBOUR_API_TOKEN 环境变量 > config.json；都缺失时自动生成并落盘。"""
+    tok = os.environ.get("HARBOUR_API_TOKEN", "").strip()
+    if tok:
+        return tok
+    try:
+        cfg_path = ROOT / "config.json"
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+        tok = (cfg or {}).get("api_token") or ""
+        if not tok:
+            import uuid as _uuid
+            tok = str(_uuid.uuid4())
+            cfg_path.write_text(json.dumps({**(cfg or {}), "api_token": tok},
+                                           ensure_ascii=False, indent=2),
+                                encoding="utf-8")
+            obs.get_logger(__name__).warning(
+                "api_token 未配置：已自动生成并写入 config.json（生产环境建议改设 HARBOUR_API_TOKEN）")
+    except Exception:  # aqg: top-level boundary
+        import secrets as _secrets
+        tok = _secrets.token_hex(16)
+    return tok
+
+
 def _api_token() -> str:
-    """读取 API Token（带 1s 缓存，避免每次请求读盘）。"""
+    """读取 API Token（带 1s 缓存，避免每次请求读盘；conftest 打桩点）。"""
     global _api_token_cache
     import time as _t
-    if _api_token_cache and (_t.monotonic() - _api_token_cache[0]) < 1.0:
+    now = _t.monotonic()
+    if _api_token_cache and (now - _api_token_cache[0]) < 1.0:
         return _api_token_cache[1]
-    try:
-        tok = (json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
-               or {}).get("api_token") or ""
-    except Exception:
-        tok = ""
-    _api_token_cache = (_t.monotonic(), tok)
+    tok = _resolve_token()
+    _api_token_cache = (now, tok)
     return tok
 
 
