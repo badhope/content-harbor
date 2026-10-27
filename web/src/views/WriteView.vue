@@ -6,8 +6,12 @@
       :articles="hub.articles"
       :current-id="hub.currentId"
       :loading="hub.loadingList"
+      :total="hub.total"
+      :has-more="hub.hasMore"
+      :loading-more="hub.loadingMore"
       @open="onOpen"
       @new-article="hub.newArticle()"
+      @load-more="hub.loadMore()"
     />
 
     <!-- 中：编辑器 -->
@@ -49,8 +53,12 @@
       :articles="hub.articles"
       :current-id="hub.currentId"
       :loading="hub.loadingList"
+      :total="hub.total"
+      :has-more="hub.hasMore"
+      :loading-more="hub.loadingMore"
       @open="id => { onOpen(id); listDrawer = false }"
       @new-article="hub.newArticle()"
+      @load-more="hub.loadMore()"
     />
   </el-drawer>
 

@@ -15,7 +15,7 @@
         <div class="sc-lbl">已上线实例</div>
       </div>
       <div class="stat-card">
-        <div class="sc-num">{{ hub.articles.filter(a => a.status === 'published').length }}</div>
+        <div class="sc-num">{{ hub.stats?.published || 0 }}</div>
         <div class="sc-lbl">已发布文章</div>
       </div>
       <span class="spacer" />
@@ -229,10 +229,10 @@ const statusChart = computed(() => {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 8, right: 14, top: 18, bottom: 8, containLabel: true },
     xAxis: { type: 'category', data: labels, axisTick: { show: false }, axisLine: { lineStyle: { color: '#D3DAE5' } }, axisLabel: { fontSize: 11, color: '#5A6478' } },
-    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#EDF1F7' } }, axisLabel: { fontSize: 11, color: '#8A93A6' } },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#EDF1F7' } }, axisLabel: { fontSize: 11, color: '#5F6A78' } },
     series: [{
       type: 'bar', data: values, barMaxWidth: 34,
-      itemStyle: { color: '#3370FF', borderRadius: [6, 6, 0, 0] }
+      itemStyle: { color: '#2A5CE0', borderRadius: [6, 6, 0, 0] }
     }]
   }
 })

@@ -99,6 +99,18 @@ def tasks_list(limit: int = 50, kind: str = None, status: str = None):
     return get_hub().tasks.list(limit=limit, kind=kind, status=status)
 
 
+@router.get("/tasks/page")
+def tasks_page(limit: int = 50, offset: int = 0, kind: str = None, status: str = None):
+    """分页视图：返回 {items,total,has_more}。保持 /tasks 的原样返回不变。"""
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    tm = get_hub().tasks
+    items = tm.list(limit=limit, kind=kind, status=status, offset=offset)
+    total = tm.count(kind=kind, status=status)
+    return {"items": items, "total": total, "offset": offset, "limit": limit,
+            "has_more": offset + len(items) < total}
+
+
 @router.get("/tasks/{task_id}")
 def tasks_detail(task_id: str):
     """查询任意任务状态：pending / running / ok / failed / waiting_human。"""

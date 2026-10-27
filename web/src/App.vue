@@ -46,7 +46,8 @@ const hub = useHubStore()
 const aiDialog = ref(false)
 
 const waitCount = computed(() => hub.pendingHuman.length + hub.waitingTasks.length)
-const publishedCount = computed(() => hub.articles.filter(a => a.status === 'published').length)
+// 列表已分页，计数一律取服务端统计，避免只统计到已加载的那一页
+const publishedCount = computed(() => hub.stats?.published || 0)
 
 onMounted(() => hub.boot())
 onBeforeUnmount(() => hub.dispose())

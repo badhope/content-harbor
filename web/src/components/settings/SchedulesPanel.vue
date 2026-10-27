@@ -37,11 +37,11 @@
                 desc="例：每周一 9 点把某个专栏文章发到知乎 + 掘金"
                 :px="60" />
 
-    <el-dialog v-model="createOpen" title="新建定时任务" width="520px">
+    <el-dialog v-model="createOpen" title="新建定时任务" width="min(520px, 94vw)">
       <el-form label-width="92px">
         <el-form-item label="文章">
           <el-select v-model="form.article_id" filterable placeholder="选一篇" style="width:100%">
-            <el-option v-for="a in hub.articles" :key="a.id" :label="`#${a.id} ${a.title}`" :value="a.id" />
+            <el-option v-for="a in articleOptions" :key="a.id" :label="`#${a.id} ${a.title}`" :value="a.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="平台">
@@ -86,12 +86,15 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
+import { api } from '@/api'
 import EmptyState from '@/components/EmptyState.vue'
 import { fmtDateTime } from '@/utils/format'
 
 const hub = useHubStore()
 
 const createOpen = ref(false)
+// 文章库列表本身是分页的，定时任务要能选到任意一篇，这里单独翻页取全量
+const articleOptions = ref([])
 const creating = ref(false)
 const form = reactive({ article_id: null, platforms: [], schedule_type: 'once',
                         schedule_expr: '', draft_only: false, title: '' })
@@ -110,9 +113,19 @@ const exprHelp = computed(() => ({
   cron: '分 时 日 月 周',
 }[form.schedule_type] || ''))
 
+async function loadArticleOptions() {
+  const all = []
+  for (let offset = 0; offset < 1000; offset += 200) {
+    const r = await api.articlesPage({ limit: 200, offset }) || {}
+    all.push(...(r.items || []))
+    if (!r.has_more) break
+  }
+  articleOptions.value = all
+}
+
 onMounted(async () => {
   hub.loadSchedules()
-  if (!hub.articles.length) await hub.loadArticles()
+  await loadArticleOptions()
   if (!hub.platforms.length) await hub.loadPlatforms()
 })
 

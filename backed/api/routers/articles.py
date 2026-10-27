@@ -53,8 +53,24 @@ class AIRewriteIn(BaseModel):
 # ---- 文章 CRUD ----
 
 @router.get("/articles")
-def list_articles(status: str = None, limit: int = 100):
-    return get_hub().list(status, limit)
+def list_articles(status: str = None, limit: int = 100, offset: int = 0):
+    return get_hub().list(status, limit, offset)
+
+
+@router.get("/articles/page")
+def articles_page(status: str = None, limit: int = 20, offset: int = 0):
+    """分页视图：返回 {items,total,has_more}，供前端「加载更多」。
+
+    必须声明在 /articles/{aid} 之前，否则 "page" 会被当成 aid 匹配。
+    """
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    hub = get_hub()
+    items = hub.list(status, limit, offset)
+    total = hub.count_articles(status)
+    return {"items": items, "total": total,
+            "offset": offset, "limit": limit,
+            "has_more": offset + len(items) < total}
 
 
 @router.post("/articles")

@@ -304,8 +304,11 @@ class Hub:
         r = db.get_article(self.conn, article_id)
         return dict(r) if r else None
 
-    def list(self, status=None, limit=100):
-        return [dict(r) for r in db.list_articles(self.conn, status, limit)]
+    def list(self, status=None, limit=100, offset=0):
+        return [dict(r) for r in db.list_articles(self.conn, status, limit, offset)]
+
+    def count_articles(self, status=None):
+        return db.count_articles(self.conn, status)
 
     def search(self, keyword):
         return [dict(r) for r in db.search_articles(self.conn, keyword)]

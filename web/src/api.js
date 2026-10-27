@@ -80,12 +80,14 @@ export const api = {
   // ---------------- 统一任务查询 ----------------
   tasks: (limit = 50, kind, status) =>
     http.get('/tasks', { params: { limit, kind, status } }),
+  tasksPage: (params = {}) => http.get('/tasks/page', { params }),
   task: (taskId) => http.get(`/tasks/${taskId}`),
   resumeTask: (taskId, approved = true) =>
     http.post(`/tasks/${taskId}/resume`, { approved }),
 
   // ---------------- 文章 ----------------
   listArticles: (status) => http.get('/articles', { params: { status } }),
+  articlesPage: (params = {}) => http.get('/articles/page', { params }),
   getArticle: (id) => http.get(`/articles/${id}`),
   createArticle: (data) => http.post('/articles', data),
   updateArticle: (id, data) => http.put(`/articles/${id}`, data),

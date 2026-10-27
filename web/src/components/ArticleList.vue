@@ -3,7 +3,9 @@
     <div class="pane-head">
       <span class="title">文章库</span>
       <span class="spacer" />
-      <span class="count-chip">{{ articles.length }}</span>
+      <span class="count-chip" :title="`已加载 ${articles.length} / 共 ${total} 篇`">
+        {{ total > articles.length ? `${articles.length}/${total}` : articles.length }}
+      </span>
     </div>
 
     <div class="pane-body">
@@ -16,12 +18,18 @@
       </template>
 
       <template v-else>
+        <!-- 列表项是按钮语义的容器：role/tabindex + Enter/Space 与鼠标点击等价 -->
         <div
           v-for="(a, i) in articles" :key="a.id"
           class="art-item"
           :class="{ on: a.id === currentId }"
           :style="{ '--i': i }"
+          role="button"
+          tabindex="0"
+          :aria-current="a.id === currentId ? 'true' : undefined"
           @click="$emit('open', a.id)"
+          @keydown.enter.prevent="$emit('open', a.id)"
+          @keydown.space.prevent="$emit('open', a.id)"
         >
           <div class="t">{{ a.title }}</div>
           <div class="m">
@@ -31,6 +39,10 @@
             <span>{{ fmt(a.updated_at) }}</span>
           </div>
         </div>
+        <el-button v-if="hasMore" class="more-btn" size="small" :loading="loadingMore"
+                   @click="$emit('load-more')">
+          加载更多（还有 {{ total - articles.length }} 篇）
+        </el-button>
         <EmptyState v-if="!articles.length" title="还没有文章" desc="点右上角「新建」写第一篇，或让 AI 帮你起稿">
           <el-button size="small" type="primary" :icon="Plus" @click="$emit('new-article')">新建文章</el-button>
         </EmptyState>
@@ -47,9 +59,12 @@ import { fmtShort } from '@/utils/format'
 defineProps({
   articles: { type: Array, default: () => [] },
   currentId: [Number, null],
-  loading: Boolean
+  loading: Boolean,
+  total: { type: Number, default: 0 },
+  hasMore: Boolean,
+  loadingMore: Boolean
 })
-defineEmits(['open', 'new-article'])
+defineEmits(['open', 'new-article', 'load-more'])
 
 const statusText = s => ({ draft: '草稿', published: '已发布', review: '待审', archived: '归档' }[s] || s)
 const tagType = s => ({ draft: 'warning', published: 'success', review: 'primary', archived: 'info' }[s] || 'info')
@@ -58,6 +73,10 @@ const fmt = (ts) => fmtShort(ts)
 </script>
 
 <style scoped>
+.more-btn {
+  width: calc(100% - 24px);
+  margin: 8px 12px 12px;
+}
 .count-chip {
   min-width: 20px;
   height: 18px;

@@ -94,8 +94,12 @@ class TaskManager:
         """按 task_id 查任务状态。"""
         return db.get_task(self.conn, task_id)
 
-    def list(self, limit=50, kind=None, status=None):
-        return db.list_tasks(self.conn, limit=limit, kind=kind, status=status)
+    def list(self, limit=50, kind=None, status=None, offset=0):
+        return db.list_tasks(self.conn, limit=limit, kind=kind, status=status,
+                             offset=offset)
+
+    def count(self, kind=None, status=None):
+        return db.count_tasks(self.conn, kind=kind, status=status)
 
     def resume(self, task_id, approved=True):
         """恢复 waiting_human 任务。

@@ -17,6 +17,10 @@ export const useArticleStore = defineStore('article', {
     dirty: false,
     saving: false,
     loadingList: false,
+    total: 0,
+    hasMore: false,
+    loadingMore: false,
+    PAGE_SIZE: 50,
   }),
 
   getters: {
@@ -36,8 +40,29 @@ export const useArticleStore = defineStore('article', {
   actions: {
     async loadList() {
       this.loadingList = true
-      try { this.articles = await api.listArticles() || [] }
-      finally { this.loadingList = false }
+      try {
+        const r = await api.articlesPage({
+          limit: this.PAGE_SIZE, offset: 0, status: this.filterStatus || undefined
+        }) || {}
+        this.articles = r.items || []
+        this.total = r.total || this.articles.length
+        this.hasMore = !!r.has_more
+      } finally { this.loadingList = false }
+    },
+
+    async loadMore() {
+      if (this.loadingMore || !this.hasMore) return
+      this.loadingMore = true
+      try {
+        const r = await api.articlesPage({
+          limit: this.PAGE_SIZE, offset: this.articles.length,
+          status: this.filterStatus || undefined
+        }) || {}
+        const known = new Set(this.articles.map(a => a.id))
+        this.articles = this.articles.concat((r.items || []).filter(a => !known.has(a.id)))
+        this.total = r.total || this.total
+        this.hasMore = !!r.has_more
+      } finally { this.loadingMore = false }
     },
 
     async open(id) {

@@ -5,12 +5,14 @@ import { setActivePinia, createPinia } from 'pinia'
 vi.mock('@/api', () => ({
   api: {
     listArticles: vi.fn().mockResolvedValue([]),
+    articlesPage: vi.fn().mockResolvedValue({ items: [], total: 0, has_more: false }),
     getArticle: vi.fn().mockResolvedValue({}),
     createArticle: vi.fn(), updateArticle: vi.fn(),
     publications: vi.fn().mockResolvedValue([]), allPublications: vi.fn().mockResolvedValue([]),
     status: vi.fn().mockResolvedValue({ accounts: [] }), platforms: vi.fn().mockResolvedValue([]),
     pendingHuman: vi.fn().mockResolvedValue([]), publish: vi.fn(), task: vi.fn(),
-    tasks: vi.fn().mockResolvedValue([]), aiStatus: vi.fn().mockResolvedValue({ ready: false, providers: [] }),
+    tasks: vi.fn().mockResolvedValue([]),
+    tasksPage: vi.fn().mockResolvedValue({ items: [], total: 0, has_more: false }), aiStatus: vi.fn().mockResolvedValue({ ready: false, providers: [] }),
     tags: vi.fn().mockResolvedValue([]), schedules: vi.fn().mockResolvedValue([]),
     webhooks: vi.fn().mockResolvedValue([]), notifications: vi.fn().mockResolvedValue([])
   },

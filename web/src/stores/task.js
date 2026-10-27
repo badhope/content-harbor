@@ -6,6 +6,8 @@ import { api } from '@/api'
 export const useTaskStore = defineStore('task', {
   state: () => ({
     tasks: [],
+    total: 0,
+    truncated: false,   // 拉到的条数 == limit 时说明可能还有更老的没加载
     loginTasks: {},   // platform -> {task_id, status, message}
     _es: null,         // EventSource
     _lastEventTs: 0,
@@ -19,7 +21,11 @@ export const useTaskStore = defineStore('task', {
     // 初始化时拉一次全量，后续走 SSE 增量
     async loadTasks(notify = false) {
       try {
-        const list = await api.tasks() || []
+        const limit = 200
+        const r = await api.tasksPage({ limit, offset: 0 }) || {}
+        const list = r.items || []
+        this.total = r.total || list.length
+        this.truncated = !!r.has_more
         const prevWaiting = new Set(this.tasks.filter(t => t.status === 'waiting_human').map(t => t.task_id))
         this.tasks = list
         if (notify) {

@@ -299,9 +299,19 @@ def list_articles(conn, status=None, limit=100, offset=0):
     if status:
         sql += " WHERE status=?"
         args.append(status)
-    sql += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+    # id 作次键：updated_at 相同（批量导入常见）时保证分页顺序稳定
+    sql += " ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?"
     args += [limit, offset]
     return conn.execute(sql, args).fetchall()
+
+
+def count_articles(conn, status=None):
+    sql = "SELECT COUNT(*) FROM articles"
+    args = []
+    if status:
+        sql += " WHERE status=?"
+        args.append(status)
+    return conn.execute(sql, args).fetchone()[0]
 
 
 def search_articles(conn, keyword):
@@ -417,7 +427,7 @@ def get_task(conn, task_id):
     return dict(row)
 
 
-def list_tasks(conn, limit=50, kind=None, status=None):
+def list_tasks(conn, limit=50, kind=None, status=None, offset=0):
     sql = "SELECT * FROM tasks"
     where, args = [], []
     if kind:
@@ -428,9 +438,23 @@ def list_tasks(conn, limit=50, kind=None, status=None):
         args.append(status)
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY id DESC LIMIT ?"
-    args.append(limit)
+    sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
+    args += [limit, offset]
     return [dict(r) for r in conn.execute(sql, args).fetchall()]
+
+
+def count_tasks(conn, kind=None, status=None):
+    sql = "SELECT COUNT(*) FROM tasks"
+    where, args = [], []
+    if kind:
+        where.append("kind=?")
+        args.append(kind)
+    if status:
+        where.append("status=?")
+        args.append(status)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    return conn.execute(sql, args).fetchone()[0]
 
 
 def next_pending_tasks(conn, limit=10):

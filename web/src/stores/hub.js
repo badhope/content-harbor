@@ -37,6 +37,9 @@ export const useHubStore = defineStore('hub', {
     dirty() { return useArticleStore().dirty },
     saving() { return useArticleStore().saving },
     loadingList() { return useArticleStore().loadingList },
+    total() { return useArticleStore().total },
+    hasMore() { return useArticleStore().hasMore },
+    loadingMore() { return useArticleStore().loadingMore },
     filtered() { return useArticleStore().filtered },
     updatable() { return useArticleStore().updatable },
 
@@ -46,6 +49,8 @@ export const useHubStore = defineStore('hub', {
     pendingHuman() { return useAccountStore().pendingHuman },
 
     tasks() { return useTaskStore().tasks },
+    taskTotal() { return useTaskStore().total },
+    taskTruncated() { return useTaskStore().truncated },
     loginTasks() { return useTaskStore().loginTasks },
     waitingTasks() { return useTaskStore().waitingTasks },
 
@@ -161,6 +166,10 @@ export const useHubStore = defineStore('hub', {
 
     async loadArticles() {
       return await useArticleStore().loadList()
+    },
+
+    async loadMore() {
+      return await useArticleStore().loadMore()
     },
 
     async syncPending() {

@@ -8,6 +8,9 @@
           {{ runningCount ? `${runningCount} 个执行中` : '空闲' }}
         </span>
         <span class="spacer" />
+        <span v-if="hub.taskTruncated" class="trunc-hint" role="status">
+          仅显示最近 {{ hub.tasks.length }} / {{ hub.taskTotal }} 条
+        </span>
         <el-select v-model="fKind" size="small" placeholder="类型" clearable style="width:110px">
           <el-option v-for="k in KINDS" :key="k.v" :label="k.t" :value="k.v" />
         </el-select>
@@ -63,7 +66,7 @@
     </div>
 
     <!-- 任务详情 -->
-    <el-dialog v-model="taskDialog" :title="`任务 ${taskDetail?.task_id || ''}`" width="640px">
+    <el-dialog v-model="taskDialog" :title="`任务 ${taskDetail?.task_id || ''}`" width="min(640px, 94vw)">
       <template v-if="taskDetail">
         <div class="rd-meta">
           <el-tag size="small" :type="taskTagType(taskDetail.status)" effect="dark">
@@ -181,6 +184,7 @@ const fmtTime = (ts) => fmtDateTime(ts)
 .dim { color: var(--tx-4); }
 .mono { font-family: var(--font-mono); font-size: 11px; }
 .run-err { color: var(--bad); font-size: var(--fs-xs); }
+.trunc-hint { font-size: var(--fs-xs); color: var(--tx-3); }
 .p-link { color: var(--accent); text-decoration: none; &:hover { text-decoration: underline; } }
 .rd-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .rd-sec { border-top: 1px solid var(--line); padding: 10px 0; font-size: var(--fs-xs);
