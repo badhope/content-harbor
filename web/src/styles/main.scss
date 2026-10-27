@@ -19,19 +19,19 @@
   // 文字（深灰层次，黑得干净、灰得透气）
   --tx-1: #1F2329;        // 主标题 / 正文强调
   --tx-2: #4E5969;        // 常规正文
-  --tx-3: #86909C;        // 次要 / 说明
-  --tx-4: #C9CDD4;        // 占位 / 禁用
+  --tx-3: #5F6A78;        // 次要 / 说明（AA：白底 5.5:1）
+  --tx-4: #66707F;        // 占位 / 禁用（AA：白底 5.0:1）
 
   // 单一强调色：飞书蓝（主操作 + 选中 + 高亮）
-  --accent:      #3370FF;  // 飞书蓝
-  --accent-hi:   #5B8CFF;  // 亮蓝（hover / 高亮）
-  --accent-soft: rgba(51, 112, 255, .08);
-  --accent-line: rgba(51, 112, 255, .28);
+  --accent:      #2A5CE0;  // 飞书蓝（加深到白字 5.67:1）
+  --accent-hi:   #2456D6;  // hover 加深（白字 6.22:1）
+  --accent-soft: rgba(42, 92, 224, .08);
+  --accent-line: rgba(42, 92, 224, .28);
 
   // 辅助强调（克制使用）
-  --ok:   #34A97B;   // 成功 / 在线（柔和绿）
-  --warn: #E8964A;   // 警告（暖橙）
-  --bad:  #E05252;   // 失败（柔红）
+  --ok:   #0F7A52;   // 成功 / 在线（白字 5.35:1）
+  --warn: #7C4E0E;   // 警告（白字 7.11:1；浅底文字也 ≥ 5:1）
+  --bad:  #B0382E;   // 失败（白字 6.08:1）
 
   // 字体（系统字体栈 + 中文优化，零外部请求）
   // 无衬线栈：英文用 SF Pro / Segoe UI，中文用苹方 / 微软雅黑
@@ -66,11 +66,11 @@
   --ease-out: cubic-bezier(.22, 1, .36, 1);
 
   // 兼容旧变量名（避免大面积改动期间样式断裂）
-  --brand-1: #3370FF;
-  --brand-2: #5B8CFF;
-  --brand-grad: linear-gradient(135deg, #3370FF, #5B8CFF);
-  --brand-soft: rgba(51, 112, 255, .08);
-  --brand-line: rgba(51, 112, 255, .28);
+  --brand-1: #2A5CE0;
+  --brand-2: #2456D6;
+  --brand-grad: linear-gradient(135deg, #2A5CE0, #2456D6);
+  --brand-soft: rgba(42, 92, 224, .08);
+  --brand-line: rgba(42, 92, 224, .28);
   --ach-bg: #F5F7FA;
   --ach-panel: #FFFFFF;
   --ach-panel-2: #F7F9FC;
@@ -83,18 +83,18 @@
 
 // ---------- Element Plus 亮色变量接管（飞书蓝主题） ----------
 html {
-  --el-color-primary: #3370FF;
-  --el-color-primary-light-3: #5B8CFF;
+  --el-color-primary: #2A5CE0;
+  --el-color-primary-light-3: #4C74E4;
   --el-color-primary-light-5: #8FB5FF;
   --el-color-primary-light-7: #C6D8FF;
   --el-color-primary-light-8: #DCE8FF;
   --el-color-primary-light-9: #F0F5FF;
-  --el-color-primary-dark-2: #2A5CE0;
+  --el-color-primary-dark-2: #1F4FC4;
 
-  --el-color-success: #34A97B;
-  --el-color-warning: #E8964A;
-  --el-color-danger:  #E05252;
-  --el-color-error:   #E05252;
+  --el-color-success: #0F7A52;
+  --el-color-warning: #7C4E0E;
+  --el-color-danger:  #B0382E;
+  --el-color-error:   #B0382E;
 
   --el-bg-color:            #FFFFFF;
   --el-bg-color-page:       #F5F7FA;
@@ -114,9 +114,9 @@ html {
 
   --el-text-color-primary:     #1F2329;
   --el-text-color-regular:     #4E5969;
-  --el-text-color-secondary:   #86909C;
-  --el-text-color-placeholder: #C9CDD4;
-  --el-text-color-disabled:    #B9BFc9;
+  --el-text-color-secondary:   #5F6A78;
+  --el-text-color-placeholder: #66707F;
+  --el-text-color-disabled:    #8A93A6;
 
   --el-border-radius-base: 10px;
   --el-disabled-bg-color: #F7F9FC;
@@ -688,10 +688,10 @@ a:focus-visible,
 }
 
 .el-button--success {
-  --el-button-bg-color: #34A97B;
-  --el-button-border-color: #34A97B;
-  --el-button-hover-bg-color: #3FBD8C;
-  --el-button-hover-border-color: #3FBD8C;
+  --el-button-bg-color: #0F7A52;
+  --el-button-border-color: #0F7A52;
+  --el-button-hover-bg-color: #0C6B48;
+  --el-button-hover-border-color: #0C6B48;
 }
 
 // 输入框 / 文本域：聚焦蓝边
