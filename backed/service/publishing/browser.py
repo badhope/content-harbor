@@ -256,7 +256,14 @@ def stop_display():
         _XVFB = None
 
 ROOT = Path(__file__).resolve().parent.parent
-PROFILE_ROOT = ROOT / "data" / "profiles"
+def _profile_root() -> Path:
+    from service.publishing.db import data_root
+    d = data_root() / "profiles"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+PROFILE_ROOT = _profile_root()
 DEBUG_DIR = ROOT / "data" / "debug"
 CAPTCHA_DIR = ROOT / "data" / "captcha"
 

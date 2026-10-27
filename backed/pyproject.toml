@@ -2,21 +2,22 @@
 # 包管理与启动推荐使用 uv（https://github.com/astral-sh/uv）
 
 [project]
-name = "ai-content-hub-backend"
+name = "harbour-backend"
 version = "0.7.0"
-description = "AI 内容中台后端：基于 FastAPI 的文章库 / 多平台发布 / AIGC 合规门禁"
+description = "Harbour 后端：基于 FastAPI 的文章库 / 多平台发布 / AIGC 合规门禁"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.23.0",
-    "aiosqlite>=0.20.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "python-multipart>=0.0.6",
     "click>=8.1.0",
     "PyJWT>=2.8.0",
-    "passlib[bcrypt]>=1.7.4",
+    # 直接 import bcrypt / cryptography：必须显式声明，不能靠 passlib[bcrypt] 的传递依赖
+    "bcrypt>=4.0.0",
+    "cryptography>=42.0.0",
     "python-dotenv>=1.0.0",
     # 平台发布引擎依赖
     "patchright>=1.60",

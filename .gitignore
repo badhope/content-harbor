@@ -47,3 +47,8 @@ backed/config.json
 
 # AQG 本地台账（不入库）
 .aqg/
+
+# PyInstaller 构建产物
+backed/dist/
+backed/build/
+*.spec.bak
