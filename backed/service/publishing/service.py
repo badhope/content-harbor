@@ -913,5 +913,9 @@ class Hub:
             "SELECT COUNT(*) c FROM publications WHERE status='ok'").fetchone()["c"]
         pend = self.conn.execute(
             "SELECT COUNT(*) c FROM publications WHERE status='pending'").fetchone()["c"]
+        pub_arts = self.conn.execute(
+            "SELECT COUNT(*) c FROM articles WHERE status='published'").fetchone()["c"]
+        # published = 已上线的平台实例数；published_articles = 已发布文章数（两个口径别混用）
         return {"articles": arts, "publications": pubs, "published": ok,
+                "published_articles": pub_arts,
                 "pending_sync": pend, "accounts": self.accounts()}

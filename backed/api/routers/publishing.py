@@ -96,6 +96,7 @@ def sync_pending(body: Optional[UpdateIn] = None):
 @router.get("/tasks")
 def tasks_list(limit: int = 50, kind: str = None, status: str = None):
     """任务列表：按 kind/status 过滤，默认返回最近 50 条。"""
+    limit = max(1, min(limit, 200))
     return get_hub().tasks.list(limit=limit, kind=kind, status=status)
 
 
@@ -103,7 +104,7 @@ def tasks_list(limit: int = 50, kind: str = None, status: str = None):
 def tasks_page(limit: int = 50, offset: int = 0, kind: str = None, status: str = None):
     """分页视图：返回 {items,total,has_more}。保持 /tasks 的原样返回不变。"""
     limit = max(1, min(limit, 200))
-    offset = max(0, offset)
+    offset = max(0, min(offset, 1_000_000))
     tm = get_hub().tasks
     items = tm.list(limit=limit, kind=kind, status=status, offset=offset)
     total = tm.count(kind=kind, status=status)

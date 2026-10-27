@@ -294,6 +294,9 @@ def get_article(conn, article_id):
 
 
 def list_articles(conn, status=None, limit=100, offset=0):
+    # limit<=0 在 SQLite 里等于"不限量"，会把整表拉出来；统一夹到 1..1000
+    limit = max(1, min(int(limit), 1000))
+    offset = max(0, min(int(offset), 1_000_000))
     sql = "SELECT * FROM articles"
     args = []
     if status:
@@ -428,6 +431,8 @@ def get_task(conn, task_id):
 
 
 def list_tasks(conn, limit=50, kind=None, status=None, offset=0):
+    limit = max(1, min(int(limit), 1000))
+    offset = max(0, min(int(offset), 1_000_000))
     sql = "SELECT * FROM tasks"
     where, args = [], []
     if kind:

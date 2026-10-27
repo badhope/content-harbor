@@ -128,8 +128,13 @@ class MetricRegistry:
                     label = str(b) if b != float("inf") else "+Inf"
                     h["buckets"][label] = h["buckets"].get(label, 0) + 1
 
-    def _quantile(self, buckets: dict, total: int, q: float) -> float:
-        """按累积桶线性插值估算分位（Prometheus histogram_quantile 同款思路）。"""
+    def _quantile(self, buckets: dict, total: int, q: float,
+                  max_value: float = 0.0) -> float:
+        """按累积桶线性插值估算分位（Prometheus histogram_quantile 同款思路）。
+
+        分位落进 +Inf 桶（超出最大有限边界 60s）时无法插值出上界，返回实测 max：
+        否则 120s 的观测会被报成 p99=60s，尾部被系统性低估。
+        """
         if not total:
             return 0.0
         rank = q * total
@@ -140,7 +145,7 @@ class MetricRegistry:
             if cum >= rank:
                 lower = upper
                 if b == float("inf"):
-                    return lower
+                    return max_value if max_value > lower else lower
                 if b == lower:
                     return upper
                 # 桶内均匀分布假设
@@ -167,9 +172,9 @@ class MetricRegistry:
                                 for label in (str(b) if b != float("inf") else "+Inf"
                                               for b in self._BUCKETS)},
                     "quantiles": {
-                        "p50": round(self._quantile(h["buckets"], h["n"], 0.50), 4),
-                        "p90": round(self._quantile(h["buckets"], h["n"], 0.90), 4),
-                        "p99": round(self._quantile(h["buckets"], h["n"], 0.99), 4),
+                        "p50": round(self._quantile(h["buckets"], h["n"], 0.50, h["max"]), 4),
+                        "p90": round(self._quantile(h["buckets"], h["n"], 0.90, h["max"]), 4),
+                        "p99": round(self._quantile(h["buckets"], h["n"], 0.99, h["max"]), 4),
                     },
                 }
             return out

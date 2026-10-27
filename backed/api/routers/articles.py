@@ -54,6 +54,9 @@ class AIRewriteIn(BaseModel):
 
 @router.get("/articles")
 def list_articles(status: str = None, limit: int = 100, offset: int = 0):
+    # 夹到安全区间：limit<=0 在 SQLite 里等于不限量，超大 offset 会溢出 INTEGER
+    limit = max(1, min(limit, 200))
+    offset = max(0, min(offset, 1_000_000))
     return get_hub().list(status, limit, offset)
 
 
@@ -64,7 +67,7 @@ def articles_page(status: str = None, limit: int = 20, offset: int = 0):
     必须声明在 /articles/{aid} 之前，否则 "page" 会被当成 aid 匹配。
     """
     limit = max(1, min(limit, 200))
-    offset = max(0, offset)
+    offset = max(0, min(offset, 1_000_000))
     hub = get_hub()
     items = hub.list(status, limit, offset)
     total = hub.count_articles(status)

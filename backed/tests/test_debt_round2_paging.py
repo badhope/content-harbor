@@ -35,3 +35,67 @@ def test_task_pagination_and_count(conn):
     second = db.list_tasks(conn, limit=2, offset=2)
     assert len(first) == 2 and len(second) == 1
     assert first[0]["id"] > first[1]["id"], "任务列表按 id 倒序"
+
+
+def test_pagination_clamps_bad_input(conn):
+    """limit<=0 在 SQLite 里等于不限量，超大 offset 会溢出 INTEGER——都必须被夹住。"""
+    for i in range(3):
+        db.create_article(conn, f"夹紧{i}", "正文")
+    assert len(db.list_articles(conn, limit=-1)) <= 3
+    assert len(db.list_articles(conn, limit=0)) == 1
+    assert len(db.list_articles(conn, limit=10**9)) <= 3
+    assert db.list_articles(conn, offset=10**12) == []
+
+
+def test_quantile_uses_max_when_in_inf_bucket():
+    """分位落进 +Inf 桶时必须用实测 max，不能压到 60s 边界。"""
+    from service.publishing import observability as obs
+    reg = obs.MetricRegistry()
+    reg.observe("slow", 120.0)
+    q = reg.snapshot()["histograms"]["slow"]["quantiles"]
+    assert q["p99"] == 120.0
+    assert q["p50"] == 120.0
+
+
+def test_get_hub_is_thread_safe(monkeypatch, tmp_path):
+    """并发首次访问 get_hub() 只能创建一个 Hub。
+
+    前端首屏并发打 5-6 个端点，多线程各自 new Hub 会在 SQLite 上
+    撞 `database is locked`（实测 8 线程可复现），首屏 500。
+    """
+    import threading
+
+    import api.deps as deps
+    from service.publishing.service import Hub
+
+    created = []
+    lock = threading.Lock()
+
+    class SlowHub(Hub):
+        def __init__(self, *a, **kw):
+            with lock:
+                created.append(1)
+            import time as _t
+            _t.sleep(0.05)          # 放大竞态窗口
+            super().__init__(*a, **kw)
+
+    monkeypatch.setattr(deps, "_hub_instance", None)
+    monkeypatch.setattr("service.publishing.service.Hub", SlowHub)
+
+    barrier = threading.Barrier(8)
+    errors = []
+
+    def hit():
+        try:
+            barrier.wait()
+            deps.get_hub()
+        except Exception as e:      # aqg: top-level boundary（收集线程内异常带回主断言）
+            errors.append(e)
+
+    ts = [threading.Thread(target=hit) for _ in range(8)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+
+    assert not errors, f"并发首次访问抛异常: {errors[:2]}"
+    assert len(created) == 1, f"应只创建 1 个 Hub，实际 {len(created)}"
+    monkeypatch.setattr(deps, "_hub_instance", None)

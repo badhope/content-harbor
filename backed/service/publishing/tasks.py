@@ -186,6 +186,11 @@ class TaskManager:
                         pass
                     evt_mod.on_task_complete(completed)
                 return
+            # 业务层可能用 (ok, msg) 表达成功/失败（login 就是这种）。不检查 ok
+            # 会把「等待登录超时」标成完成——任务中心显示成功，用户以为登录好了。
+            if isinstance(result, (tuple, list)) and len(result) == 2 \
+                    and isinstance(result[0], bool) and not result[0]:
+                raise RuntimeError(str(result[1] or "业务失败"))
             db.update_task(self.conn, task_id, status="ok",
                            result=json.dumps(result, ensure_ascii=False),
                            message="完成", finished_at=time.time())
@@ -260,6 +265,10 @@ class TaskManager:
     PERMANENT_HINTS = (
         "合规门禁", "422", "门禁拒绝", "安全扫描", "高危内容",
     )
+    # login 特有的确定性失败：没人扫码就是没人扫码，立刻重开浏览器重试毫无意义
+    LOGIN_PERMANENT_HINTS = (
+        "等待登录超时", "没有可用的显示", "遇到验证码",
+    )
 
     def _triage(self, kind, err, attempts):
         """确定性失败分诊。返回 (action, reason)。
@@ -269,6 +278,11 @@ class TaskManager:
         新增 PERMANENT_HINTS：合规门禁拒绝 / 422 等确定性错误立即 fail，不浪费重试。
         """
         low = (err or "").lower()
+        if kind == "login":
+            # 扫码登录是人工动作：超时不等于网络故障，重试只会再弹一次浏览器
+            for h in self.LOGIN_PERMANENT_HINTS:
+                if h.lower() in low:
+                    return "fail", "登录未完成（超时/未扫码），不再自动重试"
         for h in self.HUMAN_HINTS:
             if h.lower() in low:
                 return "human", "命中风控/验证码/登录失效，需要人工处理"

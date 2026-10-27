@@ -77,27 +77,59 @@ class _TokenBucket:
 class InMemoryRateLimiter:
     """内存令牌桶限流器（线程安全）
 
-    桶表有上限（默认 10000，按最近使用淘汰最旧键）。无上限时任何来源
-    换个 IP 就能让桶表无限增长，长期运行会持续吃内存。
+    桶表有上限，防止任意来源换 IP 让 ``_buckets`` 无限增长。
+
+    淘汰顺序刻意不是"最久未用"——那会让轮换来源的请求把自己还没花完的桶挤掉、
+    拿回满额令牌，等于把限流洗白。这里优先淘汰**已经回满**的桶（它的状态本来
+    就等价于新建），只有热桶占满且超过 2× 上限时才按最久未用硬淘汰。
+
+    ``max_buckets <= 0`` 表示显式关闭上限（需要运维自己承担内存），不做静默改值。
+
+    ``_EVICT_SAMPLE``: 淘汰时只扫描最旧的 N 个桶，避免每次新建桶都 O(n) 遍历 1 万条。
     """
+
+    _EVICT_SAMPLE = 64
 
     def __init__(self, max_buckets: int = 10000):
         import threading
         self._lock = threading.Lock()
         self._buckets: Dict[str, _TokenBucket] = {}
-        self._max_buckets = max(1, int(max_buckets))
+        self._max_buckets = int(max_buckets)
         self._capacity = getattr(settings, "rate_limit_burst", 20) or 20
         self._refill = (
             getattr(settings, "rate_limit_requests_per_minute", 60) or 60
         ) / 60.0  # 每秒补充
 
+    def _evict_one(self, now: float) -> None:
+        """表满时淘汰一个桶，保持严格上限。
+
+        淘汰优先级：**剩余令牌最多者优先**（最接近回满，限流状态最不重要）。
+        被限流的来源（令牌已耗尽）因此最不容易被挤掉——轮换新来源冲刷桶表
+        也洗不白自己的配额。为控制开销只抽样最旧的 64 个桶（抽样成本有界），
+        抽到已回满的直接淘汰。
+        """
+        if self._max_buckets <= 0 or len(self._buckets) < self._max_buckets:
+            return
+        victim_key, victim_tokens, first = None, -1.0, None
+        for i, (key, b) in enumerate(self._buckets.items()):
+            if i >= self._EVICT_SAMPLE:
+                break
+            if first is None:
+                first = key
+            tokens = b.tokens + (now - b.last_refill) * b.refill_rate
+            if tokens >= b.capacity:      # 已回满：直接淘汰，不必再找
+                victim_key = key
+                break
+            if tokens > victim_tokens:
+                victim_key, victim_tokens = key, tokens
+        del self._buckets[victim_key if victim_key is not None else first]
+
     def is_allowed(self, key: str) -> Tuple[bool, Dict[str, Any]]:
-        now = time.monotonic()
         with self._lock:
+            now = time.monotonic()   # 取时钟必须在锁内：锁外取值会让等待期间 delta 为负、倒扣令牌
             bucket = self._buckets.pop(key, None)   # pop 后再插回 = 按最近使用排序
             if bucket is None:
-                while len(self._buckets) >= self._max_buckets:
-                    del self._buckets[next(iter(self._buckets))]
+                self._evict_one(now)
                 bucket = _TokenBucket(self._capacity, self._refill)
             self._buckets[key] = bucket
             allowed = bucket.consume(now)
