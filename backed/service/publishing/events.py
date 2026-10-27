@@ -124,10 +124,10 @@ def _dispatch_async(evt):
         if "*" not in evts and evt["type"] not in evts:
             continue
         try:
-            headers = {"Content-Type": "application/json", "X-Harbor-Event": evt["type"]}
+            headers = {"Content-Type": "application/json", "X-Harbour-Event": evt["type"]}
             sig = _wh.sign_payload(payload, secret_enc)
             if sig:
-                headers["X-Harbor-Signature"] = f"sha256={sig}"
+                headers["X-Harbour-Signature"] = f"sha256={sig}"
             req = urllib.request.Request(
                 url, data=payload.encode(), headers=headers, method="POST")
             with urllib.request.urlopen(req, timeout=8) as resp:

@@ -186,7 +186,7 @@ const CAT_OPTIONS = {
   juejin: ['后端', '前端', 'android', 'ios', '人工智能', '开发工具', '代码人生', '阅读'],
   csdn: ['后端与架构设计', '前端开发', '移动开发', '人工智能', '网络安全', '云计算', '大数据', '物联网', '数据库', '运维', '程序人生', '其他'],
 }
-const CAT_MEM_KEY = 'harbor.publish.categories'
+const CAT_MEM_KEY = 'harbour.publish.categories'
 
 const selected = ref([])
 const platformSettings = reactive({})

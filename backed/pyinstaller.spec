@@ -1,19 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for content-harbor sidecar.
+PyInstaller spec for harbour sidecar.
 
 打包命令（在 backed/ 目录下执行）：
   uv run pyinstaller pyinstaller.spec --clean
 
 产物：
-  dist/content-harbor-backend.exe
+  dist/harbour-backend.exe
 
 启动参数：
-  content-harbor-backend.exe --port 0 --host 127.0.0.1
+  harbour-backend.exe --port 0 --host 127.0.0.1
   端口选 0 时 OS 随机分配，stdout 第一行输出实际端口号，供 Tauri 父进程读取。
 
 数据目录：
-  桌面版将数据存放在 %APPDATA%\content-harbor\data\ 下（由 Rust 通过
+  桌面版将数据存放在 %APPDATA%\harbour\data\ 下（由 Rust 通过
   --data-dir 参数传入）。开发/测试版默认用 backed/data/。
 """
 
@@ -77,7 +77,7 @@ exe = EXE(
     a.scripts,
     [],          # 不打包进单 exe（one-file 体积太大且解压慢），用 one-dir
     exclude_binaries=True,
-    name="content-harbor-backend",
+    name="harbour-backend",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -98,5 +98,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="content-harbor-backend",
+    name="harbour-backend",
 )

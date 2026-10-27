@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Content Harbor MCP Server — 让任意 AI Agent 通过 MCP 协议操控内容港。
+"""Harbour MCP Server — 让任意 AI Agent 通过 MCP 协议操控内容港。
 
 启动（stdio 模式）：
     python mcp_server.py
@@ -9,13 +9,13 @@
     python mcp_server.py --transport sse --port 8900
 
 注册到 Claude Code / Cursor / Windsurf：
-    claude mcp add --transport stdio content-harbor python /path/to/mcp_server.py
+    claude mcp add --transport stdio harbour python /path/to/mcp_server.py
     # 或 .mcp.json:
     {
       "mcpServers": {
-        "content-harbor": {
+        "harbour": {
           "command": "python",
-          "args": ["/path/to/content-harbor/mcp_server.py"]
+          "args": ["/path/to/harbour/mcp_server.py"]
         }
       }
     }
@@ -43,7 +43,7 @@ def _get_hub() -> Hub:
     return _hub
 
 
-mcp = FastMCP("content-harbor")
+mcp = FastMCP("harbour")
 
 
 # ── 文章 ────────────────────────────────────────────────────────────
@@ -328,7 +328,7 @@ def wechatsync_publish(article_id: int, platforms: str,
     if not platforms.strip():
         raise ValueError("platforms 不能为空")
 
-    tmp = Path(os.environ.get("TEMP", "/tmp")) / f"harbor-ws-{article_id}.md"
+    tmp = Path(os.environ.get("TEMP", "/tmp")) / f"harbour-ws-{article_id}.md"
     try:
         tmp.write_text(art.get("content_md", ""), encoding="utf-8")
         args = ["sync", str(tmp), "-p", platforms]
@@ -364,7 +364,7 @@ def wechatsync_platforms() -> dict:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Content Harbor MCP Server")
+    parser = argparse.ArgumentParser(description="Harbour MCP Server")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
     parser.add_argument("--port", type=int, default=8900)
     args = parser.parse_args()

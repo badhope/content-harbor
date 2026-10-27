@@ -13,7 +13,7 @@ router = APIRouter()
 @router.get("/health")
 def health():
     """桌面版 Tauri sidecar 健康检查端点。"""
-    return {"status": "ok", "service": "content-harbor"}
+    return {"status": "ok", "service": "harbour"}
 
 
 @router.get("/status")

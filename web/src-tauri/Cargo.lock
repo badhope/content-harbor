@@ -339,7 +339,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "content-harbor"
+name = "harbour"
 version = "0.7.0"
 dependencies = [
  "reqwest 0.12.28",

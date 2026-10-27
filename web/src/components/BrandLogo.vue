@@ -1,15 +1,16 @@
 <template>
   <span class="brand" :class="{ big: size === 'big' }">
     <svg class="brand-mark" :style="{ width: px + 'px', height: px + 'px' }" viewBox="0 0 48 48" aria-hidden="true">
-      <!-- 内容港 mark：圆角方底 + 金色"一"字笔触 + 散落墨点（多平台分发） -->
+      <!-- Harbour mark：圆角方底 + 船锚 + 双波浪（锚定多平台，内容入港） -->
       <rect x="3" y="3" width="42" height="42" rx="12" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="1" />
-      <!-- "一"：横笔，古铜金，微倾斜，像落笔 -->
-      <rect x="13" y="21" width="22" height="4.5" rx="2.25"
-            fill="var(--accent)" transform="rotate(-3 24 23)" />
-      <!-- 墨点：尾迹，暗示内容散到全网 -->
-      <circle cx="36" cy="24" r="1.6" fill="var(--accent-hi)" opacity=".85" />
-      <circle cx="39.5" cy="26.5" r="1.1" fill="var(--accent)" opacity=".5" />
-      <circle cx="42" cy="28.5" r=".8" fill="var(--accent)" opacity=".3" />
+      <!-- 锚：环 + 杆 + 横杆 + 锚臂 -->
+      <circle cx="24" cy="12.4" r="3.1" fill="none" stroke="var(--accent)" stroke-width="2.6" />
+      <path d="M24 15.7 V 35.6" stroke="var(--accent)" stroke-width="2.7" stroke-linecap="round" />
+      <path d="M17.7 20.2 H 30.3" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" />
+      <path d="M14.8 27.5 A 9.2 9.2 0 0 0 33.2 27.5" fill="none" stroke="var(--accent)" stroke-width="2.7" stroke-linecap="round" />
+      <!-- 双波浪：水面，暗示全网分发 -->
+      <path d="M14 40.6 q 2.5 -2 5 0 t 5 0 t 5 0 t 5 0" fill="none" stroke="var(--accent)" stroke-width="1.9" stroke-linecap="round" opacity=".75" />
+      <path d="M18 43.7 q 2.4 -1.8 4.8 0 t 4.8 0" fill="none" stroke="var(--accent-hi)" stroke-width="1.5" stroke-linecap="round" opacity=".45" />
     </svg>
     <span v-if="withName" class="brand-txt">
       <span class="brand-name">{{ name }}</span>
@@ -20,7 +21,7 @@
 
 <script setup>
 defineProps({
-  name: { type: String, default: '内容港 Harbor' },
+  name: { type: String, default: '内容港 Harbour' },
   sub: { type: String, default: '内容进港 · 全网分发' },
   px: { type: Number, default: 28 },
   withName: { type: Boolean, default: true },

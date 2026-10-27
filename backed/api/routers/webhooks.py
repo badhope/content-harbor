@@ -57,7 +57,7 @@ def webhooks_test(wid: int):
     """发送测试事件到指定 webhook。"""
     from service.publishing import events as evt_mod
     evt_mod.init_events()
-    evt_mod.emit("test", {"message": "Content Harbor 测试事件", "webhook_id": wid})
+    evt_mod.emit("test", {"message": "Harbour 测试事件", "webhook_id": wid})
     return {"ok": True, "message": "测试事件已派发"}
 
 

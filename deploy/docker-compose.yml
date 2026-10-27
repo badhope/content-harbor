@@ -1,4 +1,4 @@
-# 内容港 Harbor — Docker Compose
+# 内容港 Harbour — Docker Compose
 #
 # 一键启动（后端 + 前端 + nginx）：
 #   docker compose --profile web up -d --build

@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""备份 harbor 的不可再生资产：文章库、登录快照、AI 凭据配置。
+"""备份 Harbour 的不可再生资产：文章库、登录快照、AI 凭据配置。
 
 为什么是个 Python 脚本而不是 docs/design/m5-data.md:60 里写的 `cp`：
 SQLite 跑在 WAL 模式下且服务常在写，`cp hub.db` 拿到的是半截事务的副本——
 能打开、但可能缺最近几条写入。`sqlite3.Connection.backup()` 走 SQLite 自己的
 备份 API，在线拿一致性快照，**不需要停服务**。
 
-备份目标默认放在用户主目录下的 harbor-backups/，刻意不复用仓库内的任何目录：
+备份目标默认放在用户主目录下的 harbour-backups/，刻意不复用仓库内的任何目录：
 auth.json 是 session cookie、config.json 是明文 API Key，入库或上传等于泄密。
 
 用法（在 backed/ 下，让 uv 环境生效）：
-    uv run python ../scripts/backup_data.py                # 备份到 ~/harbor-backups
+    uv run python ../scripts/backup_data.py                # 备份到 ~/harbour-backups
     uv run python ../scripts/backup_data.py --dry-run      # 只打印计划，不落盘
     uv run python ../scripts/backup_data.py --keep 14      # 保留 14 天
     uv run python ../scripts/backup_data.py --include-profiles   # 连浏览器 profile 一起
@@ -95,7 +95,7 @@ def _refuse_dest_inside_repo(dest: Path) -> None:
     if rel is not None:
         raise RefuseError(
             f"备份目标位于仓库内（{rel}）。auth.json 与 config.json 含凭据，"
-            f"入库即泄密。请用 --dest 指向仓库外的目录，例如 ~/harbor-backups")
+            f"入库即泄密。请用 --dest 指向仓库外的目录，例如 ~/harbour-backups")
 
 
 def _harden(path: Path) -> None:
@@ -239,12 +239,12 @@ def run_backup(dest: Path, keep_days: int, include_profiles: bool = False,
 # ---------------------------------------------------------------- CLI
 
 def _default_dest() -> Path:
-    return Path.home() / "harbor-backups"
+    return Path.home() / "harbour-backups"
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        description="备份 harbor 文章库与登录态（在线安全，无需停服务）",
+        description="备份 Harbour 文章库与登录态（在线安全，无需停服务）",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dest", type=Path, default=_default_dest(),
                         help="备份根目录，默认 %%(default)s（必须在仓库外）")
