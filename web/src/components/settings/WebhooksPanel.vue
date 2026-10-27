@@ -53,7 +53,7 @@
       <div v-else class="dim small">暂无通知</div>
     </div>
 
-    <el-dialog v-model="createOpen" title="新建 Webhook" width="520px">
+    <el-dialog v-model="createOpen" title="新建 Webhook" width="min(520px, 94vw)">
       <el-form label-width="82px">
         <el-form-item label="地址" required>
           <el-input v-model="form.url" placeholder="https://your-server/hook" />

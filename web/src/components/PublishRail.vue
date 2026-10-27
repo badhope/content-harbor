@@ -18,7 +18,14 @@
           </div>
           <div class="plat-grid rail-plats">
             <div v-for="p in platforms" :key="p.id" class="plat-card rail-plat"
-                 :class="{ on: selected.includes(p.id) }" @click="toggle(p.id)">
+                 :class="{ on: selected.includes(p.id) }"
+                 role="checkbox"
+                 :aria-checked="selected.includes(p.id) ? 'true' : 'false'"
+                 :aria-label="`${p.name}：${selected.includes(p.id) ? '已选' : '未选'}`"
+                 tabindex="0"
+                 @click="toggle(p.id)"
+                 @keydown.enter.prevent="toggle(p.id)"
+                 @keydown.space.prevent="toggle(p.id)">
               <div class="plat-top">
                 <span class="plat-badge">{{ mark(p) }}</span>
                 <div class="nn">

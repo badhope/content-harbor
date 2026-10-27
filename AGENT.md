@@ -21,7 +21,7 @@ harbour/
 │   │   └── routers/               # 按领域拆分的子路由器
 │   │       ├── __init__.py
 │   │       ├── system.py          # /health /status /metrics /jobs /publications /pending-human
-│   │       ├── articles.py        # 文章 CRUD + 搜索 + 导入 + 版本历史 + AI 增强 + 质检
+│   │       ├── articles.py        # 文章 CRUD + 分页 + 搜索 + 导入 + 版本历史 + AI 增强 + 质检
 │   │       ├── accounts.py        # 登录/登出/诊断/验证码/辅助/刷新（含 SSRF 防护）
 │   │       ├── publishing.py      # 发布/更新/同步 + 任务查询/恢复
 │   │       ├── tags.py            # 标签治理
@@ -29,7 +29,7 @@ harbour/
 │   │       ├── webhooks.py        # Webhook CRUD + 站内通知 + SSE
 │   │       └── ai.py             # AI 写稿/Provider/模板/门禁状态
 │   ├── middleware/
-│   │   ├── rate_limiter.py        # 令牌桶限流（含 XFF 绕过防护）
+│   │   ├── rate_limiter.py        # 令牌桶限流（含 XFF 绕过防护 + 桶表上限）
 │   │   ├── security_headers.py    # 安全响应头（CSP/X-Frame-Options 等）
 │   │   └── audit_middleware.py    # HTTP 审计日志
 │   ├── core/
@@ -211,13 +211,13 @@ bash scripts/check_all.sh              # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                        # 全部 (390 用例)
+uv run pytest -q                        # 全部 (402 用例)
 uv run pytest tests/test_tasks.py -q    # 任务引擎
 uv run ruff check .                     # 静态门禁
 
 # 前端（在仓库根执行）
 pnpm --dir web lint                     # eslint
-pnpm --dir web test                     # vitest（14 用例）
+pnpm --dir web test                     # vitest（39 用例）
 ```
 
 `conftest.py` 的 `sandbox` fixture（autouse）把 DB/事件日志/Webhook 派发线程

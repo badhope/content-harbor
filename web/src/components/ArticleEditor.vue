@@ -2,7 +2,7 @@
   <div class="pane" style="height:100%">
     <div class="pane-head editor-head">
       <el-button v-if="showLibrary" size="small" :icon="Files" class="lib-btn"
-                 title="打开文章库" @click="$emit('open-library')" />
+                 title="打开文章库" aria-label="打开文章库" @click="$emit('open-library')" />
       <span class="title">{{ article.id ? '#' + article.id : '新文章' }}</span>
       <el-tag v-if="dirty" size="small" type="warning" effect="dark" class="dirty-tag">未保存</el-tag>
       <span class="spacer" />
@@ -94,7 +94,7 @@
   </div>
 
   <!-- 版本历史抽屉 -->
-  <el-drawer v-model="versionDrawer" :title="`版本历史 · #${currentId}`" size="520px" direction="rtl">
+  <el-drawer v-model="versionDrawer" :title="`版本历史 · #${currentId}`" size="min(520px, 94vw)" direction="rtl">
     <div v-if="versionsLoading" class="dim padding">加载中…</div>
     <div v-else-if="versionsList.length" class="ver-list">
       <div v-for="(v, i) in versionsList" :key="v.id" class="ver-card">
@@ -115,7 +115,7 @@
   </el-drawer>
 
   <!-- 内容质检 -->
-  <el-dialog v-model="qaDialog" title="内容质检报告" width="560px">
+  <el-dialog v-model="qaDialog" title="内容质检报告" width="min(560px, 94vw)">
     <div v-if="qaLoading" class="dim padding">质检中…</div>
     <div v-else-if="qaResult">
       <div class="qa-overview">
@@ -145,7 +145,7 @@
   </el-dialog>
 
   <!-- AI 工具面板 -->
-  <el-dialog v-model="aiToolDialog" :title="aiToolTitle" width="600px">
+  <el-dialog v-model="aiToolDialog" :title="aiToolTitle" width="min(600px, 94vw)">
     <div v-if="aiToolLoading" class="dim padding">AI 生成中…</div>
     <div v-else-if="aiToolData">
       <!-- 翻译结果 -->

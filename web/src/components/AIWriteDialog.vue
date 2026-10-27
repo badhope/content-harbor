@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="AI 落笔" width="560px" :close-on-click-modal="false" class="ai-write-dialog">
+  <el-dialog v-model="visible" title="AI 落笔" width="min(560px, 94vw)" :close-on-click-modal="false" class="ai-write-dialog">
     <el-alert v-if="!ready" type="warning" :closable="false" show-icon
               title="AI 未配置"
               description="在 config.json 或环境变量里填 AI_API_KEY / AI_BASE_URL / AI_MODEL 后重启后端即可。" />

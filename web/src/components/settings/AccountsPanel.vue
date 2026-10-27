@@ -33,7 +33,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="diagOpen" :title="`接入诊断 · ${diagData?.platform || ''}`" width="560px">
+    <el-dialog v-model="diagOpen" :title="`接入诊断 · ${diagData?.platform || ''}`" width="min(560px, 94vw)">
       <el-descriptions v-if="diagData" :column="1" border size="small">
         <el-descriptions-item v-for="(v, k) in diagData" :key="k" :label="k">{{ v }}</el-descriptions-item>
       </el-descriptions>
