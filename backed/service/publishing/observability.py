@@ -94,8 +94,9 @@ class MetricRegistry:
         METRICS.snapshot()  # -> {name: value}
     """
 
-    # 固定分桶，覆盖"快/慢/崩"三档
-    BUCKETS = [0.5, 1, 2, 5, 10, 30, 60, float("inf")]
+    # 固定分桶：毫秒级 API 到分钟级发布都覆盖，避免低端只有一个桶导致分位失真
+    BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60,
+               float("inf")]
 
     def __init__(self):
         self._lock = threading.Lock()

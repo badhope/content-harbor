@@ -15,6 +15,7 @@ def test_histogram_buckets_are_cumulative():
         reg.observe("t", v)
     buckets = reg.snapshot()["histograms"]["t"]["buckets"]
     # Prometheus 语义：le 桶是 <= 上界的累积计数，+Inf 必须等于总次数
+    assert buckets["0.25"] == 0
     assert buckets["0.5"] == 1
     assert buckets["1"] == 1
     assert buckets["2"] == 2
