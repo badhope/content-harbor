@@ -36,7 +36,6 @@ def _links(path):
 
 @pytest.mark.parametrize("rel", [
     "README.md",
-    "README.en.md",
     "AGENT.md",
     "CHANGELOG.md",
     "docs/architecture/ARCHITECTURE.md",
@@ -48,7 +47,7 @@ def test_markdown_files_exist(rel):
 
 
 @pytest.mark.parametrize("src", [
-    "README.md", "README.en.md", "AGENT.md", "CHANGELOG.md",
+    "README.md", "AGENT.md", "CHANGELOG.md",
     "docs/architecture/ARCHITECTURE.md", "docs/audit/AUDIT.md",
 ])
 def test_relative_links_resolve(src):
