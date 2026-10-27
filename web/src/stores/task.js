@@ -7,7 +7,8 @@ export const useTaskStore = defineStore('task', {
   state: () => ({
     tasks: [],
     total: 0,
-    truncated: false,   // 拉到的条数 == limit 时说明可能还有更老的没加载
+    truncated: false,   // 首页条数 < 总数时说明还有更老的没加载
+    _prevWaiting: [],   // 上一轮 waiting_human 快照，用于只弹新增通知
     loginTasks: {},   // platform -> {task_id, status, message}
     _es: null,         // EventSource
     _lastEventTs: 0,
@@ -22,17 +23,25 @@ export const useTaskStore = defineStore('task', {
     async loadTasks(notify = false) {
       try {
         const limit = 200
-        const r = await api.tasksPage({ limit, offset: 0 }) || {}
-        const list = r.items || []
-        this.total = r.total || list.length
-        this.truncated = !!r.has_more
-        const prevWaiting = new Set(this.tasks.filter(t => t.status === 'waiting_human').map(t => t.task_id))
-        this.tasks = list
+        const [r, waiting] = await Promise.all([
+          api.tasksPage({ limit, offset: 0 }),
+          // 待人工任务必须单独查：它可能排在第 200 条之外，只翻首页会漏掉角标和待办
+          api.tasksPage({ limit: 200, offset: 0, status: 'waiting_human' })
+        ])
+        const list = r?.items || []
+        const waitingList = waiting?.items || []
+        this.total = r?.total ?? list.length
+        this.truncated = !!r?.has_more
+        const known = new Set(list.map(t => t.task_id))
+        // 首页之外还有 waiting_human 时补进来，保证 waitingTasks getter 完整
+        this.tasks = list.concat(waitingList.filter(t => !known.has(t.task_id)))
         if (notify) {
-          for (const t of list.filter(x => x.status === 'waiting_human' && !prevWaiting.has(x.task_id))) {
+          const prevWaiting = new Set(this._prevWaiting || [])
+          for (const t of this.tasks.filter(x => x.status === 'waiting_human' && !prevWaiting.has(x.task_id))) {
             ElNotification({ title: '任务等待人工处理', message: `${t.kind} 任务「${t.message || '挂起中'}」→ 到任务中心处理`, type: 'warning', duration: 0 })
           }
         }
+        this._prevWaiting = this.tasks.filter(t => t.status === 'waiting_human').map(t => t.task_id)
       } catch { /* 轮询失败静默 */ }
     },
 

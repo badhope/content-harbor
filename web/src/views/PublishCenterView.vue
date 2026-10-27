@@ -15,7 +15,7 @@
         <div class="sc-lbl">已上线实例</div>
       </div>
       <div class="stat-card">
-        <div class="sc-num">{{ hub.stats?.published || 0 }}</div>
+        <div class="sc-num">{{ hub.stats?.published_articles || 0 }}</div>
         <div class="sc-lbl">已发布文章</div>
       </div>
       <span class="spacer" />

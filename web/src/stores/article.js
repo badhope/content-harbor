@@ -20,6 +20,8 @@ export const useArticleStore = defineStore('article', {
     total: 0,
     hasMore: false,
     loadingMore: false,
+    serverOffset: 0,   // 已消费的服务端行数；不能用去重后的本地条数，否则会漂移
+    _listGen: 0,       // 列表请求代际，避免旧响应覆盖新列表
     PAGE_SIZE: 50,
   }),
 
@@ -39,29 +41,40 @@ export const useArticleStore = defineStore('article', {
 
   actions: {
     async loadList() {
+      const gen = ++this._listGen
       this.loadingList = true
       try {
         const r = await api.articlesPage({
           limit: this.PAGE_SIZE, offset: 0, status: this.filterStatus || undefined
         }) || {}
+        if (gen !== this._listGen) return
         this.articles = r.items || []
-        this.total = r.total || this.articles.length
+        this.serverOffset = this.articles.length
+        this.total = r.total ?? this.articles.length
         this.hasMore = !!r.has_more
-      } finally { this.loadingList = false }
+      } finally {
+        if (gen === this._listGen) this.loadingList = false
+      }
     },
 
     async loadMore() {
       if (this.loadingMore || !this.hasMore) return
+      const gen = this._listGen
       this.loadingMore = true
       try {
         const r = await api.articlesPage({
-          limit: this.PAGE_SIZE, offset: this.articles.length,
+          limit: this.PAGE_SIZE, offset: this.serverOffset,
           status: this.filterStatus || undefined
         }) || {}
+        // 期间列表被重置（保存/刷新/切筛选）就丢弃这次结果，否则会拼到新列表上
+        if (gen !== this._listGen) return
+        const items = r.items || []
         const known = new Set(this.articles.map(a => a.id))
-        this.articles = this.articles.concat((r.items || []).filter(a => !known.has(a.id)))
-        this.total = r.total || this.total
-        this.hasMore = !!r.has_more
+        this.articles = this.articles.concat(items.filter(a => !known.has(a.id)))
+        // offset 以服务端消费行数为准；即使有条目被去重也要前进，否则永远卡住
+        this.serverOffset += items.length
+        this.total = r.total ?? this.total
+        this.hasMore = !!r.has_more && items.length > 0
       } finally { this.loadingMore = false }
     },
 

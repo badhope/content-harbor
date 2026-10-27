@@ -114,13 +114,14 @@ const exprHelp = computed(() => ({
 }[form.schedule_type] || ''))
 
 async function loadArticleOptions() {
-  const all = []
-  for (let offset = 0; offset < 1000; offset += 200) {
+  const seen = new Map()
+  for (let offset = 0; offset < 5000; offset += 200) {
     const r = await api.articlesPage({ limit: 200, offset }) || {}
-    all.push(...(r.items || []))
-    if (!r.has_more) break
+    const items = r.items || []
+    for (const a of items) seen.set(a.id, { id: a.id, title: a.title })
+    if (!r.has_more || !items.length) break
   }
-  articleOptions.value = all
+  articleOptions.value = [...seen.values()]
 }
 
 onMounted(async () => {
