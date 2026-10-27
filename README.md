@@ -113,13 +113,13 @@ AI 写稿 / 手工编辑 → 保存 → 选平台 → 发布
 ## 测试
 
 ```bash
-# 一键门禁（四道全绿才能提交）
+# 一键门禁（六道全绿才能提交）
 pwsh -File scripts/check_all.ps1      # Windows
 bash scripts/check_all.sh            # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                     # 379 用例
+uv run pytest -q                     # 390 用例
 uv run ruff check .                  # 静态
 ```
 ## 备份

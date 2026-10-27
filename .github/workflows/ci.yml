@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: 安装依赖（uv sync，含 dev 组）
+        run: uv sync
+      - name: 语法检查（compileall）
+        run: uv run python -m compileall -q .
+      - name: 静态门禁（ruff：未定义名 / 运行时错误）
+        run: uv run ruff check .
+      - name: 依赖安全扫描（pip-audit，仅报告不阻断）
+        continue-on-error: true
+        run: uv run --with pip-audit pip-audit --strict --index-url https://pypi.org/simple
+      - name: 单元测试（pytest）
+        run: uv run pytest -q --no-header
+      - name: 启动冒烟（应用可装配）
+        run: uv run python -c "from app.factory import create_app; assert create_app(); print('app assembled ok')"
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+      - name: 前端 lint（eslint）
+        run: pnpm lint
+      - name: 前端单测（vitest）
+        run: pnpm test
+      - name: 构建（vite build，产物须能在 FastAPI /static 下挂载）
+        run: pnpm build

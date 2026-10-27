@@ -75,8 +75,10 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    [],          # 不打包进单 exe（one-file 体积太大且解压慢），用 one-dir
-    exclude_binaries=True,
+    a.binaries,
+    a.datas,
+    [],          # one-file：Tauri externalBin 只接受单文件，且 README 承诺"单 exe 双击即用"
+    exclude_binaries=False,
     name="harbour-backend",
     debug=False,
     bootloader_ignore_signals=False,
@@ -90,13 +92,3 @@ exe = EXE(
     entitlements_file=None,
 )
 
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name="harbour-backend",
-)

@@ -205,13 +205,13 @@ uv run python -m backed.cli approve-task <id> # 批准待人工任务
 ### 测试
 
 ```bash
-# 一键门禁（四道：compileall → ruff → pytest → vite build）
+# 一键门禁（六道：compileall → ruff → pytest → eslint → vitest → vite build）
 pwsh -File scripts/check_all.ps1        # Windows
 bash scripts/check_all.sh              # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                        # 全部 (379 用例)
+uv run pytest -q                        # 全部 (390 用例)
 uv run pytest tests/test_tasks.py -q    # 任务引擎
 uv run ruff check .                     # 静态门禁
 ```

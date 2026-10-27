@@ -8,7 +8,9 @@
 #   1. 语法编译   python -m compileall（每个 .py 都能被解释器读）
 #   2. 静态门禁   ruff（未定义名 / 运行时错误类，见 backed/pyproject.toml [tool.ruff]）
 #   3. 单元测试   pytest（DB/任务引擎/标签/版本/事件/调度器/质检/REST 接线）
-#   4. 前端构建   vite build（产物落 server/static，FastAPI 挂载点）
+#   4. 前端 lint    eslint（未使用变量 / prop 变更 / Vue 规则）
+#   5. 前端单测     vitest（store 竞态/保存发布链路/重试策略）
+#   6. 前端构建     vite build（产物落 server/static，FastAPI 挂载点）
 #
 # 任一步失败立刻停，最后打一行 PASS/FAIL 汇总。
 
@@ -37,21 +39,25 @@ step() {
 cd "$backed"
 export UV_NO_PROGRESS=1
 
-step "1/4 语法编译 compileall" uv run python -m compileall -q .
+step "1/6 语法编译 compileall" uv run python -m compileall -q .
 ruff_lint() {
   ( cd "$backed" && uv run ruff check . ) || return 1
   # mcp_server.py 在仓库根，不在 backed/ 的 pyproject 作用域内，显式带上同一套规则
   uv run ruff check "$repo_root/mcp_server.py" --select E9,F7,F82
 }
 
-step "2/4 静态门禁 ruff" ruff_lint
-step "3/4 单元测试 pytest"     uv run pytest -q --no-header -p no:cacheprovider
+step "2/6 静态门禁 ruff" ruff_lint
+step "3/6 单元测试 pytest"     uv run pytest -q --no-header -p no:cacheprovider
 
 if [ -d "$repo_root/web/node_modules" ]; then
-  step "4/4 前端构建 vite build" pnpm --dir "$repo_root/web" build
+  step "4/6 前端 lint eslint"  pnpm --dir "$repo_root/web" lint
+  step "5/6 前端单测 vitest"   pnpm --dir "$repo_root/web" test
+  step "6/6 前端构建 vite build" pnpm --dir "$repo_root/web" build
 else
   echo ""
-  echo "===> 4/4 前端构建（跳过：web/node_modules 不存在，先 pnpm --dir web install）"
+  echo "===> 4/6 前端 lint（跳过：web/node_modules 不存在）"
+  echo "===> 5/6 前端单测（同上跳过）"
+  echo "===> 6/6 前端构建（同上跳过）"
 fi
 
 echo ""
