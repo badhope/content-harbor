@@ -28,6 +28,15 @@ class ResizeObserverStub {
   disconnect() {}
 }
 globalThis.ResizeObserver = globalThis.ResizeObserver || ResizeObserverStub
+// jsdom 没有 EventSource；App.vue 挂载会调 hub.boot() → connectSSE()
+class EventSourceStub {
+  constructor() { this.readyState = 0 }
+  addEventListener() {}
+  removeEventListener() {}
+  close() { this.readyState = 2 }
+}
+globalThis.EventSource = globalThis.EventSource || EventSourceStub
+
 globalThis.matchMedia = globalThis.matchMedia || (() => ({
   matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}
 }))

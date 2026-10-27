@@ -120,6 +120,8 @@ bash scripts/check_all.sh            # Linux/macOS
 # 单跑
 cd backed
 uv run pytest -q                     # 390 用例
+pnpm --dir web test                  # 前端 14 用例（vitest）
+pnpm --dir web lint                  # 前端 eslint
 uv run ruff check .                  # 静态
 ```
 ## 备份

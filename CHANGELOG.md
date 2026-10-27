@@ -2,6 +2,67 @@
 
 ---
 
+## [Unreleased] - 2026-10-27（品牌更名 Harbour + 工程质量债偿还）
+
+> 主题：**项目更名 Harbour（含仓库/logo/代码标识）；前端从零建测试体系；修复 7 个阻断缺陷；门禁四道 → 六道；恢复 CI。**
+> 测试：后端 379 → 390；前端 0 → 14（vitest）；新增 eslint 门禁。
+
+### 品牌更名（breaking）
+
+- 仓库原地改名 `badhope/content-harbor` → `badhope/harbour`（GitCode API，不删库重建）。
+- 包名/产物：Cargo `harbour`、PyInstaller `harbour-backend`、Tauri identifier `com.harbour.hub`。
+- 环境变量：`HARBOR_*` → `HARBOUR_*`（`DATABASE_URL` / `SECRET_KEY` / `API_TOKEN`）。
+- Webhook 契约头：`X-Harbor-Event` / `X-Harbor-Signature` → `X-Harbour-*`（**外部集成需同步**）。
+- 新 logo：蓝底白锚 + 双波浪，50 个 Tauri 图标全套重绘（ico/icns/ios/android/windows）。
+- 文档统一中文单语，删除重复的 `README.en.md`。
+
+### 修复：7 个阻断缺陷
+
+- **鉴权失败返回 500**：中间件层 `raise HTTPException` 不走 FastAPI 异常处理器，改返回
+  `JSONResponse(401)`。端到端实测（真实打包 sidecar）错 token → 401、对 token → 200。
+- **任务队列饿死**：`list_tasks(limit=10)` 先按 id 倒序再重排，积压超 10 条时最早任务
+  永不执行；新增 `db.next_pending_tasks()` 在 SQL 层 `ORDER BY created_at ASC, id ASC`。
+- **定时任务假成功**：`update()` 不校验存在性且无条件 `return True`，路由对 None 解包抛 500；
+  改 rowcount 判定。
+- **`db.update_article` / `update_task` 静默成功**：不检查 rowcount，改返回布尔。
+- **前端保存后 ReferenceError**：`article.js` 调用 `useHubStore()` 却未 import，保存必抛。
+- **发布发旧稿**：`hub.publish` 只在新建时保存，已有文章改完点发布会发旧版；改为
+  `!currentId || dirty` 都先保存。
+- **POST 重复发布**：axios 拦截器对所有方法重试 5xx，限定仅 GET（幂等）。
+- **未保存标记失效**：`WriteView` 直接给 Pinia getter 赋值（静默失败，有丢稿风险），
+  新增 `markDirty()` action。
+
+### 修复：其他工程质量
+
+- `service` 层不再抛 `HTTPException`，改抛领域异常 `GateError`，由 `app/exceptions.py`
+  映射 422；MCP/CLI 同路径可识别业务错误。
+- `HUB_DATA_DIR` 此前只在 sidecar 设置、无人读取（桌面版数据写进安装目录）；
+  `db.data_root()` 统一接管 db / Fernet 密钥 / browser profile 三处。
+- 依赖声明纠正：删除零使用的 `aiosqlite`、`passlib`；显式声明 `bcrypt` / `cryptography`
+  （原靠传递依赖，PyInstaller 精简环境会缺包）。
+- 时间格式化 6 处重复收敛到 `web/src/utils/format.js`；`humanize.human_type` 与
+  `human_click.human_type` 重复且前者零调用，删除。
+- `pyinstaller.spec` 由 onedir 改 onefile：Tauri `externalBin` 只接受单文件，
+  onedir 产物缺 `_internal` 无法启动；README 也承诺单 exe 双击即用。
+
+### 新增
+
+- **前端测试体系**：vitest + @vue/test-utils + jsdom + @pinia/testing，14 个用例
+  （视图互斥、保存/发布契约、重试策略、dirty 状态）。均做过回退验证确认能抓回归。
+- **ESLint 9 flat config** + eslint-plugin-vue。
+- **CI 恢复**（`remove-ci-workflow` 后长期无自动化）：双 job，backend 跑
+  compileall/ruff/pytest/装配冒烟，frontend 跑 eslint/vitest/build。
+- **门禁四道 → 六道**：compileall → ruff → pytest → eslint → vitest → vite build
+  （`scripts/check_all.ps1` / `.sh` 与 CI 对齐）。
+
+### 验证
+
+- 六道门禁全绿；pytest 390 passed / vitest 14 passed / ruff + eslint 零错误。
+- `cargo check` 通过（Tauri Rust 侧首次实际编译验证）。
+- onefile sidecar（25MB）实测启动 + `/health` 200。
+
+---
+
 ## [Unreleased] - 2026-10-14（第四轮：AI 声明改走平台选项 + 发布多模式）
 
 > 主题：**AI 声明不再写进正文（改用平台自带「AI 辅助」选项）；发布支持三档操作模式**。
