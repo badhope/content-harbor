@@ -9,12 +9,23 @@
 """
 
 import json
+import os
 import sqlite3
 import threading
 import time
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "hub.db"
+def data_root() -> Path:
+    """数据根目录：优先 HUB_DATA_DIR（Tauri sidecar 传入 %APPDATA%），否则仓库内 data/。"""
+    env = os.environ.get("HUB_DATA_DIR", "").strip()
+    if env:
+        p = Path(env)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    return Path(__file__).resolve().parent.parent / "data"
+
+
+DB_PATH = data_root() / "hub.db"
 
 
 class LockedConnection(sqlite3.Connection):
@@ -265,8 +276,10 @@ def update_article(conn, article_id, **kw):
         return False
     kw["updated_at"] = now()
     sets = ", ".join(f"{k}=?" for k in kw)
-    conn.execute(f"UPDATE articles SET {sets} WHERE id=?", (*kw.values(), article_id))
+    cur = conn.execute(f"UPDATE articles SET {sets} WHERE id=?", (*kw.values(), article_id))
     conn.commit()
+    if cur.rowcount == 0:
+        return False
     # 内容变了，已发布的实例全部标记待更新
     if "content_md" in kw or "title" in kw:
         conn.execute(
@@ -420,13 +433,22 @@ def list_tasks(conn, limit=50, kind=None, status=None):
     return [dict(r) for r in conn.execute(sql, args).fetchall()]
 
 
+def next_pending_tasks(conn, limit=10):
+    """按创建时间升序取待跑任务（FIFO）。审计 B5：原实现取 id DESC 再排序，
+    超 10 条积压时最早的会被永久饿死。"""
+    return [dict(r) for r in conn.execute(
+        "SELECT * FROM tasks WHERE status='pending' ORDER BY created_at ASC, id ASC LIMIT ?",
+        (limit,)).fetchall()]
+
+
 def update_task(conn, task_id, **kw):
     if not kw:
-        return
+        return False
     kw["updated_at"] = now()
     sets = ", ".join(f"{k}=?" for k in kw)
-    conn.execute(f"UPDATE tasks SET {sets} WHERE task_id=?", (*kw.values(), task_id))
+    cur = conn.execute(f"UPDATE tasks SET {sets} WHERE task_id=?", (*kw.values(), task_id))
     conn.commit()
+    return cur.rowcount > 0
 
 
 def prune_tasks(conn, keep=200):

@@ -9,7 +9,7 @@ import os
 from ipaddress import ip_address, ip_network
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request as FastAPIRequest
+from fastapi import FastAPI, Request as FastAPIRequest
 from starlette.requests import Request
 
 from service.publishing import observability as obs
@@ -119,7 +119,12 @@ def attach_auth_middleware(app: FastAPI) -> None:
         token = _api_token()
         if token and not is_trusted(request) \
                 and request.headers.get("X-API-Token") != token:
-            raise HTTPException(status_code=401, detail="无效的 API Token")
+            # 中间件层抛 HTTPException 不走 FastAPI 异常处理器，会退化成 500；
+            # 必须直接返回 JSONResponse（审计 B4）。
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=401,
+                                content={"code": 401, "message": "无效的 API Token",
+                                         "success": False, "data": None})
         return await call_next(request)
 
     _LOG_SKIP = ("/metrics", "/health", "/docs", "/openapi.json", "/redoc")

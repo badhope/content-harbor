@@ -149,11 +149,9 @@ class TaskManager:
 
     def _next_pending(self):
         with self._lock:
-            rows = db.list_tasks(self.conn, limit=10, status="pending")
+            rows = db.next_pending_tasks(self.conn, limit=10)
             if not rows:
                 return None
-            # 优先跑最老的
-            rows.sort(key=lambda t: t["created_at"])
             task = rows[0]
             db.update_task(self.conn, task["task_id"],
                            status="running", updated_at=time.time())

@@ -335,15 +335,17 @@ class Scheduler:
             cur_row = self.conn.execute(
                 "SELECT schedule_type, schedule_expr FROM scheduled_tasks WHERE id=?",
                 (sid,)).fetchone()
+            if cur_row is None:
+                return False
             st = kw.get("schedule_type", cur_row["schedule_type"])
             se = kw.get("schedule_expr", cur_row["schedule_expr"]) or ""
             kw["next_run"] = _calc_next_run(st, se)
         kw["updated_at"] = time.time()
         sets = ", ".join(f"{k}=?" for k in kw)
-        self.conn.execute(f"UPDATE scheduled_tasks SET {sets} WHERE id=?",
-                          (*kw.values(), sid))
+        cur = self.conn.execute(f"UPDATE scheduled_tasks SET {sets} WHERE id=?",
+                                (*kw.values(), sid))
         self.conn.commit()
-        return True
+        return cur.rowcount > 0
 
     def pause(self, sid):
         return self.update(sid, enabled=0)

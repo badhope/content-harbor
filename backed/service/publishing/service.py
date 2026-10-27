@@ -707,9 +707,9 @@ class Hub:
             for pf in platforms:
                 jid = db.add_job(self.conn, "publish", article_id, pf)
                 db.finish_job(self.conn, jid, False, f"合规门禁拒绝: {str(ge)[:200]}")
-            # 抛 HTTPException（422 语义"内容不合规"），让 FastAPI 返回 4xx 而非 500
-            from fastapi import HTTPException
-            raise HTTPException(422, f"合规门禁拒绝发布: {ge}")
+            # 抛领域异常：由 app/exceptions.py 映射为 422；service 不再依赖 Web 框架，
+            # MCP / CLI 调用同一路径也能拿到可识别的业务错误
+            raise ge
         art = gate_r["article"]   # AI 源已打 AIGC 标识
         # 人工确认留痕：谁在什么时候确认了 AI 稿上线（审计追溯，只写不覆盖已有时点）
         if human_confirmed and aigc_gate.is_ai_sourced(art) and not draft_only:
