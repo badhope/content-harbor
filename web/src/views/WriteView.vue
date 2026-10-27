@@ -17,6 +17,8 @@
       :is-new="!hub.currentId"
       :dirty="hub.dirty"
       :saving="hub.saving"
+      :show-library="!listDocked"
+      @open-library="listDrawer = true"
       @save="hub.save()"
       @touch="hub.dirty = true"
       @publish="onPublish"
@@ -28,10 +30,12 @@
       <EmptyState
         :px="58"
         title="墨迹未干"
-        desc="挑一篇接着写，或新起一篇。写完在右侧发布轨里选平台，一发出网。"
+        desc="挑一篇接着写，或新起一篇。写完在发布轨里选平台，一发出网。"
       >
         <el-button type="primary" :icon="Plus" @click="hub.newArticle()">起一篇新文</el-button>
         <el-button :icon="MagicStick" @click="$emit('ai-write')">让 AI 落笔</el-button>
+        <el-button v-if="!listDocked && hub.articles.length" :icon="Files"
+                   @click="listDrawer = true">打开文章库</el-button>
       </EmptyState>
     </div>
 
@@ -60,7 +64,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { Plus, MagicStick } from '@element-plus/icons-vue'
+import { Plus, MagicStick, Files } from '@element-plus/icons-vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useHubStore } from '@/stores/hub'
 import { api } from '@/api'

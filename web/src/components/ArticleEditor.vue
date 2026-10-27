@@ -1,6 +1,8 @@
 <template>
   <div class="pane" style="height:100%">
     <div class="pane-head editor-head">
+      <el-button v-if="showLibrary" size="small" :icon="Files" class="lib-btn"
+                 title="打开文章库" @click="$emit('open-library')" />
       <span class="title">{{ article.id ? '#' + article.id : '新文章' }}</span>
       <el-tag v-if="dirty" size="small" type="warning" effect="dark" class="dirty-tag">未保存</el-tag>
       <span class="spacer" />
@@ -186,7 +188,7 @@
 import { computed, ref, watch } from 'vue'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
-import { Check, PriceTag, Aim, Brush, Menu, Edit, Operation, View, Promotion, Refresh,
+import { Check, PriceTag, Aim, Brush, Menu, Edit, Operation, View, Promotion, Refresh, Files,
          Paperclip, Picture, List, DocumentCopy, Clock, DataAnalysis } from '@element-plus/icons-vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useHubStore } from '@/stores/hub'
@@ -195,10 +197,11 @@ const props = defineProps({
   article: { type: Object, default: null },
   isNew: Boolean,
   dirty: Boolean,
-  saving: Boolean
+  saving: Boolean,
+  showLibrary: Boolean
 })
 const hub = useHubStore()
-const emit = defineEmits(['save', 'touch', 'ai-rewrite', 'ai-polish', 'publish', 'sync-update'])
+const emit = defineEmits(['save', 'touch', 'ai-rewrite', 'ai-polish', 'publish', 'sync-update', 'open-library'])
 
 const { isMobile } = useBreakpoint()
 // 手机默认只看编辑，分屏两栏根本没法用；桌面默认分屏

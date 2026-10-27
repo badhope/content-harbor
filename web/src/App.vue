@@ -15,8 +15,9 @@
       />
 
       <main class="shell-main">
-        <!-- 写作台常驻（v-show）：切走再切回时编辑状态不丢 -->
-        <WriteView v-show="hub.view === 'write'" @ai-write="aiDialog = true" />
+        <!-- 视图切换统一用 v-if：v-show 节点紧邻 v-if 链会被编译成同一分支而失效；
+             编辑态由 hub store 持有（current/dirty/saving），切回不丢 -->
+        <WriteView v-if="hub.view === 'write'" @ai-write="aiDialog = true" />
         <PublishCenterView v-if="hub.view === 'publish'" />
         <TasksView v-else-if="hub.view === 'tasks'" />
         <SettingsView v-else-if="hub.view === 'settings'" />
