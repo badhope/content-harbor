@@ -644,7 +644,7 @@ class Hub:
         def _fill():
             """在浏览器线程里：拿到页面 → （assist 预填）→ 记 URL 后立刻返回，
             让出控制权（不点发布）。"""
-            br = self._acquire(platform, account)   # 已持池锁（_acquire 语义）
+            br = self._acquire(platform, account)   # _acquire 自取池锁，调用方不持锁
             page = br.new_page()
             target = ps.get("question_url") or ad.new_url or ad.home_url
             page.goto(target, timeout=60000, wait_until="domcontentloaded")

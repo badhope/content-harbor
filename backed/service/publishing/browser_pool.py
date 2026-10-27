@@ -34,25 +34,31 @@ class BrowserPoolManager:
     def _acquire(self, platform, account):
         """拿（或起）一个 headless 实例。拿到的不关，池里常驻复用。"""
         key = (platform, account)
+        victims = []
+        br = None
         with self._pool_lock:
             br = self._pool.get(key)
             if br is not None:
                 if key in self._pool_order:
                     self._pool_order.remove(key)
                 self._pool_order.append(key)
-                return br
-            br = BuiltinBrowser(platform, account, headless=self.headless)
-            self._pool[key] = br
-            self._pool_order.append(key)
-            while len(self._pool_order) > self.POOL_MAX:
-                old = self._pool_order.pop(0)
-                victim = self._pool.pop(old, None)
-                if victim:
-                    try:
-                        victim.close()
-                    except Exception:
-                        pass
-            return br
+            else:
+                br = BuiltinBrowser(platform, account, headless=self.headless)
+                self._pool[key] = br
+                self._pool_order.append(key)
+                while len(self._pool_order) > self.POOL_MAX:
+                    old = self._pool_order.pop(0)
+                    victim = self._pool.pop(old, None)
+                    if victim:
+                        victims.append(victim)
+        # 淘汰实例必须在池锁外关闭：close() 会走浏览器线程并可能阻塞数秒，
+        # 持锁关闭会把整池取用（含其它 key 的 _acquire）一起堵死。
+        for victim in victims:
+            try:
+                browser_thread_run(victim.close)
+            except Exception:  # aqg: top-level boundary 关闭失败不影响已取到的实例
+                pass
+        return br
 
     def _drop(self, platform, account):
         """实例疑似崩了：踢出池关掉，下次 _acquire 会起全新的。"""

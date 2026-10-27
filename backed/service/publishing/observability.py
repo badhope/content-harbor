@@ -94,13 +94,15 @@ class MetricRegistry:
         METRICS.snapshot()  # -> {name: value}
     """
 
+    # 固定分桶，覆盖"快/慢/崩"三档
+    BUCKETS = [0.5, 1, 2, 5, 10, 30, 60, float("inf")]
+
     def __init__(self):
         self._lock = threading.Lock()
         self._counters = {}
         self._gauge = {}
-        self._hist = {}   # name -> {"sum": float, "n": int, "buckets": {label: int}}
-        # 固定分桶，覆盖"快/慢/崩"三档
-        self._BUCKETS = [0.5, 1, 2, 5, 10, 30, 60, float("inf")]
+        self._hist = {}   # name -> {"sum": float, "n": int, "max": float, "buckets": {label: int}}
+        self._BUCKETS = self.BUCKETS
 
     def incr(self, name: str, delta: int = 1):
         with self._lock:
@@ -113,16 +115,41 @@ class MetricRegistry:
     def observe(self, name: str, value: float):
         """记录一次耗时（秒），进固定分桶。"""
         with self._lock:
-            h = self._hist.setdefault(name, {"sum": 0.0, "n": 0, "max": 0.0, "buckets": {}})
+            h = self._hist.setdefault(name, {"sum": 0.0, "n": 0, "max": 0.0,
+                                             "buckets": {}})
             h["sum"] += value
             h["n"] += 1
             if value > h["max"]:
                 h["max"] = value
+            # 累积语义：一次观测会同时落进所有 >= value 的桶
             for b in self._BUCKETS:
                 if value <= b:
                     label = str(b) if b != float("inf") else "+Inf"
                     h["buckets"][label] = h["buckets"].get(label, 0) + 1
-                    break
+
+    def _quantile(self, buckets: dict, total: int, q: float) -> float:
+        """按累积桶线性插值估算分位（Prometheus histogram_quantile 同款思路）。"""
+        if not total:
+            return 0.0
+        rank = q * total
+        upper = 0.0
+        for b in self._BUCKETS:
+            label = str(b) if b != float("inf") else "+Inf"
+            cum = buckets.get(label, 0)
+            if cum >= rank:
+                lower = upper
+                if b == float("inf"):
+                    return lower
+                if b == lower:
+                    return upper
+                # 桶内均匀分布假设
+                prev = buckets.get(str(lower), 0) if lower else 0
+                span = cum - prev
+                if span <= 0:
+                    return upper
+                return lower + (b - lower) * (rank - prev) / span
+            upper = b if b != float("inf") else upper
+        return upper
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -135,7 +162,14 @@ class MetricRegistry:
                     "sum": h["sum"],
                     "avg": (h["sum"] / h["n"]) if h["n"] else 0.0,
                     "max": h.get("max", 0.0),
-                    "buckets": dict(h["buckets"]),
+                    "buckets": {label: h["buckets"].get(label, 0)
+                                for label in (str(b) if b != float("inf") else "+Inf"
+                                              for b in self._BUCKETS)},
+                    "quantiles": {
+                        "p50": round(self._quantile(h["buckets"], h["n"], 0.50), 4),
+                        "p90": round(self._quantile(h["buckets"], h["n"], 0.90), 4),
+                        "p99": round(self._quantile(h["buckets"], h["n"], 0.99), 4),
+                    },
                 }
             return out
 

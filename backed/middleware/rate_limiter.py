@@ -75,12 +75,17 @@ class _TokenBucket:
 
 
 class InMemoryRateLimiter:
-    """内存令牌桶限流器（线程安全）"""
+    """内存令牌桶限流器（线程安全）
 
-    def __init__(self):
+    桶表有上限（默认 10000，按最近使用淘汰最旧键）。无上限时任何来源
+    换个 IP 就能让桶表无限增长，长期运行会持续吃内存。
+    """
+
+    def __init__(self, max_buckets: int = 10000):
         import threading
         self._lock = threading.Lock()
         self._buckets: Dict[str, _TokenBucket] = {}
+        self._max_buckets = max(1, int(max_buckets))
         self._capacity = getattr(settings, "rate_limit_burst", 20) or 20
         self._refill = (
             getattr(settings, "rate_limit_requests_per_minute", 60) or 60
@@ -89,10 +94,12 @@ class InMemoryRateLimiter:
     def is_allowed(self, key: str) -> Tuple[bool, Dict[str, Any]]:
         now = time.monotonic()
         with self._lock:
-            bucket = self._buckets.get(key)
+            bucket = self._buckets.pop(key, None)   # pop 后再插回 = 按最近使用排序
             if bucket is None:
+                while len(self._buckets) >= self._max_buckets:
+                    del self._buckets[next(iter(self._buckets))]
                 bucket = _TokenBucket(self._capacity, self._refill)
-                self._buckets[key] = bucket
+            self._buckets[key] = bucket
             allowed = bucket.consume(now)
             return allowed, {
                 "limit": self._capacity,
