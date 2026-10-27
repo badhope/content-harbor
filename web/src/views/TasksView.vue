@@ -115,6 +115,7 @@ import { ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
 import { api } from '@/api'
 import EmptyState from '@/components/EmptyState.vue'
+import { fmtDateTime } from '@/utils/format'
 
 const hub = useHubStore()
 
@@ -169,12 +170,7 @@ const taskTagType = (s) => s === 'ok' ? 'success' : s === 'failed' ? 'danger'
   : s === 'waiting_human' ? 'warning' : s === 'running' ? 'primary' : 'info'
 const taskTagText = (s) => s === 'ok' ? '完成' : s === 'failed' ? '失败'
   : s === 'waiting_human' ? '等人工' : s === 'running' ? '执行中' : '排队中'
-const fmtTime = (ts) => {
-  if (!ts) return '—'
-  const d = new Date(ts * 1000)
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+const fmtTime = (ts) => fmtDateTime(ts)
 </script>
 
 <style scoped lang="scss">

@@ -81,6 +81,7 @@ import { Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
 import EmptyState from '@/components/EmptyState.vue'
+import { fmtClock } from '@/utils/format'
 
 const hub = useHubStore()
 
@@ -135,12 +136,7 @@ const parseEvents = (e) => {
 const notiType = (n) => String(n.event || n.type || '').includes('fail') ? 'danger'
   : String(n.event || n.type || '').includes('human') ? 'warning' : 'success'
 const notiText = (n) => n.message || n.data?.message || `${n.kind || ''} ${n.article_id ? '#' + n.article_id : ''}`.trim() || '—'
-const fmtTime = (ts) => {
-  if (!ts) return ''
-  const d = new Date(ts * 1000)
-  const pad = n => String(n).padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
+const fmtTime = (ts) => fmtClock(ts)
 </script>
 
 <style scoped lang="scss">

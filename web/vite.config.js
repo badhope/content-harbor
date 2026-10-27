@@ -22,10 +22,18 @@ export default defineConfig(({ command }) => ({
         manualChunks: {
           vue: ['vue', 'pinia', 'axios'],
           element: ['element-plus', '@element-plus/icons-vue'],
-          md: ['md-editor-v3']
+          md: ['md-editor-v3'],
+          chart: ['echarts/core', 'echarts/charts', 'echarts/components', 'echarts/renderers']
         }
       }
     }
+  },
+
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['src/test/setup.js'],
+    include: ['src/**/*.test.js']
   },
 
   server: {

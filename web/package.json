@@ -9,7 +9,10 @@
     "preview": "vite preview --port 5173",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --max-warnings=999"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -22,10 +25,18 @@
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@pinia/testing": "^0.1.7",
     "@tauri-apps/api": "^2.12.2",
     "@tauri-apps/cli": "^2.12.1",
     "@vitejs/plugin-vue": "^5.2.4",
+    "@vue/test-utils": "^2.5.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-vue": "^9.33.0",
+    "globals": "^15.15.0",
+    "jsdom": "^25.0.1",
     "sass": "^1.105.1",
-    "vite": "^6.4.4"
+    "vite": "^6.4.4",
+    "vitest": "^2.1.9"
   }
 }

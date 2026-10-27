@@ -166,6 +166,7 @@ import { ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
 import EmptyState from '@/components/EmptyState.vue'
 import ChartPanel from '@/components/ChartPanel.vue'
+import { fmtDateTime } from '@/utils/format'
 
 const hub = useHubStore()
 
@@ -292,12 +293,7 @@ const pubText = (s) => ({
   ok: '已发布', pending: '待同步', failed: '失败',
   pending_human: '待人工', pending_user: '等你确认'
 }[s] || s)
-const fmtTime = (ts) => {
-  if (!ts) return '—'
-  const d = new Date(ts * 1000)
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+const fmtTime = (ts) => fmtDateTime(ts)
 </script>
 
 <style scoped lang="scss">

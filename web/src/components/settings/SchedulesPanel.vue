@@ -87,6 +87,7 @@ import { Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
 import EmptyState from '@/components/EmptyState.vue'
+import { fmtDateTime } from '@/utils/format'
 
 const hub = useHubStore()
 
@@ -141,12 +142,7 @@ const label = (type, expr) => ({ once: '一次性', daily: '每天', weekly: '�
   + (expr ? ' · ' + expr : '')
 const parsePlats = (p) => { try { return JSON.parse(p || '[]') } catch { return [] } }
 const platName = (id) => hub.platforms.find(p => p.id === id)?.name || id
-const fmtTime = (ts) => {
-  if (!ts) return '—'
-  const d = new Date(ts * 1000)
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+const fmtTime = (ts) => fmtDateTime(ts)
 </script>
 
 <style scoped lang="scss">
