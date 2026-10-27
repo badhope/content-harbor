@@ -88,3 +88,11 @@ def test_agent_md_adapter_tree_matches_reality():
     for ghost in ("douyin.py", "weibo.py", "sf.py"):
         assert ghost not in agent, f"AGENT.md 仍列着不存在的 {ghost}"
     assert named  # 防止正则失效时静默通过
+
+def test_login_probe_script_is_documented():
+    """新增诊断脚本必须同时出现在 AGENT.md 与 CHANGELOG，避免工具写完没人知道。"""
+    assert (REPO / "scripts/login_probe.py").is_file()
+    agent = (REPO / "AGENT.md").read_text(encoding="utf-8")
+    changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "login_probe.py" in agent
+    assert "login_probe.py" in changelog

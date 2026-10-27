@@ -40,6 +40,8 @@ cd "$backed"
 export UV_NO_PROGRESS=1
 
 step "1/6 语法编译 compileall" uv run python -m compileall -q .
+# scripts/ 在 backed 作用域外，单独编译
+step "1/6b 语法编译 scripts/" uv run python -m compileall -q "$repo_root/scripts"
 ruff_lint() {
   ( cd "$backed" && uv run ruff check . ) || return 1
   # mcp_server.py 在仓库根，不在 backed/ 的 pyproject 作用域内，显式带上同一套规则

@@ -109,7 +109,8 @@ harbour/
 ├── scripts/
 │   ├── check_all.ps1            # 一键门禁（Windows）
 │   ├── check_all.sh             # 一键门禁（Linux/macOS）
-│   └── backup_data.py           # 数据备份（在线一致性快照）
+│   ├── backup_data.py           # 数据备份（在线一致性快照）
+│   └── login_probe.py           # 登录页诊断（导出二维码 / 复检登录态，不代替扫码）
 ├── mcp_server.py                # MCP Server（23 Tool，stdio + SSE）
 ├── deploy/                      # Docker 部署
 └── docs/
@@ -254,3 +255,16 @@ uv run python ../scripts/backup_data.py --dry-run    # 只看计划
 | `AI_BASE_URL` | LLM 端点 | deepseek |
 | `ASSIST_ALLOW_LOCAL=1` | 允许 assist 打开 localhost（桌面版调试） | 0 |
 | `FERNET_KEY` | Webhook secret 加密主密钥 | 自动生成 |
+
+### 登录诊断
+
+```bash
+# 打开平台登录页，导出二维码 PNG（不代替人扫码）
+uv run --project backed python scripts/login_probe.py --platform juejin
+uv run --project backed python scripts/login_probe.py --platform csdn --headed --wait 30
+# 复检本地 profile 的登录态是否还在
+uv run --project backed python scripts/login_probe.py --platform juejin --check-cookie
+```
+
+只回答两件事：登录页是否可用、二维码/登录态是否真的生成。真实扫码仍走应用内
+「设置 → 平台账号 → 去登录」。

@@ -45,6 +45,8 @@ try {
 
     Invoke-Step '1/6 语法编译 compileall' {
         uv run python -m compileall -q .
+        # scripts/ 在 backed 作用域外，单独编译，避免只测到后端代码
+        uv run python -m compileall -q "$repoRoot/scripts"
     }
 
     Invoke-Step '2/6 静态门禁 ruff（backed + 根目录 mcp_server.py）' {
