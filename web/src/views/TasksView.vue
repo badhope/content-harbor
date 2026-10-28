@@ -11,57 +11,59 @@
         <span v-if="hub.taskTruncated" class="trunc-hint" role="status">
           仅显示最近 {{ hub.tasks.length }} / {{ hub.taskTotal }} 条
         </span>
-        <el-select v-model="fKind" size="small" placeholder="类型" clearable style="width:110px">
+        <el-select v-model="fKind" size="small" placeholder="类型" clearable class="filt">
           <el-option v-for="k in KINDS" :key="k.v" :label="k.t" :value="k.v" />
         </el-select>
-        <el-select v-model="fStatus" size="small" placeholder="状态" clearable style="width:110px">
+        <el-select v-model="fStatus" size="small" placeholder="状态" clearable class="filt">
           <el-option v-for="s in STATUSES" :key="s.v" :label="s.t" :value="s.v" />
         </el-select>
         <el-button size="small" :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
       </div>
 
       <div class="pane-body body">
-        <el-table v-if="list.length" :data="list" size="default" max-height="100%"
-                  @row-click="showTask" row-style="cursor:pointer">
-          <el-table-column label="任务" width="104">
-            <template #default="{ row }"><span class="dim mono">{{ row.task_id }}</span></template>
-          </el-table-column>
-          <el-table-column label="类型" width="84">
-            <template #default="{ row }">{{ kindText(row.kind) }}</template>
-          </el-table-column>
-          <el-table-column label="对象" min-width="150">
-            <template #default="{ row }">
-              {{ row.article_id ? ('文章 #' + row.article_id) : '' }}
-              {{ (row.platforms || []).join('、') }}
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag size="small" :type="taskTagType(row.status)" effect="dark">
-                {{ taskTagText(row.status) }}
+        <!-- 卡片列表：窄屏不再依赖表格横向滚动，宽屏也更易扫读 -->
+        <div v-if="list.length" class="task-list">
+          <article
+            v-for="t in list" :key="t.task_id"
+            class="task-card"
+            :class="`st-${t.status}`"
+            role="button"
+            tabindex="0"
+            :aria-label="`任务 ${t.task_id}，${kindText(t.kind)}，${taskTagText(t.status)}`"
+            @click="showTask(t)"
+            @keydown.enter.prevent="showTask(t)"
+            @keydown.space.prevent="showTask(t)"
+          >
+            <div class="tc-head">
+              <span class="tc-id mono">{{ t.task_id }}</span>
+              <el-tag size="small" :type="taskTagType(t.status)" effect="dark">
+                {{ taskTagText(t.status) }}
               </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="说明" min-width="180">
-            <template #default="{ row }">
-              <span v-if="row.message" class="dim">{{ row.message }}</span>
-              <span v-else-if="row.error" class="run-err">{{ row.error.slice(0, 60) }}</span>
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="时间" width="128">
-            <template #default="{ row }">{{ fmtTime(row.updated_at) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="150">
-            <template #default="{ row }">
-              <template v-if="row.status === 'waiting_human'">
-                <el-button size="small" type="primary" text @click.stop="doResume(row, true)">继续</el-button>
-                <el-button size="small" text type="danger" @click.stop="doResume(row, false)">放弃</el-button>
-              </template>
-            </template>
-          </el-table-column>
-        </el-table>
-        <EmptyState v-else title="还没有任务" desc="发布、更新、登录、同步都会产生任务，进度通过 SSE 实时推进" :px="96" />
+              <span class="tc-kind">{{ kindText(t.kind) }}</span>
+              <span class="spacer" />
+              <span class="tc-time">{{ fmtTime(t.updated_at) }}</span>
+            </div>
+
+            <div class="tc-target">
+              <span v-if="t.article_id" class="tc-art">文章 #{{ t.article_id }}</span>
+              <el-tag v-for="pf in platList(t)" :key="pf" size="small" effect="plain" type="info">
+                {{ platName(pf) }}
+              </el-tag>
+              <span v-if="!t.article_id && !platList(t).length" class="dim">—</span>
+            </div>
+
+            <div v-if="t.message || t.error" class="tc-msg" :class="{ err: !t.message && t.error }">
+              {{ t.message || t.error }}
+            </div>
+
+            <div v-if="t.status === 'waiting_human'" class="tc-ops">
+              <el-button size="small" type="primary" @click.stop="doResume(t, true)">已处理，继续</el-button>
+              <el-button size="small" text @click.stop="doResume(t, false)">放弃</el-button>
+            </div>
+          </article>
+        </div>
+        <EmptyState v-else title="还没有任务"
+                    desc="发布、更新、登录、同步都会产生任务，进度通过 SSE 实时推进" :px="96" />
       </div>
     </div>
 
@@ -72,9 +74,14 @@
           <el-tag size="small" :type="taskTagType(taskDetail.status)" effect="dark">
             {{ taskTagText(taskDetail.status) }}
           </el-tag>
-          <span class="dim">{{ kindText(taskDetail.kind) }} ·
-            {{ taskDetail.article_id ? ('文章 #' + taskDetail.article_id) : '' }}
-            {{ (taskDetail.platforms || []).join('、') }}</span>
+          <span class="dim">{{ kindText(taskDetail.kind) }}</span>
+          <span v-if="taskDetail.article_id" class="dim">
+            文章 #{{ taskDetail.article_id }}
+            <template v-if="taskDetail.article_title">· {{ taskDetail.article_title }}</template>
+          </span>
+          <span v-if="platList(taskDetail).length" class="dim">
+            {{ platList(taskDetail).map(platName).join('、') }}
+          </span>
           <span v-if="taskDetail.attempts" class="dim">尝试 {{ taskDetail.attempts }} 次</span>
         </div>
 
@@ -103,6 +110,7 @@
         <div v-if="taskDetail.message" class="rd-sec"><b>说明</b><div class="dim">{{ taskDetail.message }}</div></div>
       </template>
       <template #footer>
+        <el-button v-if="taskDetail?.article_id" @click="openArticle">打开文章</el-button>
         <el-button v-if="taskDetail?.status === 'waiting_human'" type="primary"
                    @click="doResume(taskDetail, true)">已处理，继续</el-button>
         <el-button @click="taskDialog = false">关闭</el-button>
@@ -168,6 +176,23 @@ async function showTask(row) {
   taskDialog.value = true
 }
 
+function openArticle() {
+  const id = taskDetail.value?.article_id
+  taskDialog.value = false
+  hub.switchView('write')
+  if (id) hub.open(id)
+}
+
+// platforms 列表接口已解析为数组；这里再兜一层，字符串也不会让 join 抛错
+const platList = (t) => {
+  const p = t?.platforms
+  if (Array.isArray(p)) return p
+  if (typeof p === 'string' && p.trim()) {
+    try { const v = JSON.parse(p); return Array.isArray(v) ? v : [] } catch { return [] }
+  }
+  return []
+}
+const platName = (id) => hub.platforms.find(p => p.id === id)?.name || id
 const kindText = (k) => ({ publish: '发布', update: '更新', sync: '同步', refresh: '抓取', login: '登录', assist: '人工接管' }[k] || k || '—')
 const taskTagType = (s) => s === 'ok' ? 'success' : s === 'failed' ? 'danger'
   : s === 'waiting_human' ? 'warning' : s === 'running' ? 'primary' : 'info'
@@ -181,14 +206,60 @@ const fmtTime = (ts) => fmtDateTime(ts)
 .grow { flex: 1; min-height: 0; }
 .body { padding: 4px 14px 14px; }
 .pill.mini { height: 26px; font-size: 11px; padding: 0 10px; }
-.dim { color: var(--tx-4); }
+.dim { color: var(--tx-3); }
 .mono { font-family: var(--font-mono); font-size: 11px; }
 .run-err { color: var(--bad); font-size: var(--fs-xs); }
 .trunc-hint { font-size: var(--fs-xs); color: var(--tx-3); }
 .p-link { color: var(--accent); text-decoration: none; &:hover { text-decoration: underline; } }
+.filt { width: 110px; }
+
+.task-list { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 8px; }
+
+.task-card {
+  border: 1px solid var(--line);
+  // 状态色只做左侧细条，不铺满整卡（避免整页花）
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  padding: 12px 14px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: border-color .14s, transform .14s, box-shadow .14s;
+  animation: fadeUp .26s var(--ease-out) both;
+
+  &:hover { border-color: var(--accent-line); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  &.st-ok { border-left-color: var(--ok); }
+  &.st-failed { border-left-color: var(--bad); }
+  &.st-waiting_human { border-left-color: var(--warn); }
+  &.st-running, &.st-pending { border-left-color: var(--accent); }
+}
+
+.tc-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  .tc-id { color: var(--tx-3); }
+  .tc-kind { font-size: var(--fs-sm); font-weight: 600; color: var(--tx-1); }
+  .tc-time { font-size: var(--fs-xs); color: var(--tx-3); font-variant-numeric: tabular-nums; }
+}
+.tc-target { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+.tc-art { font-size: var(--fs-xs); color: var(--tx-2); }
+.tc-msg {
+  margin-top: 6px; font-size: var(--fs-xs); color: var(--tx-3); line-height: 1.6;
+  &.err { color: var(--bad); }
+}
+.tc-ops { display: flex; gap: 6px; margin-top: 8px; }
+
 .rd-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .rd-sec { border-top: 1px solid var(--line); padding: 10px 0; font-size: var(--fs-xs);
   color: var(--tx-2); b { color: var(--tx-1); display: block; margin-bottom: 6px; } }
 .rd-human { border-left: 3px solid var(--warn); padding-left: 10px; }
 .rd-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; }
+
+@media (max-width: 767px) {
+  .tasks-wrap { padding: 8px; }
+  .pane-head { flex-wrap: wrap; row-gap: 8px; }
+  .filt { width: 96px; }
+  .trunc-hint { order: 9; width: 100%; }
+}
 </style>

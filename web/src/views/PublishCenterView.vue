@@ -18,10 +18,11 @@
         <div class="sc-num">{{ hub.stats?.published_articles || 0 }}</div>
         <div class="sc-lbl">已发布文章</div>
       </div>
-      <span class="spacer" />
-      <el-button :icon="Refresh" :loading="reloading" @click="reloadAll">刷新</el-button>
-      <el-button v-if="pendingSync.length" type="primary" :icon="Refresh"
-                 :loading="hub.publishing" @click="hub.syncPending()">一键同步全部</el-button>
+      <div class="stat-ops">
+        <el-button :icon="Refresh" :loading="reloading" @click="reloadAll">刷新</el-button>
+        <el-button v-if="pendingSync.length" type="primary" :icon="Refresh"
+                   :loading="hub.publishing" @click="hub.syncPending()">一键同步全部</el-button>
+      </div>
     </div>
 
     <!-- ① 等待人工（任务挂起 + 平台草稿等人点发布） -->
@@ -302,19 +303,35 @@ const fmtTime = (ts) => fmtDateTime(ts)
   gap: 12px; padding: 14px 16px; overflow-y: auto;
 }
 
-.stat-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+  align-items: stretch;
+  gap: 12px;
+}
+.stat-ops { display: flex; align-items: center; gap: 8px; }
 .viz-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .viz-card { min-height: 0; }
-@media (max-width: 1023px) { .viz-row { grid-template-columns: 1fr; } }
 .stat-card {
-  min-width: 120px;
   padding: 10px 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  .sc-num { font-size: 22px; font-weight: 700; color: var(--tx-1); font-variant-numeric: tabular-nums; }
+  box-shadow: var(--shadow);
+  .sc-num { font-size: 22px; font-weight: 700; color: var(--tx-1); font-variant-numeric: tabular-nums; line-height: 1.3; }
   .sc-lbl { font-size: var(--fs-xs); color: var(--tx-3); }
-  &.warn { border-color: rgba(232, 150, 74, .4); .sc-num { color: var(--warn); } }
+  &.warn { border-color: rgba(138, 85, 16, .35); .sc-num { color: var(--warn); } }
+}
+
+@media (max-width: 1023px) {
+  .viz-row { grid-template-columns: 1fr; }
+  .stat-row { grid-template-columns: repeat(2, 1fr); }
+  .stat-ops { grid-column: 1 / -1; }
+}
+@media (max-width: 767px) {
+  .center-wrap { padding: 8px; }
+  .stat-card { padding: 8px 12px; .sc-num { font-size: 19px; } }
+  .blk-body { padding: 4px 10px 12px; }
 }
 
 .blk { flex-shrink: 0; &.grow { flex: 1; min-height: 320px; } }

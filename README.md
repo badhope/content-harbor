@@ -119,8 +119,8 @@ bash scripts/check_all.sh            # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                     # 402 用例
-pnpm --dir web test                  # 前端 39 用例（vitest，含 a11y 静态门禁）
+uv run pytest -q                     # 412 用例
+pnpm --dir web test                  # 前端 42 用例（vitest，含 a11y 静态门禁）
 pnpm --dir web lint                  # 前端 eslint
 uv run ruff check .                  # 静态
 ```

@@ -88,3 +88,43 @@ describe('交互可达性（WCAG 4.1.2 / 2.1.1）', () => {
     expect(src).toMatch(/aria-label="打开文章库"/)
   })
 })
+
+describe('Element Plus 主题接管必须落在 :root', () => {
+  it('样式表用 :root 而不是 html 定义 --el-color-*', () => {
+    // Element Plus 默认变量定义在 :root 上；html 是类型选择器，优先级更低，
+    // 写了也会被默认色板覆盖（实测标签仍是 #f56c6c 默认红）。
+    const idx = scss.indexOf('--el-color-primary')
+    expect(idx).toBeGreaterThan(-1)
+    const before = scss.slice(0, idx)
+    const lastRoot = before.lastIndexOf(':root {')
+    const lastHtml = before.lastIndexOf('\nhtml {')
+    expect(lastRoot).toBeGreaterThan(-1)
+    expect(lastRoot).toBeGreaterThan(lastHtml)
+  })
+
+  it('primary / success / warning / danger 的四档浅色齐全（否则 EP 组件取不到配色）', () => {
+    for (const name of ['primary', 'success', 'warning', 'danger', 'error', 'info']) {
+      for (const n of ['3', '5', '7', '8', '9']) {
+        expect(scss, `--el-color-${name}-light-${n}`)
+          .toContain(`--el-color-${name}-light-${n}:`)
+      }
+      expect(scss, `--el-color-${name}-dark-2`).toContain(`--el-color-${name}-dark-2:`)
+    }
+  })
+
+  it('EP 语义色与设计 token 一致（避免两套色板打架）', () => {
+    // 按行解析而不是正则：模板字面量里的 \s 会被吃掉，写成正则容易假通过/假失败
+    const vars = {}
+    for (const line of scss.split('\n')) {
+      const m = line.match(/^\s*--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6})/)
+      if (m && !(m[1] in vars)) vars[m[1]] = m[2].toLowerCase()
+    }
+    const pairs = [['el-color-success', 'ok'], ['el-color-warning', 'warn'],
+                   ['el-color-danger', 'bad'], ['el-color-primary', 'accent']]
+    for (const [ep, token] of pairs) {
+      expect(vars[ep], `缺少 --${ep}`).toBeTruthy()
+      expect(vars[token], `缺少 --${token}`).toBeTruthy()
+      expect(vars[ep], `${ep} vs ${token}`).toBe(vars[token])
+    }
+  })
+})

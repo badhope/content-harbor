@@ -191,7 +191,7 @@ SQLite 单文件，WAL 模式 + 30s busy_timeout。
 
 | 域 | 端点 |
 |---|---|
-| **总览** | `GET /api/v1/hub/status` · `GET /api/v1/hub/platforms` · `GET /api/v1/hub/metrics`（累积桶直方图 + p50/p90/p99） |
+| **总览** | `GET /api/v1/hub/status`（`published`=已上线平台实例数、`published_articles`=已发布文章数，两口径别混用） · `GET /api/v1/hub/platforms` · `GET /api/v1/hub/metrics`（累积桶直方图 + p50/p90/p99） |
 | **文章** | `GET/POST /api/v1/hub/articles` · `GET /api/v1/hub/articles/page?limit=&offset=` · `GET/PUT /api/v1/hub/articles/{id}` · `GET /api/v1/hub/articles/search/{kw}` |
 | **发布** | `POST /api/v1/hub/articles/{id}/publish` · `POST /api/v1/hub/articles/{id}/update` · `POST /api/v1/hub/sync/pending` |
 | **任务** | `GET /api/v1/hub/tasks` · `GET /api/v1/hub/tasks/page?limit=&offset=` · `GET /api/v1/hub/tasks/{id}` · `POST /api/v1/hub/tasks/{id}/resume` |

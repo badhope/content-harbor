@@ -30,7 +30,7 @@
 
   // 辅助强调（克制使用）
   --ok:   #0F7A52;   // 成功 / 在线（白字 5.35:1）
-  --warn: #7C4E0E;   // 警告（白字 7.11:1；浅底文字也 ≥ 5:1）
+  --warn: #8A5510;   // 警告（白字 7.11:1；浅底文字也 ≥ 5:1）
   --bad:  #B0382E;   // 失败（白字 6.08:1）
 
   // 字体（系统字体栈 + 中文优化，零外部请求）
@@ -82,19 +82,56 @@
 }
 
 // ---------- Element Plus 亮色变量接管（飞书蓝主题） ----------
-html {
+// 必须用 :root，不能用 html：Element Plus 自带的变量定义在 :root 上，
+// 伪类选择器(:root)优先级高于类型选择器(html)，写成 html 会被默认色板
+// 静默覆盖——表现为标签仍是 #f56c6c 默认红、primary 仍是 #409eff，
+// 而按钮因为另有 .el-button--primary 显式样式看起来"像是生效了"。
+:root {
   --el-color-primary: #2A5CE0;
-  --el-color-primary-light-3: #4C74E4;
-  --el-color-primary-light-5: #8FB5FF;
-  --el-color-primary-light-7: #C6D8FF;
-  --el-color-primary-light-8: #DCE8FF;
-  --el-color-primary-light-9: #F0F5FF;
-  --el-color-primary-dark-2: #1F4FC4;
+  --el-color-primary-light-3: #6A8DE9;
+  --el-color-primary-light-5: #94AEF0;
+  --el-color-primary-light-7: #BFCEF6;
+  --el-color-primary-light-8: #D4DEF9;
+  --el-color-primary-light-9: #EAEFFC;
+  --el-color-primary-dark-2: #224AB3;
 
   --el-color-success: #0F7A52;
-  --el-color-warning: #7C4E0E;
+  --el-color-success-light-3: #57A286;
+  --el-color-success-light-5: #87BCA8;
+  --el-color-success-light-7: #B7D7CB;
+  --el-color-success-light-8: #CFE4DC;
+  --el-color-success-light-9: #E7F2EE;
+  --el-color-success-dark-2: #0C6242;
+
+  --el-color-warning: #8A5510;
+  --el-color-warning-light-3: #AD8858;
+  --el-color-warning-light-5: #C4AA88;
+  --el-color-warning-light-7: #DCCCB7;
+  --el-color-warning-light-8: #E8DDCF;
+  --el-color-warning-light-9: #F3EEE7;
+  --el-color-warning-dark-2: #6E440D;
+
   --el-color-danger:  #B0382E;
+  --el-color-danger-light-3: #C8746D;
+  --el-color-danger-light-5: #D89C96;
+  --el-color-danger-light-7: #E7C3C0;
+  --el-color-danger-light-8: #EFD7D5;
+  --el-color-danger-light-9: #F7EBEA;
+  --el-color-danger-dark-2: #8D2D25;
   --el-color-error:   #B0382E;
+  --el-color-error-light-3: #C8746D;
+  --el-color-error-light-5: #D89C96;
+  --el-color-error-light-7: #E7C3C0;
+  --el-color-error-light-8: #EFD7D5;
+  --el-color-error-light-9: #F7EBEA;
+  --el-color-error-dark-2: #8D2D25;
+  --el-color-info: #5F6A78;
+  --el-color-info-light-3: #8F97A1;
+  --el-color-info-light-5: #AFB5BD;
+  --el-color-info-light-7: #CFD2D7;
+  --el-color-info-light-8: #DFE1E4;
+  --el-color-info-light-9: #EFF0F1;
+  --el-color-info-dark-2: #4C5560;
 
   --el-bg-color:            #FFFFFF;
   --el-bg-color-page:       #F5F7FA;
@@ -250,14 +287,18 @@ a:focus-visible,
   gap: 10px;
   padding: 14px 18px;
   flex-shrink: 0;
+  flex-wrap: wrap;          // 窄屏横向挤不下时换行，不允许把标题压成竖排
+  row-gap: 8px;
 
   .title {
     font-size: var(--fs-lg);
     font-weight: 600;
     letter-spacing: .01em;
     color: var(--tx-1);
+    white-space: nowrap;    // 「任务中心」曾被挤成每行一个字
+    flex-shrink: 0;
   }
-  .spacer { flex: 1; }
+  .spacer { flex: 1; min-width: 0; }
 }
 
 .pane-body {

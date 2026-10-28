@@ -31,6 +31,16 @@ CREATE INDEX IF NOT EXISTS idx_tag_count ON tag_stats(count DESC);
 ALIAS_MAP_KEY = "tag_alias_map"  # 存在 config.json JSON 里
 
 
+def _config_path():
+    """别名映射落在 backed/config.json——与 ai/gate/metaweblog 同一份配置。
+
+    回归：此前用 ``Path(__file__).parent.parent`` 算成了 ``backed/service/config.json``，
+    而那个路径既不是其它模块读的配置，也**不在 .gitignore 里**——点一次
+    「标签治理 → 合并」就在仓库里凭空多出一个未跟踪的 config.json。
+    """
+    return Path(__file__).resolve().parents[2] / "config.json"
+
+
 def _ensure_table(conn):
     try:
         conn.executescript(TAGS_TABLE_DDL)
@@ -67,7 +77,7 @@ def sync_from_articles(conn):
 
     返回 {added, updated, total}。"""
     _ensure_table(conn)
-    config_path = str(Path(__file__).resolve().parent.parent / "config.json")
+    config_path = str(_config_path())
     alias_map = _load_alias_map(config_path)
 
     # 扫所有文章的 tags 字段
@@ -174,7 +184,7 @@ def merge_tags(conn, from_tag, to_tag):
 
     返回 {affected_articles, deleted_tag}。"""
     _ensure_table(conn)
-    config_path = str(Path(__file__).resolve().parent.parent / "config.json")
+    config_path = str(_config_path())
     alias_map = _load_alias_map(config_path)
     alias_map[from_tag.lower()] = to_tag
     _save_alias_map(config_path, alias_map)
@@ -207,7 +217,7 @@ def rename_tag(conn, old, new):
 
 def add_alias(conn, alias, canonical):
     """添加别名：alias 出现时自动替换成 canonical。"""
-    config_path = str(Path(__file__).resolve().parent.parent / "config.json")
+    config_path = str(_config_path())
     alias_map = _load_alias_map(config_path)
     alias_map[alias.lower()] = canonical
     _save_alias_map(config_path, alias_map)

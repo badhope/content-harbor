@@ -254,3 +254,24 @@ def test_jobs_endpoint(client):
     db.add_job(hub.conn, "publish", article_id=1)
     rows = client.get("/api/v1/hub/jobs").json()
     assert rows[0]["type"] == "publish"
+
+
+def test_tasks_list_parses_platforms(client):
+    """列表端点必须把 platforms 解析成数组。
+
+    回归：/tasks 与 /tasks/page 直接返回 DB 原始行，platforms 是 JSON 字符串；
+    前端 `(row.platforms || []).join()` 会抛 TypeError，整个单元格渲染失败
+    ——实测任务表「对象」列空白且后续列错位，状态标签跑到对象列。
+    """
+    from service.publishing import db
+    conn = _hub().conn
+    db.create_task(conn, "tkplat0001", "publish", article_id=1,
+                   platforms=["juejin", "csdn"])
+
+    rows = client.get("/api/v1/hub/tasks").json()
+    row = [r for r in rows if r["task_id"] == "tkplat0001"][0]
+    assert row["platforms"] == ["juejin", "csdn"], f"应为数组，实际 {type(row['platforms'])}"
+
+    page = client.get("/api/v1/hub/tasks/page?limit=50").json()
+    prow = [r for r in page["items"] if r["task_id"] == "tkplat0001"][0]
+    assert prow["platforms"] == ["juejin", "csdn"]
