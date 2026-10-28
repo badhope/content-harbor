@@ -227,7 +227,8 @@
 - 三档视口（1440/1024/390）× 四视图逐屏截图：所有页面 `scrollWidth == clientWidth`。
 - EP 变量实测：primary `#2A5CE0` / danger `#B0382E` / success `#0F7A52` / warning `#8A5510`。
 - 回退验证：还原 `deps.py` → Hub 竞态用例红；还原 `article.js` → 分页 3 例红；
-  还原 `browser_pool.py` → 池等待用例红。
+  还原 `browser_pool.py` → 池等待用例红；还原 `App.vue` → 侧栏计数 2 例红
+  （`published` 平台实例数被当成「已发布 N 篇」，一篇发两个平台会显示 2 篇）。
 
 ---
 

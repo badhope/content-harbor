@@ -218,7 +218,7 @@ uv run ruff check .                     # 静态门禁
 
 # 前端（在仓库根执行）
 pnpm --dir web lint                     # eslint
-pnpm --dir web test                     # vitest（54 用例）
+pnpm --dir web test                     # vitest（57 用例）
 ```
 
 `conftest.py` 的 `sandbox` fixture（autouse）把 DB/事件日志/Webhook 派发线程

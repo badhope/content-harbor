@@ -68,3 +68,57 @@ describe('App 视图互斥渲染（回归：v-show 与 v-if 链并存导致叠�
     expect(w.find('[data-view="write"]').exists()).toBe(false)
   })
 })
+
+// 侧栏徽标是唯一把「全局计数」暴露给用户的入口，必须走服务端统计：
+// 列表已分页，用 hub.articles 数出来的结果只有当前页。
+const mountWithNav = () => mount(App, {
+  global: {
+    stubs: {
+      ...stubs,
+      SideNav: {
+        props: ['view', 'aiReady', 'waitCount', 'publishedCount'],
+        template: '<nav data-view="sidenav" :data-wait="waitCount" :data-pub="publishedCount" />'
+      }
+    }
+  }
+})
+
+describe('App 侧栏计数口径', () => {
+  // boot() 会拉真实数据覆盖测试设置；这里只测「计数怎么算」，把 boot 关掉
+  let hub, article, account, task
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    hub = useHubStore()
+    vi.spyOn(hub, 'boot').mockResolvedValue()
+    const { useArticleStore } = await import('@/stores/article')
+    const { useAccountStore } = await import('@/stores/account')
+    const { useTaskStore } = await import('@/stores/task')
+    article = useArticleStore()
+    account = useAccountStore()
+    task = useTaskStore()
+  })
+
+  it('已发布篇数取 stats.published_articles，而不是平台实例数 published', async () => {
+    account.stats = { published: 9, published_articles: 3 }
+    const w = mountWithNav()
+    await w.vm.$nextTick()
+    expect(w.find('[data-view="sidenav"]').attributes('data-pub')).toBe('3')
+  })
+
+  it('已发布篇数不依赖已加载的文章列表（分页后只剩当前页）', async () => {
+    account.stats = { published_articles: 42 }
+    article.articles = [{ id: 1, status: 'published' }, { id: 2, status: 'draft' }]
+    const w = mountWithNav()
+    await w.vm.$nextTick()
+    expect(w.find('[data-view="sidenav"]').attributes('data-pub')).toBe('42')
+  })
+
+  it('待人工数 = pendingHuman + waitingTasks', async () => {
+    account.pendingHuman = [{ platform: 'juejin' }, { platform: 'csdn' }]
+    task.tasks = [{ task_id: 'a', status: 'waiting_human' }]
+    const w = mountWithNav()
+    await w.vm.$nextTick()
+    expect(w.find('[data-view="sidenav"]').attributes('data-wait')).toBe('3')
+  })
+})
