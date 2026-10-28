@@ -181,6 +181,54 @@
 - 门禁第 1 道补 `scripts/` 目录的 compileall：原先只编译 `backed/`，仓库根与 `scripts/` 的
   脚本语法错误漏检。
 
+
+---
+
+## [Unreleased] - 2026-10-28（真机截图巡检 + 主题失效修复）
+
+> 主题：**按 1440/1024/390 三档视口逐屏截图巡检，修掉 3 个静默缺陷与 4 个窄屏布局缺陷；任务中心改卡片列表，文章库加搜索筛选。**
+> 测试：后端 411 → 414；前端 42 → 49。
+
+### 修复：静默缺陷（不报错、界面上却看不出来）
+
+- **Element Plus 主题色板完全失效**：`main.scss` 把 `--el-color-*` 写在 `html {}` 里，而 EP
+  默认变量定义在 `:root`（伪类优先级高于类型选择器），自定义色被静默覆盖。实测
+  `--el-color-danger` 仍是默认 `#f56c6c`，标签渲染成 `rgb(245,108,108)`。按钮另有
+  `.el-button--primary` 显式样式，看上去"像是生效了"，掩盖了问题。改 `:root` 并补齐
+  primary/success/warning/danger/error/info 全套 light-3/5/7/8/9 + dark-2。
+- **`/tasks` 与 `/tasks/page` 的 `platforms` 是 JSON 字符串**：详情端点早解析，列表端点漏了。
+  前端 `(row.platforms || []).join()` 拿到字符串抛 TypeError → Vue 渲染中断 → 任务表「对象」
+  列空白、状态标签落到对象列、后续列整体错位。新增 `_task_row()` 统一收口；详情补
+  `article_title`，任务可直接跳回文章。
+- **`tags.py` 的 config.json 路径算错两层**：`Path(__file__).parent.parent` 得到
+  `backed/service/config.json`，既不是 ai/gate/metaweblog 共用的 `backed/config.json`，也不在
+  `.gitignore` —— 点一次「标签治理 → 合并」就在仓库里凭空多出一个未跟踪文件。收口
+  `_config_path()`。
+
+### UI：窄屏布局与卡片化（截图驱动）
+
+- **`.pane-head` 允许换行 + 标题 `nowrap`**：390px 下「任务中心」「设置」曾被压成每行一个字。
+- **任务中心改卡片列表**：原 1166px 表格塞进 264px 视口只剩三列可见。新卡片带状态色左条、
+  平台标签、错误摘要、待人工任务就地操作，`role=button` + Enter/Space 键盘可达。
+- **文章库加搜索与状态筛选**：搜索框（标题+摘要）+ 状态 chips（全部/草稿/已发布/待审，
+  `aria-pressed`）+ 无结果一键清空 + 筛选态明确提示「只作用于已加载的 N 篇」。
+- **发布中心统计卡改网格**：宽屏 4 卡 + 操作按钮同排，窄屏 2×2 + 按钮独占一行。
+- **AI Provider 价格标签 `nowrap` + 折叠头窄屏换行**：原先「经济/均衡/旗舰」被挤成竖排。
+- **设置页窄屏隐藏副标题**，腾出宽度给标题。
+
+### 测试基建
+
+- `el-input` 的 vitest 桩原是无 `v-model` 的裸 `<input />`，被测组件收不到输入值——过滤逻辑
+  根本测不到（典型"测试绿但功能未覆盖"）。改为转发 props/emits。
+
+### 验证
+
+- 六道门禁全绿；pytest 414 passed / vitest 49 passed / ruff + eslint 零错误。
+- 三档视口（1440/1024/390）× 四视图逐屏截图：所有页面 `scrollWidth == clientWidth`。
+- EP 变量实测：primary `#2A5CE0` / danger `#B0382E` / success `#0F7A52` / warning `#8A5510`。
+- 回退验证：还原 `deps.py` → Hub 竞态用例红；还原 `article.js` → 分页 3 例红；
+  还原 `browser_pool.py` → 池等待用例红。
+
 ---
 
 ## [Unreleased] - 2026-10-14（第四轮：AI 声明改走平台选项 + 发布多模式）

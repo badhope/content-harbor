@@ -99,3 +99,27 @@ def test_get_hub_is_thread_safe(monkeypatch, tmp_path):
     assert not errors, f"并发首次访问抛异常: {errors[:2]}"
     assert len(created) == 1, f"应只创建 1 个 Hub，实际 {len(created)}"
     monkeypatch.setattr(deps, "_hub_instance", None)
+
+
+def test_status_separates_instance_and_article_counts(conn):
+    """`published` 是平台实例数，`published_articles` 是文章数，两者不能混用。
+
+    回归：侧栏「N 篇已发布」曾直接取 `published`，一篇发两个平台会显示 2 篇。
+    """
+    from service.publishing.service import Hub
+
+    for i in range(3):
+        db.create_article(conn, f"文章{i}", "正文")
+    db.update_article(conn, 1, status="published")
+    db.update_article(conn, 2, status="published")
+    # 文章 1 发到两个平台 → 2 条上线实例
+    db.upsert_publication(conn, 1, "juejin", status="ok", post_id="j1")
+    db.upsert_publication(conn, 1, "csdn", status="ok", post_id="c1")
+
+    hub = Hub.__new__(Hub)          # 只测 status 的 SQL，不起调度器/任务线程
+    hub.conn = conn
+    hub.accounts = lambda: []
+    snap = hub.status()
+
+    assert snap["published"] == 2, "published 应为上线实例数"
+    assert snap["published_articles"] == 2, "published_articles 应为已发布文章数"
