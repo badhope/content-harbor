@@ -4,7 +4,12 @@ import { config } from '@vue/test-utils'
 // element-plus 的交互组件在测试里会尝试挂载 DOM 之外的东西，统一 stub 掉
 const stubs = {
   'el-button': { template: '<button><slot /></button>' },
-  'el-input': { template: '<input />' },
+  // el-input 桩必须转发 v-model，否则被测组件的输入过滤逻辑永远收不到值
+  'el-input': {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+  },
   'el-tag': { template: '<span><slot /></span>' },
   'el-select': { template: '<div><slot /></div>' },
   'el-option': { template: '<div />' },
