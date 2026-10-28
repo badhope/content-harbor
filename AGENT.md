@@ -212,13 +212,13 @@ bash scripts/check_all.sh              # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                        # 全部 (412 用例)
+uv run pytest -q                        # 全部 (414 用例)
 uv run pytest tests/test_tasks.py -q    # 任务引擎
 uv run ruff check .                     # 静态门禁
 
 # 前端（在仓库根执行）
 pnpm --dir web lint                     # eslint
-pnpm --dir web test                     # vitest（42 用例）
+pnpm --dir web test                     # vitest（49 用例）
 ```
 
 `conftest.py` 的 `sandbox` fixture（autouse）把 DB/事件日志/Webhook 派发线程

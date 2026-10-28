@@ -52,3 +52,6 @@ backed/config.json
 backed/dist/
 backed/build/
 *.spec.bak
+
+# 本地临时工作区（截图/探针/一次性脚本，收尾清空）
+.tmp/
