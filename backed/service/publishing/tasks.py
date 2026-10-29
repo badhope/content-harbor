@@ -188,6 +188,20 @@ class TaskManager:
                     break
             if picked is None:
                 return None          # 全部都在退避中：让 _loop 睡到下一次轮询
+            # 平台冷却：任务声明的平台还在限流窗口内就整体延后（不占用 worker）
+            try:
+                from service.publishing import ratelimit
+                pfs = json.loads(picked.get("platforms") or "[]")
+                waits = [ratelimit.remaining(self.conn, pf) for pf in pfs or []]
+                wait = max(waits) if waits else 0.0
+                if wait > 0:
+                    not_before[picked["task_id"]] = time.monotonic() + wait
+                    db.update_task(self.conn, picked["task_id"],
+                                   status="pending",
+                                   message=f"平台限流冷却中（{wait:.0f}s 后重试）")
+                    return None
+            except Exception:   # aqg: top-level boundary（冷却查询失败按可执行处理）
+                pass
             db.update_task(self.conn, picked["task_id"],
                            status="running", updated_at=time.time())
             return picked
@@ -236,6 +250,9 @@ class TaskManager:
                 evt_mod.on_task_complete(completed)
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
+            # 平台级限流：429/503 不只是"这次失败"，而是"这个平台现在不收请求"。
+            # 置入平台冷却，让同平台后续任务一起等，而不是继续撞窗口。
+            self._note_platform_cooldown(task.get("platforms"), err)
             action, reason = self._triage(kind, err, attempts)
             if action == "retry":
                 # 重试：任务回到 pending，不算终态，不 emit on_task_complete
@@ -304,6 +321,19 @@ class TaskManager:
             return self.hub.assist_open(platforms[0] if platforms else None,
                                         extra.get("url", ""), account=account)
         raise ValueError(f"未知任务类型: {kind}")
+
+    def _note_platform_cooldown(self, platforms_json, err):
+        """从错误串识别平台限流，命中则写平台冷却（失败不阻断任务）。"""
+        try:
+            from service.publishing import ratelimit
+            platforms = json.loads(platforms_json or "[]")
+            for pf in platforms or []:
+                secs = ratelimit.classify_and_mark(self.conn, pf, err)
+                if secs:
+                    evt_mod.emit("platform.rate_limited", {
+                        "platform": pf, "seconds": secs, "error": err[:200]})
+        except Exception:   # aqg: top-level boundary（冷却记录失败不能掩盖原始错误）
+            pass
 
     # 永久失败关键词：命中就立即 fail，不重试（重试也不会改变结果）。
     PERMANENT_HINTS = (

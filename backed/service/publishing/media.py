@@ -39,6 +39,12 @@ from pathlib import Path
 MAX_BYTES = 15 * 1024 * 1024
 TIMEOUT = 15
 MAX_REDIRECTS = 3
+# 像素上限：解码炸弹防护。一个 30000×30000 的 PNG 压缩后只有几 MB，
+# 解码却要 3.6GB 内存；只在文件大小上限之外再卡一道像素数。
+MAX_PIXELS = 40_000_000
+# 允许的图片格式（Pillow format 名）。刻意排除 SVG：SVG 是 XML，
+# 可携带 <script>/外链实体，作为"图片"直接托管等于给 XSS 开后门。
+ALLOWED_FORMATS = {"PNG", "JPEG", "GIF", "WEBP", "BMP", "AVIF", "TIFF"}
 
 _EXT_BY_MIME = {
     "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif",
@@ -93,11 +99,42 @@ def ensure_schema(conn) -> None:
         conn.commit()
 
 
-def public_base() -> str:
-    """媒体对外基地址。空串表示"未配置"，改写阶段会跳过（保留原 URL）。
+# 运行期自动探测到的对外基地址（由请求中间件写入）。
+# 为什么需要：发布动作发生在后台任务里，没有 request 上下文；如果只认
+# 环境变量，用户必须手工配 PUBLIC_BASE_URL 才能让图片被平台抓取——配错了
+# 或忘了配就静默退化成"只入库不改写"，这是上一轮的遗留坑。
+_runtime_base = ""
+_runtime_base_lock = threading.Lock()
 
-    配置方式：环境变量 `PUBLIC_BASE_URL`（如 https://harbour.example.com），
-    或 config.json 同名键。反代部署时这就是站点对外地址。
+
+def set_runtime_base(base: str) -> None:
+    """记录最近一次请求的对外地址（由 app 中间件调用）。
+
+    只接受 http/https 且不带路径，避免把奇怪的 Host 头写进正文。
+    """
+    global _runtime_base
+    b = (base or "").strip().rstrip("/")
+    if not b:
+        return
+    if not (b.startswith("http://") or b.startswith("https://")):
+        return
+    if len(b) > 200:
+        return
+    with _runtime_base_lock:
+        _runtime_base = b
+
+
+def clear_runtime_base() -> None:
+    global _runtime_base
+    with _runtime_base_lock:
+        _runtime_base = ""
+
+
+def public_base() -> str:
+    """媒体对外基地址。优先级：env > config.json > 最近请求自动探测 > 空。
+
+    空串表示"不知道平台能否访问"，改写阶段会跳过（保留原 URL）——
+    把图片改成本机 127.0.0.1 地址只会让平台侧更糟。
     """
     env = os.environ.get("PUBLIC_BASE_URL", "").strip()
     if env:
@@ -107,10 +144,30 @@ def public_base() -> str:
         from service.publishing.gate import CONFIG_FILE
         if CONFIG_FILE.exists():
             data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-            return str(data.get("PUBLIC_BASE_URL") or "").rstrip("/")
+            configured = str(data.get("PUBLIC_BASE_URL") or "").strip()
+            if configured:
+                return configured.rstrip("/")
     except Exception:
         pass
-    return ""
+    with _runtime_base_lock:
+        return _runtime_base
+
+
+def base_source() -> str:
+    """当前基地址的来源，给 /media/stats 显示（排查"为什么没改写"用）。"""
+    if os.environ.get("PUBLIC_BASE_URL", "").strip():
+        return "env:PUBLIC_BASE_URL"
+    try:
+        import json
+        from service.publishing.gate import CONFIG_FILE
+        if CONFIG_FILE.exists():
+            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            if str(data.get("PUBLIC_BASE_URL") or "").strip():
+                return "config.json"
+    except Exception:
+        pass
+    with _runtime_base_lock:
+        return "auto-detected" if _runtime_base else "none"
 
 
 # ---------------------------------------------------------------- 安全下载
@@ -181,7 +238,56 @@ def fetch_bytes(url: str) -> tuple[bytes, str]:
             raise ValueError(f"图片超过 {MAX_BYTES // 1024 // 1024}MB 上限")
     if not buf:
         raise ValueError("空响应")
-    return bytes(buf), mime
+    data = bytes(buf)
+    # 下载路径同样按内容校验：Content-Type 由对端决定，可以随便写
+    info = sniff_image(data)
+    return data, info["mime"]
+
+
+# ---------------------------------------------------------------- 内容校验
+
+def sniff_image(data: bytes) -> dict:
+    """用内容而不是文件扩展名判断"这是不是图片"，并给出真实格式与尺寸。
+
+    为什么必须做：`UploadFile.content_type` 与文件名都由客户端提供，
+    把 `evil.html` 改名成 `a.png` 就能绕过扩展名白名单。上一轮只校验了
+    扩展名 + 客户端 MIME，等于没校验。
+
+    返回 {"format","mime","width","height"}；不是合法图片抛 ValueError。
+    """
+    import io
+
+    from PIL import Image, UnidentifiedImageError
+
+    if not data:
+        raise ValueError("空文件")
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            fmt = (im.format or "").upper()
+            width, height = im.size
+            # verify() 会检查结构完整性（截断/坏块），但调用后对象不可再用
+            im.verify()
+    except UnidentifiedImageError:
+        raise ValueError("不是可识别的图片格式")
+    except Exception as e:
+        raise ValueError(f"图片损坏或无法解析: {type(e).__name__}")
+
+    if fmt not in ALLOWED_FORMATS:
+        raise ValueError(f"不支持的图片格式: {fmt or '未知'}")
+    if width <= 0 or height <= 0:
+        raise ValueError("图片尺寸非法")
+    if width * height > MAX_PIXELS:
+        raise ValueError(
+            f"图片像素过大（{width}×{height} > 上限 {MAX_PIXELS // 1_000_000}M 像素）")
+    mime = _MIME_BY_FORMAT.get(fmt, "application/octet-stream")
+    return {"format": fmt, "mime": mime, "width": width, "height": height}
+
+
+_MIME_BY_FORMAT = {
+    "PNG": "image/png", "JPEG": "image/jpeg", "GIF": "image/gif",
+    "WEBP": "image/webp", "BMP": "image/bmp", "AVIF": "image/avif",
+    "TIFF": "image/tiff",
+}
 
 
 # ---------------------------------------------------------------- 入库
@@ -197,19 +303,25 @@ def _guess_ext(mime: str, url: str) -> str:
 
 
 def store_bytes(conn, data: bytes, mime: str = "", source: str = "") -> dict:
-    """按内容寻址入库（同图只存一份），返回 asset 行。"""
+    """按内容寻址入库（同图只存一份），返回 asset 行。
+
+    入库前用魔数嗅探确认"真的是图片"，并把 mime/扩展名换成真实值——
+    客户端给的 content_type 与文件名都不可信。
+    """
+    info = sniff_image(data)
+    mime = info["mime"]
     ensure_schema(conn)
     sha = hashlib.sha256(data).hexdigest()
     row = conn.execute("SELECT * FROM media_assets WHERE sha256=?", (sha,)).fetchone()
     if row:
         return {**dict(row), "deduped": True}
-    ext = _guess_ext(mime, source)
+    ext = _EXT_BY_MIME.get(info["mime"]) or _guess_ext(mime, source)
     folder = media_root() / sha[:2]
     folder.mkdir(parents=True, exist_ok=True)
     (folder / f"{sha}{ext}").write_bytes(data)
     conn.execute(
         "INSERT OR IGNORE INTO media_assets (sha256, ext, mime, bytes, source, created_at)"
-        " VALUES (?,?,?,?,?,?)", (sha, ext, mime or "", len(data), source[:500], time.time()))
+        " VALUES (?,?,?,?,?,?)", (sha, ext, mime, len(data), source[:500], time.time()))
     conn.commit()
     row = conn.execute("SELECT * FROM media_assets WHERE sha256=?", (sha,)).fetchone()
     return {**dict(row), "deduped": False}

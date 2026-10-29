@@ -24,6 +24,23 @@
 
   "api_token": "_说明：留空=不启用鉴权（本机 127.0.0.1 使用够用）。把服务暴露到局域网/公网时必须设一串随机值，此后所有请求都要带 X-API-Token 头",
 
+  "MCP_BRIDGE": {
+    "_说明": "外部 MCP Server 桥接（可选）。配了才会拉起子进程；不配则完全关闭。tools 是白名单，空数组=不授权任何工具。",
+    "_用法": "先去掉某个 server 前导下划线，再填 tools 白名单。用 GET /api/v1/hub/mcp/bridge/<server>/tools 查看实际工具名。",
+    "_playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--headless"],
+      "tools": ["browser_navigate", "browser_snapshot", "browser_take_screenshot"],
+      "timeout": 60
+    },
+    "_fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "tools": ["fetch"],
+      "timeout": 30
+    }
+  },
+
   "platforms": {
     "cnblogs": {
       "_说明": "纯协议接入（XML-RPC），推荐一条命令自动填充：cd backed && uv run python -m backed.cli --headed bootstrap-cnblogs --username 登录名 --password 密码",

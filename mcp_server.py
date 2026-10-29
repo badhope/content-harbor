@@ -258,6 +258,37 @@ def ingest_image(url: str) -> dict:
             "bytes": asset["bytes"]}
 
 
+# ── 外部 MCP Server 桥接（把别人的 MCP 工具当后端用）────────────────────
+
+@mcp.tool()
+def external_mcp_status() -> dict:
+    """已配置的外部 MCP Server（Playwright / fetch / filesystem 等）状态与能力覆盖。
+
+    默认关闭；在 config.json 的 MCP_BRIDGE 段配置后才会拉起子进程。
+    """
+    from service.publishing import mcp_bridge
+    out = mcp_bridge.status()
+    out["coverage"] = mcp_bridge.capability_coverage()
+    return out
+
+
+@mcp.tool()
+def external_mcp_tools(server: str) -> dict:
+    """列出一个外部 MCP Server 实际提供的工具（配白名单前先看）。"""
+    from service.publishing import mcp_bridge
+    return mcp_bridge.list_tools(server)
+
+
+@mcp.tool()
+def external_mcp_call(server: str, tool: str, arguments: dict = None) -> dict:
+    """调用外部 MCP Server 的工具（仅白名单内）。
+
+    例：external_mcp_call("playwright", "browser_navigate", {"url": "https://..."})
+    """
+    from service.publishing import mcp_bridge
+    return mcp_bridge.call_tool(server, tool, arguments or {})
+
+
 # ── 外部执行器：Wechatsync（可选后端，不可用时优雅降级）──────────────────
 #
 # 为什么接它：Wechatsync 支持 29+ 平台且直接调用各平台官方 Web API，比我们

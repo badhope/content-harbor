@@ -53,6 +53,20 @@ class PlatformError(Exception):
     pass
 
 
+def _http_error(url: str, status, res: dict, method: str = "POST") -> PlatformError:
+    """构造带限流元数据的错误串。
+
+    任务引擎要靠 `retry-after:` / `x-ratelimit-reset:` 这两个前缀解析平台
+    冷却窗口；不把它们带出来，上层只能瞎猜一个默认值。
+    """
+    parts = [f"{method} {url} 失败({status}): {str(res.get('text', ''))[:200]}"]
+    if res.get("retryAfter"):
+        parts.append(f"retry-after: {res['retryAfter']}")
+    if res.get("rateLimitReset"):
+        parts.append(f"x-ratelimit-reset: {res['rateLimitReset']}")
+    return PlatformError(" | ".join(parts))
+
+
 # ---------------- 回读验证原语（verify-after-act）----------------
 #
 # 2026-09 复盘出的系统缺陷：三个平台都出过「动作没生效但函数返回成功」的假成功
@@ -403,11 +417,13 @@ class PlatformAdapter:
         """在页面上下文里发 GET，自动带 cookie —— 比直接 requests 省事也更像真人。"""
         js = """async (u) => {
             const r = await fetch(u, {credentials: 'include'});
-            return {status: r.status, text: await r.text()};
+            return {status: r.status, text: await r.text(),
+                    retryAfter: r.headers.get('retry-after') || '',
+                    rateLimitReset: r.headers.get('x-ratelimit-reset') || ''};
         }"""
         res = page.evaluate(js, url)
         if res["status"] != 200:
-            raise PlatformError(f"GET {url} -> HTTP {res['status']}")
+            raise PlatformError(_http_error(url, res["status"], res, method="GET"))
         try:
             return json.loads(res["text"])
         except Exception:
@@ -421,7 +437,9 @@ class PlatformAdapter:
                 headers: Object.assign({'content-type': 'application/json'}, hdrs || {}),
                 body: JSON.stringify(body)
             });
-            return {status: r.status, text: await r.text()};
+            return {status: r.status, text: await r.text(),
+                    retryAfter: r.headers.get('retry-after') || '',
+                    rateLimitReset: r.headers.get('x-ratelimit-reset') || ''};
         }"""
         res = page.evaluate(js, [url, payload, headers])
         try:
@@ -433,7 +451,7 @@ class PlatformAdapter:
         status = res["status"]
         if not (200 <= int(status) < 300) or (
                 isinstance(data, dict) and data.get("err_no") not in (0, None)):
-            raise PlatformError(f"POST {url} 失败({status}): {res['text'][:200]}")
+            raise PlatformError(_http_error(url, status, res))
         return data
 
     def api_put(self, page, url, payload, headers=None):

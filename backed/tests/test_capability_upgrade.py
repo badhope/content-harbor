@@ -147,7 +147,17 @@ def test_backoff_delay_grows_exponentially():
 # ---------------------------------------------------------------- 媒体管线
 
 def _png_bytes() -> bytes:
-    return b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    """真实可解码的 PNG。
+
+    回归：旧夹具是 8 字节魔数 + 一堆 0——只够骗过扩展名检查。
+    现在入库前按魔数 + 解码校验（防伪装扩展名 / 解码炸弹），假图必须换真图。
+    """
+    import io
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (70, 120, 220)).save(buf, "PNG")
+    return buf.getvalue()
 
 
 def test_media_store_is_content_addressed_and_deduped(conn, tmp_path):
@@ -340,9 +350,11 @@ def test_read_markdown_file_rejects_escape(tmp_path):
 
 
 def test_import_md_uses_frontmatter_title_and_tags(conn, tmp_path, monkeypatch):
+    # 导入根已随方法搬到 article_ops，patch 点要跟着走
+    from service.publishing import article_ops
     from service.publishing import service as service_mod
 
-    monkeypatch.setattr(service_mod, "BACKED_ROOT", tmp_path / "backed")
+    monkeypatch.setattr(article_ops, "BACKED_ROOT", tmp_path / "backed")
     md = tmp_path / "note.md"
     md.write_text("---\ntitle: YAML 标题\ntags: [a, b]\n---\n\n正文内容", encoding="utf-8")
 
@@ -491,3 +503,300 @@ def test_web_dockerfile_copies_vite_output():
     repo = Path(__file__).resolve().parents[2]
     text = (repo / "deploy/Dockerfile.web").read_text(encoding="utf-8")
     assert "/app/server/static" in text, "vite 产物目录是 server/static，不是 dist"
+
+
+# ---------------------------------------------------------------- 平台级限流冷却
+
+def test_parse_retry_after_seconds_and_http_date():
+    from service.publishing import ratelimit as rl
+    assert rl.parse_retry_after("30") == 30.0
+    assert rl.parse_retry_after("0") == 0.0
+    assert rl.parse_retry_after("") == 0.0
+    assert rl.parse_retry_after("not-a-date") == 0.0
+    future = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(time.time() + 120))
+    assert 100 <= rl.parse_retry_after(future) <= 125
+
+
+def test_parse_rate_limit_reset_handles_ms_and_s():
+    from service.publishing import ratelimit as rl
+    now = time.time()
+    assert 50 <= rl.parse_rate_limit_reset(str(int(now + 60))) <= 62
+    assert 50 <= rl.parse_rate_limit_reset(str(int((now + 60) * 1000))) <= 62
+
+
+def test_retry_after_header_wins_over_reset():
+    from service.publishing import ratelimit as rl
+    assert rl.retry_after_from_headers({
+        "retry-after": "7",
+        "x-ratelimit-reset": str(int(time.time() + 999)),
+    }) == 7.0
+
+
+def test_cooldown_only_extends_never_shortens(conn):
+    from service.publishing import ratelimit as rl
+    first = rl.mark(conn, "juejin", 30, "429")
+    second = rl.mark(conn, "juejin", 5, "429 again")   # 更短，不应缩短
+    assert second == first
+    assert 25 <= rl.remaining(conn, "juejin") <= 31
+
+
+def test_cooldown_expires_and_self_cleans(conn):
+    from service.publishing import ratelimit as rl
+    rl.mark(conn, "csdn", 0.2)
+    assert rl.remaining(conn, "csdn") > 0
+    time.sleep(0.3)
+    assert rl.remaining(conn, "csdn") == 0
+    assert conn.execute("SELECT COUNT(*) c FROM platform_cooldown").fetchone()["c"] == 0
+
+
+def test_classify_and_mark_parses_error_text(conn):
+    from service.publishing import ratelimit as rl
+    rl.clear(conn)      # 与其他用例共享进程内慢状态无关，显式从干净状态起
+    err = "POST https://x 失败(429): too many | retry-after: 45"
+    secs = rl.classify_and_mark(conn, "juejin", err)
+    assert secs == 45.0
+    assert 40 <= rl.remaining(conn, "juejin") <= 46
+
+
+def test_classify_ignores_unrelated_errors(conn):
+    from service.publishing import ratelimit as rl
+    assert rl.classify_and_mark(conn, "juejin", "登录已失效") == 0.0
+    assert rl.remaining(conn, "juejin") == 0
+
+
+def test_task_defers_when_platform_cooling(conn):
+    """平台冷却期内，同平台任务不应被取走执行。"""
+    from service.publishing import ratelimit as rl
+    from service.publishing.tasks import TaskManager
+
+    class NoopHub:
+        def publish(self, *a, **kw):
+            return []
+
+    rl.mark(conn, "juejin", 30)
+    tm = TaskManager(NoopHub(), conn, backoff_base=0, backoff_max=0)
+    try:
+        tid = tm.submit("publish", article_id=1, platforms=["juejin"])
+        time.sleep(0.3)
+        task = tm.get(tid)
+        assert task["status"] == "pending", "冷却期内任务不该被标 running/ok"
+        assert "限流" in (task["message"] or "")
+    finally:
+        tm.close()
+        rl.clear(conn)
+
+
+def test_cooldown_endpoint_clears(client):
+    from service.publishing import ratelimit as rl
+    import api.deps as deps
+    rl.mark(deps._hub_instance.conn, "csdn", 60)
+    r = client.post("/api/v1/hub/platform-cooldowns/clear")
+    assert r.status_code == 200
+    assert rl.remaining(deps._hub_instance.conn, "csdn") == 0
+
+
+# ---------------------------------------------------------------- AST 内容变换
+
+def test_strip_leading_h1_only_at_document_start():
+    from service.publishing import content_transform as ct
+    out, st = ct.strip_leading_h1("# 标题\n\n正文\n\n## 小节\n")
+    assert st["removed"] and st["title"] == "标题"
+    assert out.startswith("正文")
+
+    out2, st2 = ct.strip_leading_h1("正文先行\n\n# 中间标题\n")
+    assert not st2["removed"] and "# 中间标题" in out2
+
+
+def test_strip_leading_h1_ignores_code_block_comments():
+    """回归：代码块里的 `# 注释` 曾被字符串正则误当标题删掉。"""
+    from service.publishing import content_transform as ct
+    md = "# 真标题\n\n```python\n# 这是注释\nprint(1)\n```\n"
+    out, st = ct.strip_leading_h1(md)
+    assert st["removed"]
+    assert "# 这是注释" in out
+    assert "真标题" not in out
+
+
+def test_rewrite_image_urls_only_touches_images():
+    from service.publishing import content_transform as ct
+    md = "看这个 https://a.example/x.png 地址\n\n![图](https://a.example/x.png)\n"
+    out, st = ct.rewrite_image_urls(md, lambda s: "https://cdn/" + s.rsplit("/", 1)[-1])
+    assert st["total"] == 1 and st["changed"] == 1
+    assert "https://cdn/x.png" in out
+    assert "看这个 https://a.example/x.png 地址" in out   # 正文文本不动
+
+
+def test_rewrite_image_urls_reports_failures_without_raising():
+    from service.publishing import content_transform as ct
+
+    def boom(_):
+        raise ValueError("x")
+
+    out, st = ct.rewrite_image_urls("![a](https://a/1.png)", boom)
+    assert st["failed"] == 1 and out == "![a](https://a/1.png)"
+
+
+def test_strip_tag_line_skips_code_blocks():
+    from service.publishing import content_transform as ct
+    md = "正文\n\n标签：python, 异步\n\n```\n标签：这不是元数据\n```\n"
+    out, st = ct.strip_tag_line(md)
+    assert st["removed"] == 1
+    assert "python, 异步" not in out
+    assert "标签：这不是元数据" in out       # 代码块内保留
+
+
+def test_prepare_for_platform_rules_table():
+    from service.publishing import content_transform as ct
+    md = "# 标题\n\n正文\n\n标签：a,b\n\n![i](https://x/1.png)\n"
+    out, report = ct.prepare_for_platform(
+        md, "juejin", image_mapper=lambda s: "https://cdn/1.png")
+    steps = {s["step"] for s in report["steps"]}
+    assert steps == {"images", "strip_tags_line"}
+    assert "标签：a,b" not in out and "https://cdn/1.png" in out
+
+    out2, report2 = ct.prepare_for_platform(md, "zhihu")
+    assert any(s["step"] == "strip_h1" for s in report2["steps"])
+    assert not any(s["step"] == "strip_tags_line" for s in report2["steps"])
+
+
+# ---------------------------------------------------------------- MCP 桥接
+
+def _bridge_config(tmp_path, monkeypatch, tools=("echo",)):
+    import json as _json
+    import sys as _sys
+    # 直接用当前解释器，不要 `uv run`：uv 会在子进程里做一次依赖同步，
+    # 既慢（数秒）又会在并发跑测试时争锁，导致 TaskGroup 异常。
+    cfg = {
+        "MCP_BRIDGE": {
+            "probe": {
+                "command": _sys.executable,
+                "args": [str(Path(__file__).parent / "fixtures" / "probe_mcp_server.py")],
+                "tools": list(tools),
+                "timeout": 60,
+            }
+        }
+    }
+    path = tmp_path / "bridge.json"
+    path.write_text(_json.dumps(cfg), encoding="utf-8")
+    monkeypatch.setenv("HARBOUR_MCP_SERVERS", str(path))
+    from service.publishing import mcp_bridge
+    return mcp_bridge
+
+
+def test_mcp_bridge_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("HARBOUR_MCP_SERVERS", raising=False)
+    from service.publishing import mcp_bridge
+    st = mcp_bridge.status()
+    assert st["configured"] == 0
+    r = mcp_bridge.call_tool("anything", "echo", {"text": "x"})
+    assert r["ok"] is False and "未配置" in r["error"]
+
+
+def test_mcp_bridge_rejects_unauthorized_tool(tmp_path, monkeypatch):
+    bridge = _bridge_config(tmp_path, monkeypatch, tools=("echo",))
+    r = bridge.call_tool("probe", "boom", {})
+    assert r["ok"] is False and "未被授权" in r["error"]
+
+
+def test_mcp_bridge_lists_real_tools(tmp_path, monkeypatch):
+    bridge = _bridge_config(tmp_path, monkeypatch)
+    res = bridge.list_tools("probe")
+    assert res["ok"] is True, res
+    names = {t["name"] for t in res["tools"]}
+    assert {"echo", "boom"} <= names
+
+
+def test_mcp_bridge_calls_external_tool(tmp_path, monkeypatch):
+    """端到端：真的拉起子进程、握手、调工具、拿回结果。"""
+    bridge = _bridge_config(tmp_path, monkeypatch)
+    r = bridge.call_tool("probe", "echo", {"text": "harbour"})
+    assert r["ok"] is True, r
+    assert "echo:harbour" in r["text"]
+
+
+def test_mcp_bridge_reports_capability_coverage(tmp_path, monkeypatch):
+    bridge = _bridge_config(
+        tmp_path, monkeypatch, tools=("browser_navigate", "fetch"))
+    cov = bridge.capability_coverage()
+    assert cov["browser"] == ["browser_navigate"]
+    assert cov["fetch"] == ["fetch"]
+    assert cov["filesystem"] == []
+
+
+def test_mcp_bridge_status_marks_missing_command(tmp_path, monkeypatch):
+    import json as _json
+    path = tmp_path / "bad.json"
+    path.write_text(_json.dumps({"MCP_BRIDGE": {"ghost": {
+        "command": "definitely-not-a-real-binary-xyz", "tools": ["echo"]}}}),
+        encoding="utf-8")
+    monkeypatch.setenv("HARBOUR_MCP_SERVERS", str(path))
+    from service.publishing import mcp_bridge
+    st = mcp_bridge.status()
+    assert st["servers"][0]["installed"] is False
+    assert st["servers"][0]["ready"] is False
+
+
+# ---------------------------------------------------------------- 适配器契约探针
+
+def test_probe_static_contract_is_clean():
+    """全部适配器的接口实现与能力声明必须自洽（声明了就一定要实现）。"""
+    from service.publishing import adapter_probe as ap
+    r = ap.static_contract_report()
+    assert r["checked"] >= 10
+    assert r["errors"] == 0, [p for p in r["problems"] if p["level"] == "error"]
+
+
+def test_probe_detects_declared_but_unimplemented_capability(monkeypatch):
+    """反向验证：故意声明一个没实现的 update，探针必须报错。"""
+    from service.publishing import adapter_probe as ap
+    from service.publishing.adapters import base as adbase
+
+    monkeypatch.setitem(adbase.CAPABILITIES, "bilibili",
+                        {"publish": True, "update": True})
+    # 把 update 还原成基类实现（等价于"没写"）
+    class Fake:
+        id = "bilibili"
+        publish = adbase.PlatformAdapter.publish
+        update = adbase.PlatformAdapter.update
+        list_articles = adbase.PlatformAdapter.list_articles
+        needs_browser = True
+        login_url = "x"
+        home_url = "x"
+        selector_version = "t"
+        key_selectors = {}
+    monkeypatch.setitem(adbase.ADAPTERS, "bilibili", Fake())
+    r = ap.static_contract_report()
+    issues = [p for p in r["problems"] if p["platform"] == "bilibili"]
+    assert any("未实现 update" in p["issue"] for p in issues), issues
+
+
+def test_probe_selector_syntax_validation():
+    from service.publishing import adapter_probe as ap
+    assert ap.check_selector_syntax(".bytemd") == ""
+    assert ap.check_selector_syntax("input[placeholder*='标题']") == ""
+    assert ap.check_selector_syntax("") == "空选择器"
+    assert ap.check_selector_syntax("div[") == "括号不配对"
+    assert ap.check_selector_syntax("input[placeholder='标题]") == "引号不配对"
+
+
+def test_probe_dom_matching_finds_and_reports_missing():
+    from service.publishing import adapter_probe as ap
+    html = Path(__file__).parent / "fixtures" / "dom" / "juejin.html"
+    res = ap.check_dom("juejin", html.read_text(encoding="utf-8"))
+    assert res["checked"] >= 1
+    # 采样页里没有真实的掘金结构时，缺失项要如实报告而不是假装通过
+    assert "checked" in res and "missing" in res
+
+
+def test_probe_full_report_shape():
+    from service.publishing import adapter_probe as ap
+    r = ap.full_report(include_dom=True)
+    assert r["static"]["checked"] >= 10
+    assert "dom_coverage" in r and "how_to_capture" in r
+
+
+def test_probe_endpoint_exposes_report(client):
+    r = client.get("/api/v1/hub/adapters/probe?dom=false")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["static"]["errors"] == 0

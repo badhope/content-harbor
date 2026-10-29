@@ -2,6 +2,77 @@
 
 ---
 
+## [0.9.0] - 2026-10-29（遗留问题清零：MCP 桥接 / 平台限流 / 安全加固 / 架构拆分）
+
+> 主题：**上一轮"剩余风险"全部关闭；接入外部 MCP Server 生态；service.py 988→483 行。**
+> 测试：后端 453 → 480；前端 57 保持；六道门禁全绿。
+
+### 外部 MCP Server 桥接（用户诉求："网上有 mcp 工具直接拿来用"）
+
+- 新增 `service/publishing/mcp_bridge.py`：Harbour 作为 MCP **Client**，通过
+  官方 `mcp` SDK（2.3.0）stdio 拉起并调用任意第三方 MCP Server。
+- 已核实的可直用生态（npm/PyPI 实测）：
+  `@playwright/mcp@0.0.83`（Apache-2.0，浏览器自动化）、
+  `mcp-server-fetch@2026.10.28`（MIT，网页抓取，robots.txt 合规）、
+  `@wechatsync/cli@1.1.0`（MIT）。
+- 安全默认：**工具白名单**（未授权即拒绝）、调用超时兜底、独立线程不阻塞、
+  默认关闭（未配置零子进程）。
+- 端点：`GET /mcp/bridge/status`、`GET /mcp/bridge/{s}/tools`、
+  `POST /mcp/bridge/{s}/call`；MCP 侧新增 3 tool（27 → 30）。
+- 端到端测试：真实拉起子进程 → 握手 → 调工具 → 拿回结果（6 条回归）。
+- 配置样例进 `config.example.json`。
+
+### 平台级限流冷却（retry-after）
+
+- 新增 `ratelimit.py`：解析 `Retry-After`（秒/HTTP-date）与
+  `X-RateLimit-Reset`（秒/毫秒），冷却状态按平台落 SQLite（重启不丢、
+  多任务共享），只延长不缩短，到期自清理，上限 30 分钟防锁死。
+- 适配器 `api_get/api_post` 把限流响应头带进错误串，任务引擎识别 429/503
+  自动置平台冷却，同平台后续任务整体延后（不再撞窗口）。
+- `/status` 暴露 `platform_cooldowns`；`POST /platform-cooldowns/clear` 手动解除。
+
+### 媒体安全与对外地址
+
+- **上传按内容校验**（Pillow 魔数嗅探）：扩展名/Content-Type 均可伪造，
+  现在解码验证 + 格式白名单（SVG 刻意排除——XML 可携带脚本）+
+  4000 万像素上限（防解码炸弹）。
+- **对外地址自动探测**（`middleware/public_base.py`）：媒体改写不再要求
+  手工配 `PUBLIC_BASE_URL`——从请求 Host / 受信代理的 X-Forwarded-* 自动
+  推断；本机回环访问不误报；`/media/stats` 显示来源与排查提示。
+
+### AST 级内容变换
+
+- 新增 `content_transform.py`（markdown-it-py token 流）：去开头重复 H1、
+  删正文标签行、图片 URL 改写——代码块内容天然不受影响（字符串正则的
+  经典误伤源）。规则表按平台接线进 `publish_single`，失败退回原文。
+
+### 架构：service.py 上帝类拆分（行为逐字不变）
+
+- AST 机械切片，不手抄：`article_ops.py`（文章/导入 95 行）、
+  `ai_ops.py`（AI 委托 81 行）、`publish_ops.py`（发布编排 454 行）。
+- `service.py` 988 → 483 行，只剩账号/浏览器池/生命周期；
+  Hub 通过多继承组合，MRO 验证 + 全量 480 测试锁行为。
+
+### 适配器离线契约探针
+
+- 新增 `adapter_probe.py`：接口实现/能力一致性/选择器合法性/选择器版本
+  静态检查；`tests/fixtures/dom/*.html` 采样真实页面后可做选择器漂移比对
+  （平台改版的离线信号）。端点 `GET /adapters/probe`、
+  `POST /adapters/probe/{p}/dump`。真机回归依旧需要账号，但能提前发现的
+  问题（声明矛盾、选择器写错、改版失配）不再等上线才爆。
+
+### 已核实的生态依赖
+
+| 包 | 版本 | 许可证 | 用途 |
+|---|---|---|---|
+| mcp (PyPI) | 2.3.0 | MIT | MCP Client/Server SDK |
+| @playwright/mcp (npm) | 0.0.83 | Apache-2.0 | 可选浏览器后端 |
+| mcp-server-fetch (PyPI) | 2026.10.28 | MIT | 可选抓取后端 |
+| markdown-it-py | 4.2.0 | MIT | AST 内容变换 |
+| Pillow | 13.0.0 | MIT-CMU | 图片魔数嗅探 |
+
+---
+
 ## [0.8.0] - 2026-10-29（能力补全：媒体管线 / 检索 / 能力矩阵 / 部署修复）
 
 > 主题：**把"文档写了但代码没实现"的 9 处缺口补齐；用成熟库替换 6 处自研半成品；

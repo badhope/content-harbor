@@ -24,6 +24,7 @@ harbour/
 │   │       ├── articles.py        # 文章 CRUD + 分页 + 搜索 + 导入 + 版本历史 + AI 增强 + 质检
 │   │       ├── accounts.py        # 登录/登出/诊断/验证码/辅助/刷新（含 SSRF 防护 + 能力矩阵）
 │   │       ├── media.py           # 图片上传/抓取/托管
+│       └── system.py 额外含 /adapters/probe、/mcp/bridge、/platform-cooldowns
 │   │       ├── publishing.py      # 发布/更新/同步 + 任务查询/恢复
 │   │       ├── tags.py            # 标签治理
 │   │       ├── schedules.py       # 定时发布
@@ -64,6 +65,13 @@ harbour/
 │   │   ├── content_qa.py          # 内容质检（可读性/SEO/重复度，签名缓存）
 │   │   ├── media.py               # 媒体资产：内容寻址存储 + 图片改写 + SSRF 防护下载
 │   │   ├── importing.py           # 导入：front-matter 解析 + 网页正文提取
+│   │   ├── content_transform.py   # AST 级平台内容变换（markdown-it-py）
+│   │   ├── ratelimit.py           # 平台限流冷却（Retry-After 落库共享）
+│   │   ├── mcp_bridge.py          # 外部 MCP Server 桥接（Client，白名单）
+│   │   ├── adapter_probe.py       # 适配器离线契约探针（选择器/DOM 漂移）
+│   │   ├── article_ops.py         # Hub mixin：文章 CRUD 与导入
+│   │   ├── ai_ops.py              # Hub mixin：AI 委托
+│   │   └── publish_ops.py         # Hub mixin：发布/更新/同步编排
 │   │   ├── crypto.py              # Fernet 加密（Webhook secret）
 │   │   ├── humanize.py            # 人机模拟（WPM/延迟）
 │   │   ├── cnblogs_login.py       # 博客园浏览器登录 + MetaWeblog 令牌提取
@@ -114,7 +122,7 @@ harbour/
 │   ├── check_all.sh             # 一键门禁（Linux/macOS）
 │   ├── backup_data.py           # 数据备份（在线一致性快照）
 │   └── login_probe.py           # 登录页诊断（导出二维码 / 复检登录态，不代替扫码）
-├── mcp_server.py                # MCP Server（27 Tool，stdio + SSE）
+├── mcp_server.py                # MCP Server（30 Tool，stdio + SSE；可桥接外部 MCP Server）
 ├── deploy/                      # Docker 部署
 └── docs/
     ├── architecture/ARCHITECTURE.md
@@ -215,7 +223,7 @@ bash scripts/check_all.sh              # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                        # 全部 (453 用例)
+uv run pytest -q                        # 全部 (480 用例)
 uv run pytest tests/test_tasks.py -q    # 任务引擎
 uv run ruff check .                     # 静态门禁
 

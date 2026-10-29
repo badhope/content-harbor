@@ -169,6 +169,22 @@ bash scripts/check_all.sh              # 六道门禁全绿
 
 ---
 
+## 五之二、0.9.0 追加：剩余风险处置（同日第二轮）
+
+| 上轮风险 | 处置 | 验证 |
+|---|---|---|
+| 媒体需手工配 PUBLIC_BASE_URL | `middleware/public_base.py` 自动探测（Host/XFF 受信代理） | 测试 + 实测 |
+| 图片上传无内容校验 | Pillow 魔数嗅探 + 格式白名单 + 4000 万像素上限 | 伪装扩展名被拒 |
+| 平台级 retry-after | `ratelimit.py` 冷却表 + 适配器上报 + 任务引擎延后 | 9 条回归 |
+| 无真机回归手段 | `adapter_probe.py` 离线契约探针 + DOM 采样比对 | 6 条回归 |
+| service.py 上帝类 | AST 机械拆分 3 个 mixin，988→483 行 | 480 测试全绿 |
+| mdast 内容变换 | `content_transform.py`（markdown-it-py）接入发布链路 | 6 条回归 |
+| MCP 工具复用 | `mcp_bridge.py`（playwright-mcp / mcp-server-fetch 可直用） | 端到端 6 条 |
+
+核实过的可直用生态：`@playwright/mcp@0.0.83`（Apache-2.0）、
+`mcp-server-fetch@2026.10.28`（MIT）、`@wechatsync/cli@1.1.0`（MIT）、
+`mcp` SDK `2.3.0`（MIT）。
+
 ## 六、剩余风险与下一步
 
 1. **真机验证缺口**：所有平台适配器的发布行为未在真实账号上回归（无凭据）。

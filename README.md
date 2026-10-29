@@ -63,7 +63,7 @@ uv run uvicorn app.factory:create_app --host 0.0.0.0 --port 8000 --reload
 | 版本管理 | 每次改前自动快照，误改一键回滚 |
 | 标签治理 | 同义合并 / 别名映射 / 词云 / 智能推荐 |
 | 内容质检 | 可读性 + SEO + 近似重复检测，一键出报告 |
-| MCP Server | 27 个 Tool，stdio + SSE，对接 Claude Code / Cursor / Windsurf |
+| MCP Server | 30 个 Tool（另可桥接外部 MCP Server），stdio + SSE，对接 Claude Code / Cursor / Windsurf |
 | 媒体资产 | 图片内容寻址去重、Markdown 改写、本地托管（配 `PUBLIC_BASE_URL` 后平台可直接抓取） |
 | 全文检索 | SQLite FTS5（trigram，中文免分词）+ 相关度排序 |
 | 网页导入 | 粘贴 URL 直接抓正文转 Markdown（trafilatura），带 SSRF 防护 |
@@ -124,7 +124,7 @@ bash scripts/check_all.sh            # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                     # 453 用例
+uv run pytest -q                     # 480 用例
 pnpm --dir web test                  # 前端 57 用例（vitest，含 a11y 静态门禁）
 pnpm --dir web lint                  # 前端 eslint
 uv run ruff check .                  # 静态

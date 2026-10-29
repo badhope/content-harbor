@@ -5,7 +5,6 @@
 都会先经过这里，再以稳定 URL 出现在各平台的正文里。
 """
 
-import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -25,20 +24,30 @@ class MediaUrlIn(BaseModel):
 
 @router.post("/media/upload")
 async def media_upload(file: UploadFile = File(...)):
-    """上传图片入库（内容寻址，同图自动去重）。返回稳定 URL。"""
+    """上传图片入库（内容寻址去重）。返回稳定 URL。
+
+    校验以**文件内容**为准：扩展名与 Content-Type 都来自客户端，可伪造。
+    """
     from service.publishing import media
+
     ext = Path(file.filename or "").suffix.lower()
-    if ext not in _ALLOWED_EXT:
-        raise HTTPException(422, f"不支持的图片类型: {ext or '(无扩展名)'}")
+    if ext and ext not in _ALLOWED_EXT:
+        raise HTTPException(422, f"不支持的图片类型: {ext}")
     data = await file.read()
     if not data:
         raise HTTPException(422, "空文件")
     if len(data) > media.MAX_BYTES:
         raise HTTPException(413, f"图片超过 {media.MAX_BYTES // 1024 // 1024}MB 上限")
-    mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
-    asset = media.store_bytes(get_hub().conn, data, mime, source=file.filename or "")
+    try:
+        info = media.sniff_image(data)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+    asset = media.store_bytes(get_hub().conn, data, info["mime"],
+                              source=file.filename or "")
     return {"ok": True, "sha256": asset["sha256"], "url": media.asset_url(asset),
-            "bytes": asset["bytes"], "deduped": bool(asset.get("deduped"))}
+            "bytes": asset["bytes"], "deduped": bool(asset.get("deduped")),
+            "format": info["format"], "width": info["width"], "height": info["height"]}
 
 
 @router.post("/media/ingest")
@@ -61,8 +70,15 @@ def media_list(limit: int = 100, offset: int = 0):
 
 @router.get("/media/stats")
 def media_stats():
+    """媒体库状态 + 对外地址来源（排查"为什么图片没被改写"）。"""
     from service.publishing import media
-    return media.stats(get_hub().conn)
+    out = media.stats(get_hub().conn)
+    out["public_base_source"] = media.base_source()
+    out["hint"] = (
+        "图片会在发布时改写为 public_base 下的地址；为 none 时只入库不改写"
+        "（平台抓不到本机地址）。设置方式：环境变量 PUBLIC_BASE_URL，"
+        "或用公网域名/反代地址访问一次本应用即可自动探测。")
+    return out
 
 
 # 注意：/media/{sha}{ext} 必须最后声明，否则会把 /media/stats 当产物名匹配

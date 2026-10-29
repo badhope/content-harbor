@@ -3,7 +3,7 @@
 
 [project]
 name = "harbour-backend"
-version = "0.8.0"
+version = "0.9.0"
 description = "Harbour 后端：基于 FastAPI 的文章库 / 多平台发布 / AIGC 合规门禁"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,8 @@ dependencies = [
     "jieba>=0.42",
     "python-frontmatter>=1.1",
     "trafilatura>=1.12",
+    "pillow>=10.3",
+    "markdown-it-py>=3.0",
 ]
 
 [dependency-groups]

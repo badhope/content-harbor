@@ -1,6 +1,6 @@
 {
   "productName": "内容港 Harbour",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "identifier": "com.harbour.hub",
   "build": {
     "beforeDevCommand": "pnpm dev",
