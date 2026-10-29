@@ -30,8 +30,12 @@ services:
       FASTAPI_ENV: ${FASTAPI_ENV:-docker}
       DEBUG: ${DEBUG:-false}
       SECRET_KEY: ${SECRET_KEY:-please-change-me-in-production-min-32-chars}
+      # 数据根：DB / 媒体 / 登录快照 / 事件日志全部挂在 data_root() 下。
+      # 不设它时数据落在镜像内 backed/service/data，容器重建即丢（原 compose
+      # 挂载的是 backed/data，而代码实际用的是 backed/service/data，两边对不上）。
+      HUB_DATA_DIR: /app/data
     volumes:
-      - hub_data:/app/backed/data
+      - hub_data:/app/data
     networks: [app-net]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]

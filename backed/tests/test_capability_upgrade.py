@@ -474,3 +474,20 @@ def test_similarity_signature_cache_reuses_unchanged_articles(conn):
     row = conn.execute("SELECT content_hash FROM article_simhash WHERE article_id=?",
                        (others[0]["id"],)).fetchone()
     assert row is not None      # 内容变了会重算并回写 
+
+
+# ---------------------------------------------------------------- 部署配置
+
+def test_docker_compose_mounts_the_real_data_root():
+    """compose 挂载点必须与 HUB_DATA_DIR 一致，否则容器重建丢数据。"""
+    repo = Path(__file__).resolve().parents[2]
+    text = (repo / "deploy/docker-compose.yml").read_text(encoding="utf-8")
+    assert "HUB_DATA_DIR: /app/data" in text
+    assert "hub_data:/app/data" in text
+    assert "hub_data:/app/backed/data" not in text
+
+
+def test_web_dockerfile_copies_vite_output():
+    repo = Path(__file__).resolve().parents[2]
+    text = (repo / "deploy/Dockerfile.web").read_text(encoding="utf-8")
+    assert "/app/server/static" in text, "vite 产物目录是 server/static，不是 dist"

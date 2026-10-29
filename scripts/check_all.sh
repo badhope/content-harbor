@@ -69,4 +69,4 @@ if [ "${#failed[@]}" -gt 0 ]; then
   echo "FAIL - 未通过：${failed[*]}" >&2
   exit 1
 fi
-echo "PASS - 四道门禁全绿，可以提交"
+echo "PASS - 六道门禁全绿，可以提交"
