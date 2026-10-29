@@ -1,12 +1,12 @@
 {
   "productName": "内容港 Harbour",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "identifier": "com.harbour.hub",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "pnpm build",
-    "frontendDist": "../dist"
+    "frontendDist": "../../server/static"
   },
   "app": {
     "windows": [

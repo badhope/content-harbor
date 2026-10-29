@@ -63,7 +63,11 @@ uv run uvicorn app.factory:create_app --host 0.0.0.0 --port 8000 --reload
 | 版本管理 | 每次改前自动快照，误改一键回滚 |
 | 标签治理 | 同义合并 / 别名映射 / 词云 / 智能推荐 |
 | 内容质检 | 可读性 + SEO + 近似重复检测，一键出报告 |
-| MCP Server | 23 个 Tool，stdio + SSE，对接 Claude Code / Cursor / Windsurf |
+| MCP Server | 27 个 Tool，stdio + SSE，对接 Claude Code / Cursor / Windsurf |
+| 媒体资产 | 图片内容寻址去重、Markdown 改写、本地托管（配 `PUBLIC_BASE_URL` 后平台可直接抓取） |
+| 全文检索 | SQLite FTS5（trigram，中文免分词）+ 相关度排序 |
+| 网页导入 | 粘贴 URL 直接抓正文转 Markdown（trafilatura），带 SSRF 防护 |
+| 能力矩阵 | 每个平台声明 publish/draft/update/list/tags/cover/question，前端按此置灰 |
 | Webhook | 任务完成/失败/等人工 10 种事件，HMAC 签名，自动禁僵尸 |
 | SSE 实时流 | 前端 EventSource 长连接，任务进度实时推送 |
 
@@ -81,6 +85,7 @@ uv run uvicorn app.factory:create_app --host 0.0.0.0 --port 8000 --reload
 | `AI_API_KEY` | LLM API 密钥 | 空 |
 | `AI_BASE_URL` | LLM 端点 | deepseek |
 | `FERNET_KEY` | Webhook secret 加密主密钥 | 自动生成 |
+| `PUBLIC_BASE_URL` | 媒体/图片对外基地址（如 `https://harbour.example.com`） | 空（只入库不改写） |
 
 ## 登录平台
 
@@ -119,7 +124,7 @@ bash scripts/check_all.sh            # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                     # 415 用例
+uv run pytest -q                     # 445 用例
 pnpm --dir web test                  # 前端 57 用例（vitest，含 a11y 静态门禁）
 pnpm --dir web lint                  # 前端 eslint
 uv run ruff check .                  # 静态
@@ -141,6 +146,7 @@ uv run python ../scripts/backup_data.py --dry-run    # 只看计划
 ## 文档
 
 - [架构详解](docs/architecture/ARCHITECTURE.md)
+- [0.8.0 能力审计与补全报告](docs/audit/CAPABILITY_AUDIT_2026-10-29.md)
 - [审计报告](docs/audit/AUDIT.md)
 - [技术债台账](docs/design/tech-debt.md)
 - [平台接入指南](docs/PLATFORM_PUBLISH_GUIDE.md)

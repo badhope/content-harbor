@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,7 +47,9 @@ def _mount_web_ui(app: FastAPI) -> None:
     static_dir = Path(__file__).resolve().parents[2] / "server" / "static"
     if not static_dir.is_dir():
         return
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    # 构建产物文件名带内容 hash，可以永久缓存；index.html 必须每次校验。
+    app.mount("/static", StaticFiles(directory=str(static_dir), html=False),
+              name="static")
     index_file = static_dir / "index.html"
     if index_file.is_file():
 
@@ -67,6 +70,11 @@ def create_app() -> FastAPI:
                 TrustedHostMiddleware,
                 allowed_hosts=hosts,
             )
+
+    # 压缩：前端首屏要拉 element-plus（949KB 未压缩 / 305KB gzip）与 Vue 运行时。
+    # 桌面版直接由 uvicorn 提供静态资源，没有 nginx 代劳 gzip，不装这层
+    # 每个用户都要多下 ~1MB。阈值 1KB：小响应压了反而更慢。
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     setup_middleware(app)
     setup_exception_handlers(app)

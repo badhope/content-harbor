@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | 0.6.5 |
-| 日期 | 2026-10-10 |
+| 版本 | 0.8.0 |
+| 日期 | 2026-10-29 |
 | 状态 | 维护中 |
 | 唯一真理源 | 本文件 + [`AGENT.md`](../../AGENT.md) |
 | 位置 | 2026-10-10 从仓库根目录迁入 `docs/architecture/`（tech-debt 台账 #11） |
@@ -250,7 +250,27 @@ TaskManager 100 行实现同等功能 + SQLite 持久化 + 进程重启恢复。
 30 秒轮询 `scheduled_tasks` 表 + 串行投递到 TaskManager，一次性线程（daemon=True）。
 一次性任务执行完自动 disable，`cron` 表达式走手撸最小 5 段解析（*/n 步长 + 逗号 + 连字符）。
 
-### D9: 标签治理不引 NLP 库
+### D10: 能力矩阵用代码声明，不用文档表格
+
+文档表格没人执行。`PlatformAdapter.capabilities` + `CAPABILITIES` 表把
+"这个平台支持什么"变成可断言的代码：`/platforms` 下发、发布/更新前分流、
+前端置灰、`test_capability_matrix_matches_reality` 反向校验"声明 update=True
+的平台不能抛不支持"。新增平台必须显式声明，默认全 False——默认 True 会制造
+新的"看起来支持"假象。
+
+### D11: 媒体走内容寻址，不走数据库 BLOB
+
+图片按 sha256 存 `data/media/<前2位>/<sha><ext>`，DB 只存元数据。
+理由：SQLite 存 BLOB 会让单文件库随图片膨胀到 GB 级，备份/迁移/VACUUM 全变慢；
+文件系统 + 内容寻址天然支持 immutable 缓存与 CDN 回源。同图只存一份。
+
+### D12: 检索用 FTS5 而非外部分词器
+
+中文分词（jieba）会引入词典与进程内状态，而 FTS5 的 trigram 分词对中文
+是"3 字滑窗"，无需词典、无额外依赖、支持任意子串匹配。代价是 2 字查询
+无法走索引（trigram 最少 3 字符），这类查询回退 LIKE——两字词本来就少。
+
+### D13: 标签治理
 
 本地 `tag_stats` 表记次数 + `config.json` 存 `alias_map` 同义合并规则。
 分类靠关键词白名单（语言/框架/领域/其他），AI 推荐只补全本地 Top 20 高频之外的缺口。

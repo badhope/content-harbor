@@ -102,20 +102,90 @@ def sync_from_articles(conn):
 
 
 def _normalize(tag, alias_map=None):
-    """标签归一化：去空白 -> 小写 -> alias 替换。"""
+    """标签归一化：去空白 -> 小写匹配 -> alias 替换 -> 近似同义合并。
+
+    近似合并（2026-10-29 新增 rapidfuzz）：
+      - 编辑距离 ≤ 1 且长度 ≥ 4 的纯 ASCII 标签视为同一词（"reactjs"/"react" 不算，
+        但 "javscript"/"javascript" 算）；
+      - 中文不做模糊匹配（二字词编辑距离 1 就可能是完全不同的概念）。
+    只在 alias_map 未命中时兜底，显式别名永远优先。
+    """
     tag = tag.strip()
     if not tag:
         return ""
     tag_lower = tag.lower()
-    # 同义合并
+    # 1) 显式别名（精确）
     if alias_map:
         for alias, canonical in alias_map.items():
             if tag_lower == alias.lower():
+                return canonical
+    # 2) 近似合并：只针对 ≥4 字符的 ASCII 标签
+    if alias_map and tag.isascii() and len(tag) >= 4:
+        from rapidfuzz.distance import Levenshtein
+        for alias, canonical in alias_map.items():
+            if not alias.isascii() or abs(len(alias) - len(tag)) > 1:
+                continue
+            if Levenshtein.distance(tag_lower, alias.lower()) <= 1:
                 return canonical
     # 首字母大写保形（"python" -> "Python"）但不大写中文
     if tag.isascii() and tag == tag.lower():
         tag = tag.capitalize()
     return tag
+
+
+def cluster_similar_tags(conn, threshold=72, limit=200):
+    """找出近似重复的标签簇（同义词治理的候选清单）。
+
+    判定规则针对中文/技术标签的实际分布设计：
+      - 大小写不敏感比较（Python / python 必须合并）；
+      - 纯 ASCII：编辑距离 ≤1（Javscript→JavaScript）或前缀包含（react→reactjs）；
+      - 中文：只认"短词是长词子串"（异步 ⊂ 异步编程），不做编辑距离
+        （二字中文词差一个字往往是完全不同的概念）。
+    阈值参数只在 ASCII 侧作为辅助（ratio 下限），默认 72 足够宽松且不误报。
+
+    返回 [{canonical, members: [...], reason}]，供「标签治理」一键合并。
+    """
+    from rapidfuzz.distance import Levenshtein
+
+    _ensure_table(conn)
+    rows = [r["tag"] for r in conn.execute(
+        "SELECT tag FROM tag_stats ORDER BY count DESC LIMIT ?", (limit,)).fetchall()]
+
+    def similar(a: str, b: str) -> str:
+        la, lb = a.lower(), b.lower()
+        if la == lb:
+            return "大小写差异"
+        short, long_ = (la, lb) if len(la) <= len(lb) else (lb, la)
+        if short.isascii() and long_.isascii():
+            if len(short) >= 4 and Levenshtein.distance(short, long_) <= 1:
+                return "拼写近似"
+            if len(short) >= 3 and long_.startswith(short):
+                return "前缀包含"
+            return ""
+        if not short.isascii() or not long_.isascii():
+            # 中文（或中英混合）：只认子串包含
+            if len(short) >= 2 and short in long_:
+                return "包含关系"
+        return ""
+
+    used, clusters = set(), []
+    for i, tag in enumerate(rows):
+        if tag in used:
+            continue
+        members, reasons = [], []
+        for other in rows[i + 1:]:
+            if other in used:
+                continue
+            why = similar(tag, other)
+            if why:
+                members.append(other)
+                reasons.append(why)
+        if members:
+            used.add(tag)
+            used.update(members)
+            clusters.append({"canonical": tag, "members": members,
+                             "reason": sorted(set(reasons))})
+    return clusters
 
 
 def _guess_category(tag):

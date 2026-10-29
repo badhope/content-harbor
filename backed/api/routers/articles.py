@@ -3,7 +3,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ..deps import get_hub
@@ -34,7 +34,8 @@ class ArticlePatch(BaseModel):
 
 
 class ImportIn(BaseModel):
-    path: str
+    path: str = ""
+    url: str = ""
     tags: str = ""
 
 
@@ -53,11 +54,16 @@ class AIRewriteIn(BaseModel):
 # ---- 文章 CRUD ----
 
 @router.get("/articles")
-def list_articles(status: str = None, limit: int = 100, offset: int = 0):
+def list_articles(status: str = None, limit: int = 100, offset: int = 0,
+                  slim: bool = True):
+    """文章列表。默认只返回列表元信息（不含正文），避免整页正文 JSON 化。
+
+    需要正文时传 `slim=false`（MCP/CLI 的 list 语义保持原样）。
+    """
     # 夹到安全区间：limit<=0 在 SQLite 里等于不限量，超大 offset 会溢出 INTEGER
     limit = max(1, min(limit, 200))
     offset = max(0, min(offset, 1_000_000))
-    return get_hub().list(status, limit, offset)
+    return get_hub().list(status, limit, offset, slim=slim)
 
 
 @router.get("/articles/page")
@@ -69,7 +75,7 @@ def articles_page(status: str = None, limit: int = 20, offset: int = 0):
     limit = max(1, min(limit, 200))
     offset = max(0, min(offset, 1_000_000))
     hub = get_hub()
-    items = hub.list(status, limit, offset)
+    items = hub.list(status, limit, offset, slim=True)
     total = hub.count_articles(status)
     return {"items": items, "total": total,
             "offset": offset, "limit": limit,
@@ -103,7 +109,22 @@ def search(keyword: str):
 
 @router.post("/articles/import")
 def import_md(body: ImportIn):
-    return {"id": get_hub().import_md(body.path, tags=body.tags)}
+    """导入文章：`path` 读本地 Markdown，`url` 抓网页转 Markdown（二选一）。
+
+    先试本地路径，再试 URL；两者都给时以 path 为准（本地导入更可控）。
+    """
+    hub = get_hub()
+    if body.path:
+        try:
+            return {"id": hub.import_md(body.path, tags=body.tags), "source": "file"}
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+    if body.url:
+        try:
+            return {**hub.import_url(body.url, tags=body.tags), "source": "url"}
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+    raise HTTPException(422, "path 与 url 至少要填一个")
 
 
 @router.post("/articles/{aid}/clone")
@@ -192,7 +213,30 @@ def article_qa(aid: int):
     return get_hub().content_qa(article_id=aid)
 
 
+class QAAnalyzeIn(BaseModel):
+    content_md: str = ""
+    title: str = ""
+    summary: str = ""
+    tags: str = ""
+
+
 @router.post("/qa/analyze")
-def qa_analyze(content_md: str, title: str = "", summary: str = "", tags: str = ""):
-    return get_hub().content_qa(content_md=content_md, title=title,
-                                summary=summary, tags=tags)
+def qa_analyze(request: Request, body: QAAnalyzeIn | None = None):
+    """正文质检。JSON body 与 query 参数两种调用方式都支持。
+
+    回归：前端 `api.qaAnalyze` 一直发 JSON body，而端点原先只声明了 query
+    参数（FastAPI 对非 Body 的 str 一律按 query 解析），请求体被忽略后
+    `content_md` 缺失 → 422，编辑器里的「质检」按钮从来没成功过。
+    """
+    merged = QAAnalyzeIn()
+    if body is not None:
+        merged = body
+    qp = request.query_params
+    data = merged.model_dump()
+    for k in data:
+        if not data[k] and qp.get(k):
+            data[k] = qp[k]
+    if not data["content_md"]:
+        raise HTTPException(422, "content_md 不能为空")
+    return get_hub().content_qa(content_md=data["content_md"], title=data["title"],
+                                summary=data["summary"], tags=data["tags"])

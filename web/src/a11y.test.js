@@ -80,7 +80,8 @@ describe('交互可达性（WCAG 4.1.2 / 2.1.1）', () => {
     const src = read('src/components/PublishRail.vue')
     expect(src).toContain('role="checkbox"')
     expect(src).toContain(':aria-checked')
-    expect(src).toContain('@keydown.space.prevent="toggle')
+    // 能力矩阵会给不支持发布的平台加 canPublish() 守卫，两种写法都算可达
+    expect(src).toMatch(/@keydown\.space\.prevent="(canPublish\(p\) && )?toggle/)
   })
 
   it('图标按钮带 aria-label', () => {

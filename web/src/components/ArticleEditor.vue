@@ -86,6 +86,7 @@
           :theme="'dark'"
           language="zh-CN"
           :toolbars="toolbars"
+          :on-upload-img="onUploadImg"
           class="md-editor"
           @on-change="touch"
         />
@@ -188,8 +189,10 @@
 import { computed, ref, watch } from 'vue'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
+import { api } from '@/api'
 import { Check, PriceTag, Aim, Brush, Menu, Edit, Operation, View, Promotion, Refresh, Files,
          Paperclip, Picture, List, DocumentCopy, Clock, DataAnalysis } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useHubStore } from '@/stores/hub'
 
@@ -224,6 +227,21 @@ const qaTotalClass = computed(() => {
   return 'qa-' + (t >= 70 ? 'good' : t >= 50 ? 'ok' : 'bad')
 })
 const touch = () => emit('touch')
+
+// 编辑器内粘贴/拖拽的图片：先入本地媒体库（内容寻址去重），再回写稳定 URL。
+// 直接塞 base64 会让正文膨胀几十倍，也会让平台侧富文本编辑器拒收。
+async function onUploadImg(files, callback) {
+  const urls = []
+  for (const file of files) {
+    try {
+      const r = await api.mediaUpload(file)
+      urls.push(r.url || `/api/v1/hub/media/${r.sha256}.png`)
+    } catch {
+      ElMessage.error(`图片上传失败：${file.name}`)
+    }
+  }
+  callback(urls)
+}
 
 // 版本历史抽屉状态
 const versionDrawer = ref(false)

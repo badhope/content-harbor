@@ -9,9 +9,10 @@ from .tags import router as tags_router
 from .schedules import router as schedules_router
 from .webhooks import router as webhooks_router
 from .ai import router as ai_router
+from .media import router as media_router
 
 __all__ = [
     "system_router", "articles_router", "accounts_router",
     "publishing_router", "tags_router", "schedules_router",
-    "webhooks_router", "ai_router",
+    "webhooks_router", "ai_router", "media_router",
 ]

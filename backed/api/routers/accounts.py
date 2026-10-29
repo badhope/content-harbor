@@ -82,9 +82,15 @@ class AssistIn(BaseModel):
 
 @router.get("/platforms")
 def platforms():
+    """平台清单 + 代码级能力矩阵。
+
+    能力矩阵不是文档：前端发布轨据此置灰不支持的选项（例如头条不支持
+    原地更新、知乎支持回答问题），避免用户点了才发现平台不支持。
+    """
     from service.publishing import adapters as _adapters  # noqa: F401
-    from service.publishing.adapters.base import ADAPTERS
-    return [{"id": a.id, "name": a.name, "needs_browser": a.needs_browser}
+    from service.publishing.adapters.base import ADAPTERS, capability_of
+    return [{"id": a.id, "name": a.name, "needs_browser": a.needs_browser,
+             "capabilities": capability_of(a.id)}
             for a in ADAPTERS.values()]
 
 

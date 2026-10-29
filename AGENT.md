@@ -22,7 +22,8 @@ harbour/
 │   │       ├── __init__.py
 │   │       ├── system.py          # /health /status /metrics /jobs /publications /pending-human
 │   │       ├── articles.py        # 文章 CRUD + 分页 + 搜索 + 导入 + 版本历史 + AI 增强 + 质检
-│   │       ├── accounts.py        # 登录/登出/诊断/验证码/辅助/刷新（含 SSRF 防护）
+│   │       ├── accounts.py        # 登录/登出/诊断/验证码/辅助/刷新（含 SSRF 防护 + 能力矩阵）
+│   │       ├── media.py           # 图片上传/抓取/托管
 │   │       ├── publishing.py      # 发布/更新/同步 + 任务查询/恢复
 │   │       ├── tags.py            # 标签治理
 │   │       ├── schedules.py       # 定时发布
@@ -49,7 +50,7 @@ harbour/
 │   │   ├── browser.py             # Patchright Chromium（729 行）
 │   │   ├── browser_pool.py        # 浏览器实例池（LRU + per-key 互斥）
 │   │   ├── gate.py                # AIGC 合规门禁（四道闸门）
-│   │   ├── ai.py                  # OpenAI 兼容 LLM 调用
+│   │   ├── ai.py                  # OpenAI 兼容 LLM 调用（tenacity 退避重试）
 │   │   ├── ai_service.py          # AI 增强操作（写稿/改写/润色/翻译/工具）
 │   │   ├── ai_enhancements.py     # AI 工具函数（大纲/SEO/配图/克隆/模板）
 │   │   ├── observability.py       # 日志/指标/可观测（585 行）
@@ -60,7 +61,9 @@ harbour/
 │   │   ├── _account_ops.py        # 账号操作（登录/登出/验证码/辅助）
 │   │   ├── versions.py            # 版本管理（快照/回滚/diff）
 │   │   ├── tags.py                # 标签治理
-│   │   ├── content_qa.py          # 内容质检（可读性/SEO/重复度）
+│   │   ├── content_qa.py          # 内容质检（可读性/SEO/重复度，签名缓存）
+│   │   ├── media.py               # 媒体资产：内容寻址存储 + 图片改写 + SSRF 防护下载
+│   │   ├── importing.py           # 导入：front-matter 解析 + 网页正文提取
 │   │   ├── crypto.py              # Fernet 加密（Webhook secret）
 │   │   ├── humanize.py            # 人机模拟（WPM/延迟）
 │   │   ├── cnblogs_login.py       # 博客园浏览器登录 + MetaWeblog 令牌提取
@@ -111,7 +114,7 @@ harbour/
 │   ├── check_all.sh             # 一键门禁（Linux/macOS）
 │   ├── backup_data.py           # 数据备份（在线一致性快照）
 │   └── login_probe.py           # 登录页诊断（导出二维码 / 复检登录态，不代替扫码）
-├── mcp_server.py                # MCP Server（23 Tool，stdio + SSE）
+├── mcp_server.py                # MCP Server（27 Tool，stdio + SSE）
 ├── deploy/                      # Docker 部署
 └── docs/
     ├── architecture/ARCHITECTURE.md
@@ -212,7 +215,7 @@ bash scripts/check_all.sh              # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                        # 全部 (415 用例)
+uv run pytest -q                        # 全部 (445 用例)
 uv run pytest tests/test_tasks.py -q    # 任务引擎
 uv run ruff check .                     # 静态门禁
 

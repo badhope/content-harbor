@@ -18,14 +18,15 @@
           </div>
           <div class="plat-grid rail-plats">
             <div v-for="p in platforms" :key="p.id" class="plat-card rail-plat"
-                 :class="{ on: selected.includes(p.id) }"
+                 :class="{ on: selected.includes(p.id), disabled: !canPublish(p) }"
                  role="checkbox"
                  :aria-checked="selected.includes(p.id) ? 'true' : 'false'"
-                 :aria-label="`${p.name}：${selected.includes(p.id) ? '已选' : '未选'}`"
-                 tabindex="0"
-                 @click="toggle(p.id)"
-                 @keydown.enter.prevent="toggle(p.id)"
-                 @keydown.space.prevent="toggle(p.id)">
+                 :aria-disabled="!canPublish(p) ? 'true' : 'false'"
+                 :aria-label="`${p.name}：${canPublish(p) ? (selected.includes(p.id) ? '已选' : '未选') : '不支持发布'}`"
+                 :tabindex="canPublish(p) ? 0 : -1"
+                 @click="canPublish(p) && toggle(p.id)"
+                 @keydown.enter.prevent="canPublish(p) && toggle(p.id)"
+                 @keydown.space.prevent="canPublish(p) && toggle(p.id)">
               <div class="plat-top">
                 <span class="plat-badge">{{ mark(p) }}</span>
                 <div class="nn">
@@ -33,6 +34,9 @@
                   <div class="s">
                     <span class="log-dot" :class="isOnline(p.id) ? 'ok' : 'off'" />
                     {{ isOnline(p.id) ? '已登录' : (p.needs_browser ? '未登录' : '协议凭据') }}
+                  </div>
+                  <div class="s caps" v-if="p.capabilities && !p.capabilities.publish">
+                    该平台不支持发布
                   </div>
                 </div>
                 <el-button v-if="p.needs_browser && !isOnline(p.id)" size="small" text type="primary"
@@ -179,9 +183,13 @@ const hub = useHubStore()
 const settings = useSettingsStore()
 
 const currentId = computed(() => hub.currentId)
-const platforms = computed(() => hub.platforms.filter(p => p.id !== 'metaweblog' || true))
+const platforms = computed(() => hub.platforms)
+
+// 能力矩阵来自后端（/platforms.capabilities），不是前端猜的
+const canPublish = (p) => p?.capabilities ? p.capabilities.publish !== false : true
+const canUpdate = (p) => !!p?.capabilities?.update
 const currentPubs = computed(() => hub.publications)
-const updatable = computed(() => hub.updatable)
+const updatable = computed(() => hub.updatable.filter(id => canUpdate(platforms.value.find(p => p.id === id))))
 const isAiArticle = computed(() => hub.current?.source === 'ai')
 
 // ---- 平台选择 + 分类记忆（沿用旧向导的本地记忆） ----
@@ -225,7 +233,7 @@ function toggle(id) {
   ensureCfg(id)
 }
 function selectAll() {
-  selected.value = platforms.value.map(p => p.id)
+  selected.value = platforms.value.filter(canPublish).map(p => p.id)
   selected.value.forEach(ensureCfg)
 }
 
@@ -332,7 +340,14 @@ const pubText = (s) => ({
   padding: 8px 10px;
   .n { font-size: var(--fs-sm); }
   .s { display: flex; align-items: center; gap: 5px; }
+  .s.caps { color: var(--tx-4); }
   .cat-row { margin-top: 6px; }
+  // 能力矩阵判定不支持发布的平台：置灰且不可点，而不是让用户点了才失败
+  &.disabled {
+    opacity: .5;
+    cursor: not-allowed;
+    filter: grayscale(1);
+  }
 }
 .log-dot {
   width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;

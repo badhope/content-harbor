@@ -44,7 +44,8 @@ try {
     # 想中止就用 `throw`——它会在调用方异常冒泡，正好被 Invoke-Step 的 catch 接住。
 
     Invoke-Step '1/6 语法编译 compileall' {
-        uv run python -m compileall -q .
+        # 排除 .venv：只编译项目自身源码（快 30 倍，且不被第三方包的告警污染）
+        uv run python -m compileall -q -x '([\/])(\.venv|node_modules)([\/]|$)' .
         # scripts/ 在 backed 作用域外，单独编译，避免只测到后端代码
         uv run python -m compileall -q "$repoRoot/scripts"
     }

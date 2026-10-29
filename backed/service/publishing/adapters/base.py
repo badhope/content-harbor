@@ -328,6 +328,21 @@ class PlatformAdapter:
     list_url = ""      # 内容管理页
     new_url = ""       # 新建文章页
 
+    # ---- 能力矩阵（代码级声明，不是文档幻觉）----
+    # 前端发布轨按此置灰不支持的选项，任务引擎按此决定是否降级，
+    # `/platforms` 端点原样下发。新增适配器必须显式声明，默认全 False：
+    # 默认 True 会让"看起来支持"变成新的假成功来源。
+    capabilities = {
+        "publish": False,     # 发新文章
+        "draft": False,       # 只存草稿
+        "update": False,      # 原地更新已发布文章
+        "list": False,        # 抓取账号内文章列表
+        "tags": False,        # 支持标签/分类
+        "cover": False,       # 支持封面图
+        "question": False,    # 知乎回答问题这类特有能力
+        "hosted_media": False,  # 接受本应用提供的图片 URL（自建站/支持外链的平台）
+    }
+
     # 选择器版本化（第三刀）：每个子类声明它依赖的页面结构版本与关键选择器，
     # 平台改版时 dump-dom 能立刻对上号，而不是报一堆无关错误。
     selector_version = ""    # 例如 "2026-09"（适配/验证时手动更新）
@@ -592,6 +607,35 @@ class PlatformAdapter:
 
 
 ADAPTERS = {}
+
+
+# 每个适配器声明自己真实实现的能力。数值来自各实现体：有方法且有实际赋值点才算 True，
+# 仅"没抛 NotImplementedError"不算——那是自欺。
+CAPABILITIES = {
+    "bilibili":     {"publish": True, "draft": True, "update": True,  "tags": True},
+    "cnblogs":      {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "hosted_media": True},
+    "csdn":         {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "cover": True},
+    "juejin":       {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "cover": True},
+    "metaweblog":   {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "hosted_media": True},
+    "oschina":      {"publish": True, "draft": True, "update": False, "list": False},
+    "segmentfault": {"publish": True, "draft": True, "update": True,  "tags": True},
+    "toutiao":      {"publish": True, "draft": True, "update": False, "list": False},
+    "51cto":        {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "hosted_media": True},
+    "zhihu":        {"publish": True, "draft": True, "update": True,  "tags": True,
+                     "question": True},
+}
+
+
+def capability_of(platform_id: str) -> dict:
+    """返回某平台的能力矩阵（未注册/未声明时全 False）。"""
+    base = dict(PlatformAdapter.capabilities)
+    base.update(CAPABILITIES.get(platform_id, {}))
+    return base
 
 
 def register(cls):

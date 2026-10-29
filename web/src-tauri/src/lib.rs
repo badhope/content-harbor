@@ -24,7 +24,7 @@ fn check_backend_health(port: tauri::State<BackendPort>) -> bool {
     match p {
         None => false,
         Some(port) => {
-            let url = format!("http://127.0.0.1:{}/api/hub/health", port);
+            let url = format!("http://127.0.0.1:{}/api/v1/hub/health", port);
             reqwest::blocking::get(&url)
                 .map(|resp| resp.status().is_success())
                 .unwrap_or(false)

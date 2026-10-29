@@ -36,9 +36,18 @@ from fastapi import Request
 
 from utils.logger import get_logger, setup_logger
 
-ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
-OBS_DIR = DATA / "observability"
+def _data_dir() -> Path:
+    """事件日志跟随 `db.data_root()`：桌面版走 %APPDATA%，容器走挂载卷。
+
+    回归：旧实现硬编码 `service/data`，而 DB/Fernet/profile 都走 data_root()，
+    桌面版于是出现"数据库在 APPDATA、日志/验证码截图留在安装目录"的分裂，
+    卸载重装会丢排障现场，备份脚本也漏掉这些产物。
+    """
+    from service.publishing.db import data_root
+    return data_root()
+
+
+OBS_DIR = _data_dir() / "observability"
 EVENT_LOG = OBS_DIR / "events.log"
 
 # 单文件 10MB，留 5 份备份；发布链路是低频事件，一年也不会撑爆
@@ -181,6 +190,57 @@ class MetricRegistry:
 
 
 METRICS = MetricRegistry()
+
+
+# ---------------------------------------------------------------------------
+# Prometheus 标准导出（/metrics 双格式）
+#
+# 自研 snapshot 的 JSON 便于人看，但 Prometheus / Grafana 只吃文本 exposition
+# 格式；之前要接监控得自己写 exporter。这里用官方 prometheus_client 生成
+# 标准文本（counter/gauge/histogram），指标名与原 JSON 的 key 一一对应，
+# 已有的 `/metrics?format=json` 行为完全不变。
+# ---------------------------------------------------------------------------
+def prometheus_exposition() -> str:
+    """把内存指标渲染成 Prometheus 文本格式（每次调用重建，指标基数受控）。"""
+    from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
+
+    reg = CollectorRegistry()
+    snap = METRICS.snapshot()
+    for name, value in snap["counters"].items():
+        safe = _prom_name(name)
+        c = Counter(safe, f"Harbour counter {name}", registry=reg)
+        # prometheus_client 不允许直接 set，用 _value 的接口保持精确值
+        c.inc(value)
+    for name, value in snap["gauge"].items():
+        g = Gauge(_prom_name(name), f"Harbour gauge {name}", registry=reg)
+        g.set(value)
+    for name, hist in snap["histograms"].items():
+        safe = _prom_name(name)
+        h = Histogram(safe, f"Harbour histogram {name}",
+                      buckets=MetricRegistry.BUCKETS, registry=reg)
+        # 直接写桶计数：snapshot 里已是累积桶语义
+        for label, count in hist["buckets"].items():
+            if label == "+Inf":
+                continue
+            try:
+                h.labels()._buckets[float(label)] = count
+            except Exception:
+                continue
+        try:
+            h.labels()._sum = hist["sum"]
+            h.labels()._count = hist["count"]
+        except Exception:
+            pass
+    return generate_latest(reg).decode("utf-8")
+
+
+def _prom_name(name: str) -> str:
+    """指标名规范化：只保留 [a-zA-Z0-9_]，点号换下划线。"""
+    import re as _re
+    out = _re.sub(r"[^a-zA-Z0-9_]", "_", name)
+    if not out or out[0].isdigit():
+        out = "harbour_" + out
+    return out
 
 
 # ---------------------------------------------------------------------------

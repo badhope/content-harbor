@@ -29,6 +29,11 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+try:                      # croniter 是成熟 cron 解析器（6.x，纯 Python，无额外依赖）
+    from croniter import croniter as _croniter
+except Exception:         # 未安装时退回内置最小解析器，功能不丢
+    _croniter = None
+
 
 
 # scheduled_tasks 表的 DDL（由 ensure_schema 建表，不走 MIGRATIONS 因为它不在 hub.db 里）
@@ -123,8 +128,15 @@ def _calc_next_run(schedule_type: str, schedule_expr: str, base: float = None) -
             return candidate.timestamp()
 
         elif schedule_type == "cron":
-            # 简化 cron：只做一次性下次计算（标准 cron 库太重，手撸最小集）
-            return _cron_next(schedule_expr.strip(), now)
+            # 优先 croniter：完整 5 段语义（含 L/W/#、秒级扩展、夏令时），
+            # 手撸解析器保留为兜底（无第三方依赖环境）。
+            expr = schedule_expr.strip()
+            if _croniter is not None:
+                try:
+                    return _croniter(expr, now).get_next(datetime).timestamp()
+                except Exception:
+                    pass
+            return _cron_next(expr, now)
 
     except Exception:
         pass

@@ -264,8 +264,10 @@ def _profile_root() -> Path:
 
 
 PROFILE_ROOT = _profile_root()
-DEBUG_DIR = ROOT / "data" / "debug"
-CAPTCHA_DIR = ROOT / "data" / "captcha"
+# 调试/验证码产物与 DB 同源（见 observability._data_dir 的说明）
+_DATA_ROOT = _profile_root().parent
+DEBUG_DIR = _DATA_ROOT / "debug"
+CAPTCHA_DIR = _DATA_ROOT / "captcha"
 
 
 def _find_chrome():

@@ -169,6 +169,19 @@ export const api = {
 
   jobs: () => http.get('/jobs'),
 
+  // ---------------- 媒体资产（图片入库 / 本地托管） ----------------
+  mediaUpload: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post('/media/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  mediaIngest: (url) => http.post('/media/ingest', { url }),
+  mediaList: (limit = 100) => http.get('/media', { params: { limit } }),
+  mediaStats: () => http.get('/media/stats'),
+
+  // ---------------- 导入（本地 Markdown / 网页 URL） ----------------
+  importArticle: (body) => http.post('/articles/import', body),
+
   // ---------------- 内容质检 ----------------
   qaArticle: (aid) => http.post(`/articles/${aid}/qa`),
   qaAnalyze: (contentMd, title, summary, tags) =>

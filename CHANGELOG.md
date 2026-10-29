@@ -2,6 +2,99 @@
 
 ---
 
+## [0.8.0] - 2026-10-29（能力补全：媒体管线 / 检索 / 能力矩阵 / 部署修复）
+
+> 主题：**把"文档写了但代码没实现"的 9 处缺口补齐；用成熟库替换 6 处自研半成品；
+> 首屏 JS 从 2.5MB 降到 1.04MB；内容质检从 15.7s→1.1s、带缓存 0.22s。**
+> 测试：后端 415 → 451（新增 36 条，全部实测可回退）；前端 57 保持。
+
+### 修复：阻断级（用户可感知）
+
+- **启动脚本全部是坏的**：`start.sh/.bat/.ps1` 用 `uvicorn start:app`，而
+  `start.py` 的 `app` 建在 `main()` 内、模块级没有该属性 → 三个平台的一键启动都
+  直接 AttributeError。改用 `app.factory:create_app --factory`，并支持 `PORT` 环境变量。
+- **Tauri 健康探活打错路径**：`lib.rs` 请求 `/api/hub/health`，实际挂载在
+  `/api/v1/hub/health`，桌面版永远认为后端未就绪。
+- **Tauri 打包找不到前端产物**：`frontendDist` 指向 `../dist`，而 vite 实际输出到
+  `server/static`；`tauri build` 会在打包阶段失败。
+- **内容质检接口契约错位**：`POST /qa/analyze` 只声明 query 参数，前端一直发 JSON
+  body → 每次点「质检」都 422。改为 body/query 双支持，空正文显式 422。
+  同类修复：`POST /tags/suggest`。
+- **未分类错误重试是"假重试"**：置 pending 后立刻 `_wake.set()`，3 次重试在 1 秒内
+  打完，对 429/503 毫无意义。改为指数退避 2/4/8s（封顶 60s），退避窗口内不取任务。
+- **能力矩阵与实现不符会静默失败**：头条/开源中国 `update()` 直接抛"不支持"，
+  但 `sync_pending` 会把它们全塞进更新循环 → 每次同步都返回一串假失败。
+  现在按能力矩阵跳过并如实标注 `skipped`。
+
+### 新增：媒体资产管线（对标 Wechatsync / Artipub 的基线能力）
+
+- `service/publishing/media.py`：内容寻址存储（sha256 去重）、Markdown/HTML 图片
+  改写、SSRF 防护下载（公网 IP 校验 + 手动重定向 + 15MB 上限）、
+  `/media/*` 本地托管（immutable 缓存头）。
+- 发布与更新链路自动改写正文图片为稳定 URL（需配 `PUBLIC_BASE_URL`）；
+  未配置时整段跳过，单图失败保留原地址——一张图不阻断整篇发布。
+- 编辑器支持粘贴/拖拽上传（`md-editor-v3` `onUploadImg`），同图不重复入库。
+- 新端点：`POST /media/upload`、`POST /media/ingest`、`GET /media`、`GET /media/stats`、
+  `GET /media/{sha}{ext}`。
+
+### 新增：检索与导入
+
+- **全文检索换 FTS5**（trigram 分词，中文无需外部分词器）：`search_articles` 从
+  `LIKE '%kw%'` 全表扫改为倒排索引 + 相关度排序；2 字查询走 LIKE 兜底（trigram 最少 3 字）。
+  外部内容表 + 触发器保持同步，启动时自动 `rebuild` 回填历史数据。
+- **列表接口默认不再返回正文**：新增 `slim` 投影（含 `chars` 字数），
+  `GET /articles` 与 `/articles/page` 默认 slim，需要正文传 `slim=false`。
+- **网页导入**：`trafilatura` 正文提取 → Markdown，`POST /articles/import` 支持
+  `{url}`；本地导入改用 `python-frontmatter`（旧的手写 `split("---")` 遇到正文
+  分隔线会切错，YAML 列表 tags 也解析不了）。
+- MCP 新增 4 个 tool：`search_articles` / `import_from_url` / `list_media` / `ingest_image`（23 → 27）。
+
+### 新增：能力矩阵（代码级，不是文档）
+
+- `PlatformAdapter.capabilities` + `CAPABILITIES` 表：publish/draft/update/list/tags/
+  cover/question/hosted_media 八项，逐平台按真实实现声明。
+- `/platforms` 下发 `capabilities`；发布轨按此置灰并显示"该平台不支持发布"；
+  `publish()` 与 `update()` 在进适配器前就按能力分流。
+
+### 新增：可观测与调度
+
+- `GET /metrics?format=prometheus`：标准文本 exposition（prometheus_client），
+  Grafana 可直接抓；JSON 快照格式与字段完全不变。
+- cron 表达式交给 `croniter`（完整 5 段语义，含 L/W/#），内置解析器保留为无依赖兜底。
+- 相似度签名落表缓存（`article_simhash`，内容哈希失效），200 篇库质检
+  冷启动 1.5s、热缓存 0.22s（优化前 15.7s）。
+
+### 替换：自研 → 成熟库（功能只增不减）
+
+| 位置 | 原实现 | 现实现 | 收益 |
+|---|---|---|---|
+| 高危词扫描 | 逐词 `in` 全文扫 | `pyahocorasick` | 300 词表 41.7× 提速；顺带修掉中文语境下 `` 漏检 |
+| 标签同义合并 | 精确大小写匹配 | `rapidfuzz` 编辑距离 + 前缀/包含规则 | 新增 `GET /tags/clusters` 候选清单 |
+| LLM 调用 | 裸 `requests.post` | `tenacity` 指数退避 | 429/5xx 自动重试，4xx 立即失败 |
+| 内容相似度 | 每次全量 32×md5 | blake2b + 16 置换 + 签名缓存 | 15.7s → 1.1s（14×） |
+| 定时 cron | 手撸 5 段解析 | `croniter` | 支持完整 cron 语义 |
+| Markdown 元数据 | `split("---", 2)` | `python-frontmatter` | YAML 列表/冒号/嵌套正确解析 |
+
+### 性能
+
+- 首屏 JS（modulepreload）2.56MB → 1.04MB（gzip 860KB → 349KB）：
+  视图改 `defineAsyncComponent`，`md-editor-v3`/`echarts` 按需加载；
+  去掉把它们绑成固定 chunk 的 `manualChunks` 条目（那正是懒加载失效的根因）。
+- 后端加 `GZipMiddleware`（桌面版没有 nginx 代劳压缩）。
+- 门禁 `compileall` 排除 `.venv`：10.85s → 0.3s。
+- `articles` 列表查询不再带正文（100 篇 × 20KB 正文的无效序列化消失）。
+
+### 修复：工程卫生
+
+- 数据目录统一：事件日志 / 验证码截图 / 调试 DOM / webhook 库 / 媒体全部跟随
+  `db.data_root()`；此前桌面版会出现"DB 在 APPDATA、日志留在安装目录"的分裂。
+- `media_root()` 跟随 `db.DB_PATH`（测试隔离依赖它，否则测试会写进仓库）。
+- webhook 存储不再自己拼数据库路径。
+- 测试：`test_capability_upgrade.py` 新增 36 条，覆盖上述每一条修复（含 3 条
+  部署脚本/配置一致性断言）。
+
+---
+
 ## [Unreleased] - 2026-10-27（品牌更名 Harbour + 工程质量债偿还）
 
 > 主题：**项目更名 Harbour（含仓库/logo/代码标识）；前端从零建测试体系；修复 7 个阻断缺陷；门禁四道 → 六道；恢复 CI。**

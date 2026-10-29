@@ -22,8 +22,12 @@ OWASP Agentic Top10「输出不可信 / 工具滥用 / 目标劫持」的落地�
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
+
+import ahocorasick
+
 
 # config.json 的文档位置是 backed/config.json（与 .gitignore / api/auth.py 一致；
 # 2026-10-14 修复：旧代码 parent.parent 指到 backed/service/，门禁开关读不到文档位置）
@@ -41,7 +45,9 @@ DANGEROUS_PATTERNS = [
 ]
 # 正则型（带语境的）
 DANGEROUS_REGEX = [
-    r"(?i)\b(pornhub|xvideos|xhamster)\b",     # 色情站
+    # 色情站。不能用 \b：Python 的 \w 含中日韩文字，"看PORNHUB网站" 前后都是
+    # 词字符，\b 不成立 → 中文语境下的命中全部漏掉（实测）。改用 ASCII 边界断言。
+    r"(?i)(?<![a-z0-9])(pornhub|xvideos|xhamster)(?![a-z0-9])",
     r"(?i)(get|click|buy)\s+(drug|pills?)\s+online",
     r"破解\s*(卡密|激活码|序列号)\s*出售",
 ]
@@ -81,13 +87,44 @@ def is_ai_sourced(article: dict) -> bool:
     return article.get("source") == "ai"
 
 
+_automaton = None
+_automaton_lock = threading.Lock()
+
+
+def _get_automaton():
+    """Aho-Corasick 自动机：一次线性扫描命中所有模式。
+
+    旧实现是 `for w in DANGEROUS_PATTERNS: if w in text`，词表每加一个词就
+    多扫全文一遍。合规词表只会越来越长，这个成本会线性叠加到每次发布上。
+    Aho-Corasick 预处理一次，之后 O(len(text) + 命中数)。
+    """
+    global _automaton
+    if _automaton is not None:
+        return _automaton
+    with _automaton_lock:
+        if _automaton is None:
+            auto = ahocorasick.Automaton()
+            for idx, w in enumerate(DANGEROUS_PATTERNS):
+                auto.add_word(w.lower(), (idx, w))
+            auto.make_automaton()
+            _automaton = auto
+    return _automaton
+
+
+def reload_patterns() -> None:
+    """词表变更后重建自动机（配置热加载 / 测试用）。"""
+    global _automaton
+    with _automaton_lock:
+        _automaton = None
+
+
 def scan_dangerous(content: str, title: str = "") -> list:
-    """内容安全扫描。返回命中的高危项列表（空 = 安全）。"""
+    """内容安全扫描。返回命中的高危项列表（空 = 安全）。大小写不敏感。"""
     text = f"{title}\n{content}"
     hits = []
-    for w in DANGEROUS_PATTERNS:
-        if w in text:
-            hits.append(w)
+    for _, (_idx, original) in _get_automaton().iter(text.lower()):
+        if original not in hits:
+            hits.append(original)
     for pat in DANGEROUS_REGEX:
         if re.search(pat, text, re.I):
             hits.append(f"regex:{pat[:30]}")

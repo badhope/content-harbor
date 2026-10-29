@@ -39,7 +39,9 @@ step() {
 cd "$backed"
 export UV_NO_PROGRESS=1
 
-step "1/6 语法编译 compileall" uv run python -m compileall -q .
+# 排除 .venv：站点包（jieba 等）在 Python 3.12+ 会打出 SyntaxWarning，
+# 而且把 1 万多个依赖文件编一遍要 10 秒——项目自身源码只需 0.3 秒。
+step "1/6 语法编译 compileall" uv run python -m compileall -q -x '(^|[\\/])(\.venv|node_modules|__pycache__)($|[\\/])' .
 # scripts/ 在 backed 作用域外，单独编译
 step "1/6b 语法编译 scripts/" uv run python -m compileall -q "$repo_root/scripts"
 ruff_lint() {

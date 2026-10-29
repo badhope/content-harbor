@@ -304,8 +304,10 @@ class Hub:
         r = db.get_article(self.conn, article_id)
         return dict(r) if r else None
 
-    def list(self, status=None, limit=100, offset=0):
-        return [dict(r) for r in db.list_articles(self.conn, status, limit, offset)]
+    def list(self, status=None, limit=100, offset=0, slim=False):
+        """列出文章。slim=True 走列表投影（不带正文），列表页用。"""
+        return [dict(r) for r in db.list_articles(self.conn, status, limit, offset,
+                                                  slim=slim)]
 
     def count_articles(self, status=None):
         return db.count_articles(self.conn, status)
@@ -314,33 +316,45 @@ class Hub:
         return [dict(r) for r in db.search_articles(self.conn, keyword)]
 
     def import_md(self, path, title=None, tags=""):
+        """导入本地 Markdown（front-matter 用 python-frontmatter 解析）。
+
+        旧实现手写 split("---", 2)：正文里出现水平分隔线就切错正文起点，
+        也不支持 YAML 列表形式的 tags。现在交给标准库处理。
+        """
         from pathlib import Path
-        p = Path(path).expanduser()
-        # 路径越权防护：只允许导入项目根内的 Markdown 文件，拒绝符号链接逃逸。
-        # 对标 2026 最小权限实践——API 客户端不应能借 import 读机器任意文件。
-        root = ROOT.resolve()
+        from service.publishing import importing
+
         try:
-            target = p.resolve()
-        except Exception:
-            raise ValueError(f"非法导入路径: {path}")
-        if not target.is_file():
-            raise ValueError(f"导入文件不存在: {target}")
-        if target != root and root not in target.parents:
-            raise ValueError(f"导入路径越权（仅允许项目目录内）: {target}")
-        text = target.read_text(encoding="utf-8", errors="replace")
-        if text.startswith("---"):  # 顺手吃掉 front-matter 当元数据
-            parts = text.split("---", 2)
-            if len(parts) >= 3:
-                for line in parts[1].splitlines():
-                    if line.lower().startswith("title:"):
-                        title = title or line.split(":", 1)[1].strip()
-                    if line.lower().startswith("tags:"):
-                        tags = tags or line.split(":", 1)[1].strip().strip("[]")
-                text = parts[2]
-        title = title or p.stem
-        aid = db.create_article(self.conn, title, text.lstrip("\n"),
-                                tags=tags, source="import")
+            # allow_root 用仓库根：旧实现把 ROOT 算成 backed/service，
+            # 连 docs/*.md 都判越权——"仅允许项目目录内"写成了"仅允许 service/ 内"。
+            meta, body = importing.read_markdown_file(
+                Path(path), allow_root=BACKED_ROOT.parent)
+        except importing.ImportError_ as e:
+            raise ValueError(str(e))
+        title = title or meta.get("title") or Path(path).stem
+        tags = tags or meta.get("tags") or ""
+        aid = db.create_article(self.conn, title, body, tags=tags, source="import",
+                                summary=meta.get("summary", ""),
+                                origin_url=meta.get("origin_url", ""))
         return aid
+
+    def import_url(self, url, tags=""):
+        """从网页导入：trafilatura 正文提取 → Markdown → 入库。
+
+        返回 {id, title, chars, sitename, author}。抓不到正文时抛 ValueError
+        （带原因），不做"导入了一篇空文章"的假成功。
+        """
+        from service.publishing import importing
+        try:
+            meta, body = importing.fetch_url(url)
+        except importing.ImportError_ as e:
+            raise ValueError(str(e))
+        aid = db.create_article(self.conn, meta["title"], body,
+                                tags=tags or meta.get("tags", ""),
+                                summary=meta.get("summary", ""),
+                                source="import", origin_url=url)
+        return {"id": aid, "title": meta["title"], "chars": len(body),
+                "sitename": meta.get("sitename", ""), "author": meta.get("author", "")}
 
     # ---------------- 发布 / 更新 ----------------
 
@@ -497,6 +511,32 @@ class Hub:
     def ai_ready(self):
         """(委托 AIService)"""
         return self.ai.ai_ready()
+
+    def _localize_media(self, article):
+        """把正文图片本地化并改写为稳定 URL；失败保持原样（记日志）。
+
+        只在配置了 PUBLIC_BASE_URL 时生效——平台要能访问到这个地址才有意义。
+        """
+        from service.publishing import media as media_mod
+        if not media_mod.public_base():
+            return article
+        md = article.get("content_md") or ""
+        if "![" not in md and "<img" not in md.lower():
+            return article
+        from service.publishing import observability as obs
+        try:
+            new_md, stats = media_mod.rewrite_markdown(
+                self.conn, md, on_error=lambda src, e: obs.get_logger(__name__).warning(
+                    "图片本地化失败，保留原地址 (%s): %s", src[:120], e))
+        except Exception as e:   # aqg: top-level boundary（媒体管线不得阻断发布）
+            obs.get_logger(__name__).warning("图片本地化整体失败，按原文发布: %s", e)
+            return article
+        if stats.get("localized"):
+            out = dict(article)
+            out["content_md"] = new_md
+            out["_media_stats"] = stats
+            return out
+        return article
 
     def publish_single(self, article_id, platform, article, account="default",
                        draft_only=False, page_hook=None, settings=None):
@@ -714,6 +754,11 @@ class Hub:
             # MCP / CLI 调用同一路径也能拿到可识别的业务错误
             raise ge
         art = gate_r["article"]   # AI 源已打 AIGC 标识
+        # 图片本地化（2026-10-29）：把正文里的外链图抓进 media 库并改写成
+        # PUBLIC_BASE_URL 下的稳定地址，避免平台侧防盗链 403 / 签名过期裂图。
+        # 未配置 PUBLIC_BASE_URL 时整体跳过（改成本地相对路径只会更糟），
+        # 下载失败的单张图保留原 URL，不让一张图阻断整篇发布。
+        art = self._localize_media(art)
         # 人工确认留痕：谁在什么时候确认了 AI 稿上线（审计追溯，只写不覆盖已有时点）
         if human_confirmed and aigc_gate.is_ai_sourced(art) and not draft_only:
             try:
@@ -728,6 +773,19 @@ class Hub:
             raise ValueError("文章标题为空，拒绝发布（B19 预检）")
         results = []
         all_ok = True
+        # 能力矩阵预检：不支持 publish 的平台在提交时就被拦下，而不是跑到
+        # 适配器里抛 NotImplementedError 再被当成"网络错误"重试三次。
+        from service.publishing.adapters.base import capability_of
+        publishable = []
+        for pf in platforms:
+            caps = capability_of(pf)
+            if not caps.get("publish"):
+                results.append({"platform": pf, "ok": False,
+                                "error": f"{pf} 未声明发布能力（capabilities.publish=false）"})
+                all_ok = False
+            else:
+                publishable.append(pf)
+        platforms = publishable
         # 发布链路 trace：所有平台子步骤串进同一 trace_id，事后看卡点
         with TraceContext("publish", article_id=article_id,
                           platforms=platforms, draft_only=draft_only,
@@ -815,6 +873,8 @@ class Hub:
         art = self.get(article_id)
         if not art:
             raise ValueError(f"文章 {article_id} 不存在")
+        # 图片本地化：更新同样是"内容上线"，外链图一样会裂
+        art = self._localize_media(art)
         # --- AIGC 合规门禁（与 publish 共享安全检查）---
         if aigc_gate.is_enabled():
             dangerous = aigc_gate.scan_dangerous(art.get("content_md", ""), art.get("title", ""))
@@ -827,10 +887,17 @@ class Hub:
         if platforms:
             pubs = [p for p in pubs if p["platform"] in platforms]
         pubs = [p for p in pubs if p["post_id"] or p["edit_url"]]
+        # 能力矩阵：不支持原地更新的平台（头条/开源中国）不能进 update 循环，
+        # 否则每个都抛"暂不支持原地更新"，sync_pending 永远返回一堆假失败。
+        from service.publishing.adapters.base import capability_of
+        skipped = [p["platform"] for p in pubs if not capability_of(p["platform"])["update"]]
+        pubs = [p for p in pubs if capability_of(p["platform"])["update"]]
         if not pubs:
-            return {"skipped": "没有已发布实例可更新，先 publish"}
+            return {"skipped": "没有可原地更新的已发布实例（平台不支持或尚未发布）",
+                    "unsupported": skipped}
 
-        results = []
+        results = [{"platform": pf, "ok": True, "skipped": "平台不支持原地更新"}
+                   for pf in skipped]
         for p in pubs:
             try:
                 r = self.update_single(article_id, p["platform"], p, art,

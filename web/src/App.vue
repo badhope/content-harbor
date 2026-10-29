@@ -31,15 +31,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useHubStore } from '@/stores/hub'
 import SideNav from '@/components/SideNav.vue'
-import WriteView from '@/views/WriteView.vue'
-import PublishCenterView from '@/views/PublishCenterView.vue'
-import TasksView from '@/views/TasksView.vue'
-import SettingsView from '@/views/SettingsView.vue'
-import AIWriteDialog from '@/components/AIWriteDialog.vue'
+
+// 视图按需加载：WriteView 拉 md-editor-v3（~900KB），PublishCenterView 拉
+// echarts（~490KB）。整包静态 import 会让首屏把两者都下载完才能渲染，
+// 而用户一次只看一个视图。改异步组件后首屏只付当前视图的成本。
+const WriteView = defineAsyncComponent(() => import('@/views/WriteView.vue'))
+const PublishCenterView = defineAsyncComponent(() => import('@/views/PublishCenterView.vue'))
+const TasksView = defineAsyncComponent(() => import('@/views/TasksView.vue'))
+const SettingsView = defineAsyncComponent(() => import('@/views/SettingsView.vue'))
+const AIWriteDialog = defineAsyncComponent(() => import('@/components/AIWriteDialog.vue'))
 
 const hub = useHubStore()
 

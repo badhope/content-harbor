@@ -166,6 +166,37 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at DESC);
 """
 
+# 全文检索：SQLite 自带 FTS5（trigram 分词，中文按 3 字滑窗，无需外部分词器）。
+# 之前 search_articles 用 `LIKE '%kw%'` 全表扫 + 无法走索引，文章上千篇后
+# 每次搜索都是 O(n) 的整表读。FTS5 把检索变成倒排索引查询，并能按相关度排序。
+# 外部内容表（content='articles'）不重复存正文，只存索引。
+FTS_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
+    title, content_md, summary,
+    content='articles', content_rowid='id',
+    tokenize='trigram'
+);
+CREATE TRIGGER IF NOT EXISTS articles_ai AFTER INSERT ON articles BEGIN
+    INSERT INTO articles_fts(rowid, title, content_md, summary)
+    VALUES (new.id, new.title, new.content_md, new.summary);
+END;
+CREATE TRIGGER IF NOT EXISTS articles_ad AFTER DELETE ON articles BEGIN
+    INSERT INTO articles_fts(articles_fts, rowid, title, content_md, summary)
+    VALUES ('delete', old.id, old.title, old.content_md, old.summary);
+END;
+CREATE TRIGGER IF NOT EXISTS articles_au AFTER UPDATE ON articles BEGIN
+    INSERT INTO articles_fts(articles_fts, rowid, title, content_md, summary)
+    VALUES ('delete', old.id, old.title, old.content_md, old.summary);
+    INSERT INTO articles_fts(rowid, title, content_md, summary)
+    VALUES (new.id, new.title, new.content_md, new.summary);
+END;
+"""
+
+# 列表投影：列表页只需要元信息，正文（可能几十 KB/篇）不参与列表查询。
+# 100 篇 × 20KB 正文 = 2MB 无谓序列化 + JSON 传输，列表接口因此慢且吃内存。
+LIST_COLUMNS = ("id, title, summary, tags, cover, status, source, ai_model, "
+                "origin_url, created_at, updated_at, length(content_md) AS chars")
+
 # 增量迁移：按版本号从小到大执行；已执行过的版本跳过。
 # 每项是 (版本号, 需要执行的 SQL 列表)。迁移只增不改，禁止删除已有列。
 MIGRATIONS = [
@@ -236,8 +267,33 @@ def connect(db_path=None):
     conn.executescript(SCHEMA)
     # 建表后再跑增量迁移（v2+ 列变更），migrate 幂等，多开无副作用
     migrate(conn)
+    _ensure_fts(conn)
     prune_jobs(conn, keep=500)
     return conn
+
+
+def _ensure_fts(conn):
+    """建 FTS5 索引并做一次性回填。FTS5 不可用时静默降级到 LIKE 检索。"""
+    try:
+        conn.executescript(FTS_SCHEMA)
+        conn.commit()
+    except Exception:
+        return False
+    try:
+        # 回填：外部内容表的索引不会自动包含建表前已存在的行。
+        # 用 meta 标记只做一次（同时覆盖"索引被手动删掉"的自愈场景）。
+        done = conn.execute(
+            "SELECT value FROM meta WHERE key='fts_backfilled'").fetchone()
+        count = conn.execute("SELECT COUNT(*) FROM articles_fts").fetchone()[0]
+        total = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        if count != total or not done:
+            conn.execute("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')")
+            conn.execute("INSERT INTO meta(key,value) VALUES('fts_backfilled','1') "
+                         "ON CONFLICT(key) DO UPDATE SET value='1'")
+            conn.commit()
+    except Exception:
+        pass
+    return True
 
 
 def prune_jobs(conn, keep=500):
@@ -293,11 +349,14 @@ def get_article(conn, article_id):
     return conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
 
 
-def list_articles(conn, status=None, limit=100, offset=0):
-    # limit<=0 在 SQLite 里等于"不限量"，会把整表拉出来；统一夹到 1..1000
+def list_articles(conn, status=None, limit=100, offset=0, slim=False):
+    """列出文章。slim=True 时只取列表元信息（不取正文），列表页专用。
+
+    limit<=0 在 SQLite 里等于"不限量"，会把整表拉出来；统一夹到 1..1000。
+    """
     limit = max(1, min(int(limit), 1000))
     offset = max(0, min(int(offset), 1_000_000))
-    sql = "SELECT * FROM articles"
+    sql = f"SELECT {LIST_COLUMNS} FROM articles" if slim else "SELECT * FROM articles"
     args = []
     if status:
         sql += " WHERE status=?"
@@ -317,10 +376,33 @@ def count_articles(conn, status=None):
     return conn.execute(sql, args).fetchone()[0]
 
 
-def search_articles(conn, keyword):
+def search_articles(conn, keyword, limit=50):
+    """全文检索。优先 FTS5（相关度排序），不可用/无命中时回退 LIKE。
+
+    trigram 分词要求查询词至少 3 个字符；中文 2 字词（如「异步」）走
+    LIKE 兜底更准，所以两个字符以下直接走 LIKE。
+    """
+    kw = (keyword or "").strip()
+    if not kw:
+        return []
+    limit = max(1, min(int(limit), 200))
+    if len(kw) >= 3:
+        try:
+            # 引号包裹避免 FTS5 把用户输入当语法（NEAR/OR/前缀 * 等）
+            match = '"' + kw.replace('"', '""') + '"'
+            rows = conn.execute(
+                """SELECT a.* FROM articles_fts f
+                   JOIN articles a ON a.id = f.rowid
+                   WHERE articles_fts MATCH ?
+                   ORDER BY rank LIMIT ?""", (match, limit)).fetchall()
+            if rows:
+                return rows
+        except Exception:
+            pass   # FTS 不可用或查询语法异常：回退 LIKE
     return conn.execute(
-        "SELECT * FROM articles WHERE title LIKE ? OR content_md LIKE ? ORDER BY updated_at DESC LIMIT 50",
-        (f"%{keyword}%", f"%{keyword}%")).fetchall()
+        """SELECT * FROM articles WHERE title LIKE ? OR content_md LIKE ?
+           ORDER BY updated_at DESC LIMIT ?""",
+        (f"%{kw}%", f"%{kw}%", limit)).fetchall()
 
 
 # ------------------------- publications -------------------------

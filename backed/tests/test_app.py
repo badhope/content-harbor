@@ -68,9 +68,10 @@ def _fake_hub():
         def __init__(self):
             self.conn = db.connect()
 
-        def list(self, status=None, limit=100, offset=0):
+        def list(self, status=None, limit=100, offset=0, slim=False):
             return [dict(r) for r in db.list_articles(self.conn, status=status,
-                                                      limit=limit, offset=offset)]
+                                                      limit=limit, offset=offset,
+                                                      slim=slim)]
 
         def count_articles(self, status=None):
             return db.count_articles(self.conn, status=status)

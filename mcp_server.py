@@ -159,9 +159,9 @@ def list_platforms() -> list:
     # 适配器"导入即注册"，注册动作在 service.py 导入时发生；MCP 进程里若还没
     # 创建过 Hub，这里必须显式触发一次注册。
     from service.publishing import adapters as _adapters  # noqa: F401
-    from service.publishing.adapters.base import ADAPTERS
-    return [{"id": a.id, "name": a.name, "needs_browser": a.needs_browser}
-            for a in ADAPTERS.values()]
+    from service.publishing.adapters.base import ADAPTERS, capability_of
+    return [{"id": a.id, "name": a.name, "needs_browser": a.needs_browser,
+             "capabilities": capability_of(a.id)} for a in ADAPTERS.values()]
 
 
 @mcp.tool()
@@ -226,6 +226,36 @@ def import_markdown(path: str, tags: str = "") -> dict:
     """导入本地 Markdown 文件，自动提取 front-matter 元数据。"""
     aid = _get_hub().import_md(path, tags=tags)
     return {"id": aid}
+
+
+@mcp.tool()
+def search_articles(keyword: str, limit: int = 20) -> list:
+    """全文检索文章库（FTS5 相关度排序），返回匹配文章列表。"""
+    return _get_hub().search(keyword)[:max(1, min(limit, 100))]
+
+
+@mcp.tool()
+def import_from_url(url: str, tags: str = "") -> dict:
+    """从网页抓取正文导入为文章（trafilatura 提取，需公网可访问）。"""
+    return _get_hub().import_url(url, tags=tags)
+
+
+@mcp.tool()
+def list_media(limit: int = 50) -> dict:
+    """列出已入库的图片资产（内容寻址去重）与统计。"""
+    from service.publishing import media
+    hub = _get_hub()
+    return {"items": media.list_assets(hub.conn, limit=limit),
+            "stats": media.stats(hub.conn)}
+
+
+@mcp.tool()
+def ingest_image(url: str) -> dict:
+    """把远程图片抓进本地媒体库，返回可长期引用的稳定 URL。"""
+    from service.publishing import media
+    asset = media.ingest_url(_get_hub().conn, url)
+    return {"sha256": asset["sha256"], "url": media.asset_url(asset),
+            "bytes": asset["bytes"]}
 
 
 # ── 外部执行器：Wechatsync（可选后端，不可用时优雅降级）──────────────────

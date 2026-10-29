@@ -15,6 +15,8 @@ import os
 from pathlib import Path
 
 import requests
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_exponential)
 
 # 路径基准（2026-10-14 修复）：config.json 的文档位置是 backed/config.json
 # （.gitignore 与 api/auth.py 都按此读）；旧代码用 parent.parent 指出 backed/service/，
@@ -165,13 +167,7 @@ def chat(messages, model=None, temperature=0.7, max_tokens=4096, task="standard"
     actual_model = model or _cfg("AI_MODEL", DEFAULT_MODEL)
 
     try:
-        r = requests.post(f"{base}/chat/completions",
-                          headers={"Authorization": f"Bearer {api_key}",
-                                   "Content-Type": "application/json"},
-                          json={"model": actual_model, "messages": messages,
-                                "temperature": temperature,
-                                "max_tokens": max_tokens},
-                          timeout=TIMEOUT)
+        r = _post_chat(base, api_key, actual_model, messages, temperature, max_tokens)
     except Exception as e:
         raise AIError(f"调不通 AI 接口（{base}）：{e}")
 
@@ -183,6 +179,36 @@ def chat(messages, model=None, temperature=0.7, max_tokens=4096, task="standard"
         return data["choices"][0]["message"]["content"].strip()
     except Exception:
         raise AIError(f"返回结构异常: {json.dumps(data, ensure_ascii=False)[:200]}")
+
+
+class _RetryableHTTP(Exception):
+    """可重试的瞬时错误（429/5xx/网络抖动），与参数错误等确定性失败分开。"""
+
+
+@retry(
+    retry=retry_if_exception_type((_RetryableHTTP, requests.ConnectionError,
+                                   requests.Timeout)),
+    wait=wait_exponential(multiplier=1, min=1, max=12),
+    stop=stop_after_attempt(3),
+    reraise=True,
+)
+def _post_chat(base, api_key, model, messages, temperature, max_tokens):
+    """单次 LLM 调用，带指数退避重试（tenacity）。
+
+    只重试瞬时错误：429（限流）、5xx（上游故障）、连接/超时。
+    4xx（密钥错、模型名不存在、参数非法）立刻抛——重试三次只是把同一个
+    错误重复三遍，还把用户的等待时间拉长三倍。
+    """
+    r = requests.post(f"{base}/chat/completions",
+                      headers={"Authorization": f"Bearer {api_key}",
+                               "Content-Type": "application/json"},
+                      json={"model": model, "messages": messages,
+                            "temperature": temperature,
+                            "max_tokens": max_tokens},
+                      timeout=TIMEOUT)
+    if r.status_code == 429 or 500 <= r.status_code < 600:
+        raise _RetryableHTTP(f"HTTP {r.status_code}: {r.text[:120]}")
+    return r
 
 
 def _split_title(raw: str, topic: str):
