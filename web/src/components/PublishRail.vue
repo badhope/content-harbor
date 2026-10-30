@@ -13,6 +13,7 @@
           <div class="rail-lbl">
             1 · 发到哪些平台
             <span class="spacer" />
+            <span class="dim small">{{ readyCount }}/{{ platforms.length }} 就绪</span>
             <el-button size="small" text @click="selectAll">全选</el-button>
             <el-button size="small" text @click="selected = []">清空</el-button>
           </div>
@@ -191,6 +192,10 @@ const platforms = computed(() => hub.platforms)
 // 能力矩阵来自后端（/platforms.capabilities），不是前端猜的
 const canPublish = (p) => p?.capabilities ? p.capabilities.publish !== false : true
 const canUpdate = (p) => !!p?.capabilities?.update
+const readyCount = computed(() => {
+  const onlineIds = new Set(hub.accounts.filter(a => a.status === 'logined').map(a => a.platform))
+  return platforms.value.filter(p => canPublish(p) && (onlineIds.has(p.id) || !p.needs_browser)).length
+})
 const currentPubs = computed(() => hub.publications)
 const updatable = computed(() => hub.updatable.filter(id => canUpdate(platforms.value.find(p => p.id === id))))
 const isAiArticle = computed(() => hub.current?.source === 'ai')

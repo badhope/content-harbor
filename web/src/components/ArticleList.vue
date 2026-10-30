@@ -55,8 +55,11 @@
           <el-button size="small" type="primary" :icon="Plus" @click="$emit('new-article')">新建文章</el-button>
         </EmptyState>
         <div v-else-if="!shown.length" class="no-match">
-          当前筛选下没有文章
-          <el-button size="small" text type="primary" @click="reset">清空筛选</el-button>
+          <template v-if="ftsSearching">全文检索中…</template>
+          <template v-else-if="!ftsDone">本地未命中，正在全文检索…</template>
+          <template v-else>本地与全文均无匹配文章
+            <el-button size="small" text type="primary" @click="reset">清空筛选</el-button>
+          </template>
         </div>
 
         <el-button v-if="hasMore && !filtering" class="more-btn" size="small" :loading="loadingMore"
@@ -73,10 +76,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { Plus, Search } from '@element-plus/icons-vue'
 import EmptyState from './EmptyState.vue'
 import { fmtShort } from '@/utils/format'
+import { api } from '@/api'
 
 const props = defineProps({
   articles: { type: Array, default: () => [] },
@@ -90,6 +94,30 @@ defineEmits(['open', 'new-article', 'load-more'])
 
 const keyword = ref('')
 const status = ref('')
+// FTS5 全文检索：本地过滤无结果时自动查服务端（正文内容也搜）
+const ftsResults = ref([])
+const ftsSearching = ref(false)
+const ftsDone = ref(false)
+let ftsTimer = null
+
+watch(keyword, (kw) => {
+  ftsResults.value = []; ftsDone.value = false
+  clearTimeout(ftsTimer)
+  if (!kw.trim() || kw.trim().length < 2) return
+  ftsTimer = setTimeout(async () => {
+    ftsSearching.value = true
+    try {
+      const items = await api.search(kw.trim())
+      ftsResults.value = (items || []).filter(a => a.id && !props.articles.some(x => x.id === a.id))
+      ftsDone.value = true
+    } catch { ftsDone.value = true } finally { ftsSearching.value = false }
+  }, 400)
+})
+
+const ftsExtra = computed(() => {
+  if (!keyword.value.trim() || keyword.value.trim().length < 2) return []
+  return ftsResults.value
+})
 const STATUS_FILTERS = [
   { v: '', t: '全部' },
   { v: 'draft', t: '草稿' },
@@ -98,15 +126,19 @@ const STATUS_FILTERS = [
 ]
 const filtering = computed(() => !!keyword.value.trim() || !!status.value)
 
-// 本地过滤只作用于已加载的页；分页由父组件按 offset 继续拉，两者互不干扰
+// 本地过滤只作用于已加载的页；FTS5 补充服务端全文命中的额外文章
 const shown = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
-  return props.articles.filter(a => {
+  const local = props.articles.filter(a => {
     if (status.value && a.status !== status.value) return false
     if (!kw) return true
     return (a.title || '').toLowerCase().includes(kw) ||
            (a.summary || '').toLowerCase().includes(kw)
   })
+  if (!kw.trim() || kw.trim().length < 2) return local
+  const seen = new Set(local.map(a => a.id))
+  return [...local, ...ftsExtra.value.filter(a => !seen.has(a.id) &&
+    (!status.value || a.status === status.value))]
 })
 
 function reset() {

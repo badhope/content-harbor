@@ -41,6 +41,11 @@
         <el-button v-if="!listDocked && hub.articles.length" :icon="Files"
                    @click="listDrawer = true">打开文章库</el-button>
       </EmptyState>
+      <div v-if="!hub.articles.length" class="onboard-hints">
+        <div class="hint-step"><span class="step-n">1</span> 写文章（或让 AI 帮写）</div>
+        <div class="hint-step"><span class="step-n">2</span> 设置 → 平台账号 → 登录/填凭据</div>
+        <div class="hint-step"><span class="step-n">3</span> 发布轨选平台 → 一键多平台发布</div>
+      </div>
     </div>
 
     <!-- 右：发布轨（≥1280 常驻） -->
@@ -70,7 +75,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, Files } from '@element-plus/icons-vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
@@ -91,6 +96,23 @@ const railDrawer = ref(false)
 
 const layoutClass = computed(() =>
   sideDocked.value ? 'three' : listDocked.value ? 'two' : 'one')
+
+// Ctrl+S 保存：创作者最高频快捷键，不依赖鼠标点按钮
+function onKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    if (hub.currentId || hub.dirty) hub.save()
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+
+// 关闭/刷新浏览器时如果有未保存改动，弹原生确认框（最后防线）
+function onBeforeUnload(e) {
+  if (hub.dirty) { e.preventDefault(); e.returnValue = '' }
+}
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
 async function onOpen(id) {
   await hub.open(id)
@@ -147,5 +169,20 @@ async function onPolish() {
 
 @media (max-width: 1023px) {
   .write-wrap { padding: 10px; gap: 10px; }
+}
+
+.onboard-hints {
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  margin-top: 4px; padding: 0 16px;
+  .hint-step {
+    display: flex; align-items: center; gap: 8px;
+    font-size: var(--fs-sm); color: var(--tx-3);
+  }
+  .step-n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: var(--fs-xs); font-weight: 600; flex-shrink: 0;
+  }
 }
 </style>

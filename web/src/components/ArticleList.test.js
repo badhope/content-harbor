@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+
+// FTS5 服务端搜索需要 mock api
+vi.mock('@/api', () => ({
+  api: { search: vi.fn().mockResolvedValue([]) },
+}))
+
 import ArticleList from '@/components/ArticleList.vue'
 
 // R4/R5：列表分页入口 + 键盘可达
@@ -69,6 +75,9 @@ describe('ArticleList 搜索与状态筛选', () => {
   it('筛选无结果时给出提示与一键清空', async () => {
     const w = mount(ArticleList, { props: { articles: many, total: 3 } })
     await w.find('input').setValue('不存在的关键字')
+    // FTS5 防抖 400ms + 异步搜索；等它完成后按钮才出现
+    await new Promise(r => setTimeout(r, 600))
+    await w.vm.$nextTick()
     expect(w.find('.no-match').exists()).toBe(true)
     const reset = w.findAll('.no-match button').find(b => b.text().includes('清空筛选'))
     await reset.trigger('click')
