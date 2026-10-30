@@ -3,6 +3,34 @@ import { ElMessageBox, ElMessage } from 'element-plus'
 import { api } from '@/api'
 import { useHubStore } from './hub'
 
+// 草稿自动保存：每 30 秒把 dirty 文章内容写 localStorage，防崩溃/断电丢稿
+const DRAFT_KEY_PREFIX = 'harbour_draft_'
+let _autoSaveTimer = null
+
+function _draftKey(id) { return DRAFT_KEY_PREFIX + (id || 'new') }
+
+function _saveDraftLocal(state) {
+  if (!state.dirty || !state.current) return
+  try {
+    localStorage.setItem(_draftKey(state.currentId), JSON.stringify({
+      title: state.current.title, content_md: state.current.content_md,
+      summary: state.current.summary, tags: state.current.tags,
+      saved_at: Date.now()
+    }))
+  } catch { /* localStorage 满了不影响主流程 */ }
+}
+
+function _loadDraftLocal(id) {
+  try {
+    const raw = localStorage.getItem(_draftKey(id))
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function _clearDraft(id) {
+  try { localStorage.removeItem(_draftKey(id)) } catch { /* ignore */ }
+}
+
 /** 文章 CRUD、版本管理、AI 增强 */
 export const useArticleStore = defineStore('article', {
   state: () => ({
@@ -115,7 +143,22 @@ export const useArticleStore = defineStore('article', {
       this.dirty = true
     },
 
-    markDirty() { this.dirty = true },
+    markDirty() {
+      this.dirty = true
+      // 防抖自动保存：每次标记 dirty 后 30 秒写一次 localStorage
+      clearTimeout(_autoSaveTimer)
+      _autoSaveTimer = setTimeout(() => _saveDraftLocal(this.$state), 30000)
+    },
+
+    /** 检查是否有未恢复的草稿，有则返回草稿内容 */
+    peekDraft(id) {
+      return _loadDraftLocal(id)
+    },
+
+    /** 清除已保存文章对应的草稿（保存成功后调用） */
+    clearDraft(id) {
+      _clearDraft(id)
+    },
 
     async save() {
       if (!this.current) return
@@ -132,6 +175,7 @@ export const useArticleStore = defineStore('article', {
           this.current = { ...this.current, id: r.id }
         }
         this.dirty = false
+        _clearDraft(this.currentId)
         ElMessage.success('已保存')
         await Promise.all([this.loadList(), useHubStore().loadStatus(), this.loadPubs()])
       } finally { this.saving = false }

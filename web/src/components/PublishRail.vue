@@ -120,6 +120,21 @@
           </template>
         </div>
 
+        <!-- ③b 发布前就绪摘要 -->
+        <div class="rail-sec" v-if="selected.length">
+          <div class="pre-check" v-if="selectedReady.unready.length || selectedReady.cooling.length">
+            <div v-if="selectedReady.unready.length" class="pre-warn">
+              ⚠ {{ selectedReady.unready.length }} 个平台未登录（任务会等到登录后执行）
+            </div>
+            <div v-if="selectedReady.cooling.length" class="pre-warn bad">
+              ⏳ {{ selectedReady.cooling.join('、') }} 限流冷却中，发布任务会自动延后
+            </div>
+          </div>
+          <div class="pre-ok" v-else-if="selectedReady.ready.length">
+            ✓ {{ selectedReady.ready.length }} 个平台就绪
+          </div>
+        </div>
+
         <!-- ④ 发布按钮 -->
         <div class="rail-sec">
           <el-button class="go-btn" size="large"
@@ -196,6 +211,28 @@ const readyCount = computed(() => {
   const onlineIds = new Set(hub.accounts.filter(a => a.status === 'logined').map(a => a.platform))
   return platforms.value.filter(p => canPublish(p) && (onlineIds.has(p.id) || !p.needs_browser)).length
 })
+
+// 平台限流冷却（后端 /status 返回 platform_cooldowns）
+const cooldowns = computed(() => hub.stats?.platform_cooldowns || [])
+const cooldownMap = computed(() => {
+  const m = {}
+  for (const c of cooldowns.value) m[c.platform] = c
+  return m
+})
+
+// 发布前就绪摘要：检查选中平台是否在线/配置/冷却
+const selectedReady = computed(() => {
+  const onlineIds = new Set(hub.accounts.filter(a => a.status === 'logined').map(a => a.platform))
+  const ready = [], unready = [], cooling = []
+  for (const pf of selected.value) {
+    const p = platforms.value.find(x => x.id === pf)
+    if (!p || !canPublish(p)) continue
+    if (cooldownMap.value[pf]) { cooling.push(pf); continue }
+    if (p.needs_browser && !onlineIds.has(pf)) unready.push(pf)
+    else ready.push(pf)
+  }
+  return { ready, unready, cooling }
+})
 const currentPubs = computed(() => hub.publications)
 const updatable = computed(() => hub.updatable.filter(id => canUpdate(platforms.value.find(p => p.id === id))))
 const isAiArticle = computed(() => hub.current?.source === 'ai')
@@ -203,7 +240,8 @@ const isAiArticle = computed(() => hub.current?.source === 'ai')
 // ---- 平台选择 + 分类记忆（沿用旧向导的本地记忆） ----
 const PLAT_MARKS = {
   zhihu: '知', bilibili: 'B', cnblogs: '博', csdn: 'C', metaweblog: '站',
-  juejin: '掘', oschina: '开', segmentfault: '思', toutiao: '头', wuyi_cto: 'CTO'
+  juejin: '掘', oschina: '开', segmentfault: '思', toutiao: '头', wuyi_cto: 'CTO',
+  devto: 'D', github: 'GH', wechat: '微'
 }
 const CAT_OPTIONS = {
   juejin: ['后端', '前端', 'android', 'ios', '人工智能', '开发工具', '代码人生', '阅读'],
@@ -371,6 +409,12 @@ const pubText = (s) => ({
   margin-top: 8px; font-size: var(--fs-xs); color: var(--tx-3);
   &.ok { color: var(--tx-2); }
   &.warn { color: var(--warn); }
+}
+
+.pre-check {
+  margin: 6px 0; font-size: var(--fs-xs);
+  .pre-warn { color: var(--warn); &.bad { color: var(--bad); } }
+  .pre-ok { color: var(--ok); }
 }
 
 .ai-gate {

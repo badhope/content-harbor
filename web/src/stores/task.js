@@ -106,7 +106,9 @@ export const useTaskStore = defineStore('task', {
       api.task(taskId).then(st => {
         this.loginTasks[platform] = { task_id: taskId, ...st }
         if (st.status === 'ok') {
-          useHubStore().loadStatus()
+          const hub = useHubStore()
+          hub.loadStatus()
+          hub.loadPlatforms()
         } else if (st.status === 'running' || st.status === 'pending') {
           setTimeout(() => this._pollLogin(taskId, platform), 1000)
         }

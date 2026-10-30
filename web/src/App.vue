@@ -64,6 +64,12 @@ function newArticle() {
 
 async function onAiDone(id) {
   hub.switchView('write')
-  if (id) await hub.open(id)
+  if (id) {
+    await hub.open(id)
+    // AI 写完 → 自动滚到发布轨，让用户立刻选平台发布（少一步找位置）
+    await new Promise(r => setTimeout(r, 300))
+    const rail = document.querySelector('.rail')
+    if (rail) rail.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 }
 </script>
