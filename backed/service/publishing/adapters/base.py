@@ -630,6 +630,12 @@ ADAPTERS = {}
 # 每个适配器声明自己真实实现的能力。数值来自各实现体：有方法且有实际赋值点才算 True，
 # 仅"没抛 NotImplementedError"不算——那是自欺。
 CAPABILITIES = {
+    "devto":        {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "cover": True, "hosted_media": True},
+    "github":       {"publish": True, "draft": False, "update": True, "list": True,
+                     "tags": True, "hosted_media": True},
+    "wechat":       {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": False, "cover": False, "hosted_media": False},
     "bilibili":     {"publish": True, "draft": True, "update": True,  "tags": True},
     "cnblogs":      {"publish": True, "draft": True, "update": True,  "list": True,
                      "tags": True, "hosted_media": True},

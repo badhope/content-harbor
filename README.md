@@ -1,6 +1,6 @@
 # 港 Harbour —— 桌面 + Web 双形态 AI 内容发布中枢
 
-一个后台管所有内容平台：知乎 / 掘金 / CSDN / B站 / 博客园 / 头条 / 开源中国 / SegmentFault / 51CTO / MetaWeblog。
+一个后台管所有内容平台：知乎 / 掘金 / CSDN / B站 / 博客园 / 头条 / 开源中国 / SegmentFault / 51CTO / MetaWeblog 自建博客 / 微信公众号 / GitHub Pages / Dev.to。
 AI 写稿、一键多投、原地更新、定时发布、AIGC 合规门禁、人工兜底——全在这里。
 
 ## 形态对照
@@ -124,7 +124,7 @@ bash scripts/check_all.sh            # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                     # 480 用例
+uv run pytest -q                     # 486 用例
 pnpm --dir web test                  # 前端 57 用例（vitest，含 a11y 静态门禁）
 pnpm --dir web lint                  # 前端 eslint
 uv run ruff check .                  # 静态

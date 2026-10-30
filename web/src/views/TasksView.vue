@@ -60,6 +60,11 @@
               <el-button size="small" type="primary" @click.stop="doResume(t, true)">已处理，继续</el-button>
               <el-button size="small" text @click.stop="doResume(t, false)">放弃</el-button>
             </div>
+            <div v-else-if="t.status === 'failed' && t.article_id" class="tc-ops">
+              <el-button size="small" text type="primary" @click.stop="goArticle(t.article_id)">
+                打开文章重试
+              </el-button>
+            </div>
           </article>
         </div>
         <EmptyState v-else title="还没有任务"
@@ -177,7 +182,11 @@ async function showTask(row) {
 }
 
 function openArticle() {
-  const id = taskDetail.value?.article_id
+  goArticle(taskDetail.value?.article_id)
+}
+
+/** 从任务卡片直接跳到文章编辑器（失败任务的一键恢复路径）。 */
+function goArticle(id) {
   taskDialog.value = false
   hub.switchView('write')
   if (id) hub.open(id)

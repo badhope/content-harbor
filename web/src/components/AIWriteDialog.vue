@@ -1,7 +1,7 @@
 <template>
   <el-dialog v-model="visible" title="AI 落笔" width="min(560px, 94vw)" :close-on-click-modal="false" class="ai-write-dialog">
     <el-alert v-if="!ready" type="warning" :closable="false" show-icon
-              title="AI 未配置"
+              title="AI 未配置——到 设置 → AI 模型 填任一 Provider 的密钥后即可写稿"
               description="在 config.json 或环境变量里填 AI_API_KEY / AI_BASE_URL / AI_MODEL 后重启后端即可。" />
 
     <el-form label-width="88px" style="margin-top:14px">

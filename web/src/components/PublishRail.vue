@@ -38,6 +38,9 @@
                   <div class="s caps" v-if="p.capabilities && !p.capabilities.publish">
                     该平台不支持发布
                   </div>
+                  <div class="s caps" v-else-if="!p.needs_browser && !isOnline(p.id)">
+                    未配置——到 设置 → 平台账号 填凭据
+                  </div>
                 </div>
                 <el-button v-if="p.needs_browser && !isOnline(p.id)" size="small" text type="primary"
                            class="login-btn" @click.stop="hub.startLogin(p.id)">登录</el-button>

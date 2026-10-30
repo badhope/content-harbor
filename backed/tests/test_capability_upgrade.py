@@ -800,3 +800,61 @@ def test_probe_endpoint_exposes_report(client):
     assert r.status_code == 200
     body = r.json()
     assert body["static"]["errors"] == 0
+
+
+# ---------------------------------------------------------------- 新增平台适配器（0.10.0）
+
+def test_new_adapters_registered_with_capabilities():
+    """devto / github / wechat 必须注册且能力矩阵声明自洽。"""
+    from service.publishing.adapters.base import ADAPTERS, capability_of
+    for pid in ("devto", "github", "wechat"):
+        assert pid in ADAPTERS, f"{pid} 未注册"
+        caps = capability_of(pid)
+        assert caps["publish"] is True
+    # github 是 commit 即发布，没有草稿语义
+    assert capability_of("github")["draft"] is False
+    # 个人订阅号默认只进草稿箱
+    assert capability_of("wechat")["draft"] is True
+
+
+def test_devto_tag_rules():
+    from service.publishing.adapters.devto import _clean_tags
+    # dev.to 标签只允许 [a-z0-9]：中文标签被过滤而非硬塞（硬塞会被 422 拒绝）
+    assert _clean_tags("Python, 异步, AI, Go, Extra") == ["python", "ai", "go", "extra"]
+    assert _clean_tags("") == []
+    assert _clean_tags("中文标签") == []
+    assert len(_clean_tags("a,b,c,d,e")) <= 4
+
+
+def test_github_slug_and_front_matter():
+    from service.publishing.adapters.github_pages import _slug, _front_matter
+    assert _slug("Hello World: 测试") .startswith("hello-world")
+    art = {"title": "T", "content_md": "b", "summary": "s", "tags": "a,b"}
+    fm = _front_matter(art)
+    assert fm.startswith("---\n") and 'title: "T"' in fm and "tags: [a, b]" in fm
+
+
+def test_wechat_sanitizer_strips_scripts_keeps_text():
+    from service.publishing.adapters.wechat import _sanitize_html
+    out = _sanitize_html(
+        "<p>ok</p><script>alert(1)</script><div>text</div><strong>keep</strong>")
+    assert "alert" not in out and "<script" not in out
+    assert "<p>ok</p>" in out and "<strong>keep</strong>" in out
+    assert "text" in out          # 非白名单标签剥壳但正文不丢
+
+
+def test_wechat_creds_require_appid_and_secret(monkeypatch, tmp_path):
+    import service.publishing.adapters.wechat as w
+    from service.publishing.adapters.base import PlatformError
+    monkeypatch.delenv("WECHAT_APPID", raising=False)
+    monkeypatch.delenv("WECHAT_SECRET", raising=False)
+    monkeypatch.setattr(w, "CONFIG_FILE", tmp_path / "no.json")
+    with pytest.raises(PlatformError):
+        w._creds()
+
+
+def test_probe_stays_clean_with_13_adapters():
+    from service.publishing import adapter_probe as ap
+    r = ap.static_contract_report()
+    assert r["checked"] == 13
+    assert r["errors"] == 0

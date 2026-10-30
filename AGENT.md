@@ -75,17 +75,20 @@ harbour/
 │   │   ├── crypto.py              # Fernet 加密（Webhook secret）
 │   │   ├── humanize.py            # 人机模拟（WPM/延迟）
 │   │   ├── cnblogs_login.py       # 博客园浏览器登录 + MetaWeblog 令牌提取
-│   │   ├── adapters/              # 平台适配器（10 个）
+│   │   ├── adapters/              # 平台适配器（13 个）
 │   │   │   ├── __init__.py        # @register 注册器
 │   │   │   ├── base.py            # PlatformAdapter 基类（527 行）
 │   │   │   ├── bilibili.py        # B站专栏
 │   │   │   ├── cnblogs.py         # 博客园（XML-RPC）
 │   │   │   ├── csdn.py            # CSDN
+│   │   │   ├── devto.py           # Dev.to（官方 REST API）
+│   │   │   ├── github_pages.py    # GitHub Pages / Jekyll（Contents API）
 │   │   │   ├── juejin.py          # 掘金
 │   │   │   ├── metaweblog.py     # 博客园元数据
 │   │   │   ├── oschina.py         # 开源中国
 │   │   │   ├── segmentfault.py   # SegmentFault
 │   │   │   ├── toutiao.py         # 头条号
+│   │   │   ├── wechat.py          # 微信公众号（官方草稿箱 API）
 │   │   │   ├── wuyi_cto.py       # 51CTO
 │   │   │   └── zhihu.py          # 知乎
 │   │   ├── ai_providers.py        # AI 多 Provider 路由（8 家：DeepSeek/Kimi/GLM/…）
@@ -223,7 +226,7 @@ bash scripts/check_all.sh              # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                        # 全部 (480 用例)
+uv run pytest -q                        # 全部 (486 用例)
 uv run pytest tests/test_tasks.py -q    # 任务引擎
 uv run ruff check .                     # 静态门禁
 

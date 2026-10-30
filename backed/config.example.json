@@ -61,6 +61,25 @@
       "password": "你的登录密码"
     },
 
+    "devto": {
+      "_说明": "Dev.to（Forem 官方 API）。去 dev.to/settings/extensions 生成 API Key，或设环境变量 DEVTO_API_KEY",
+      "api_key": "你的 dev.to API Key"
+    },
+    "github": {
+      "_说明": "GitHub Pages / Jekyll 仓库（Contents API 直接 commit Markdown）。PAT 勾 repo 权限；也可设环境变量 GITHUB_TOKEN",
+      "token": "ghp_xxx",
+      "owner": "你的用户名",
+      "repo": "你的用户名.github.io",
+      "branch": "main",
+      "path_prefix": "_posts",
+      "site_base": "你的用户名.github.io"
+    },
+    "wechat": {
+      "_说明": "微信公众号（官方草稿箱 API，免扫码）。公众号后台 → 设置与开发 → 基本配置；服务器 IP 需加白名单；个人订阅号默认只进草稿箱",
+      "appid": "wx_xxx",
+      "secret": "你的 secret"
+    },
+
     "_浏览器类平台_说明": "以下 7 个平台均走 Playwright 浏览器登录态，登录一次即可（扫码/账密），登录态自动保存到 data/profiles/ 目录，config.json 里不需要填任何字段。用法：cd backed && uv run python -m backed.cli --headed login --platform <平台名>",
     "_浏览器类平台_列表": {
       "juejin": "cd backed && uv run python -m backed.cli --headed login --platform juejin   # 掘金（扫码或手机号短信）",

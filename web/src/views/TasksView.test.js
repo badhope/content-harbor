@@ -16,6 +16,7 @@ vi.mock('@/api', () => ({
 import { api } from '@/api'
 import TasksView from '@/views/TasksView.vue'
 import { useTaskStore } from '@/stores/task'
+import { useHubStore } from '@/stores/hub'
 
 const task = (over = {}) => ({
   task_id: 'tk00000001', kind: 'publish', article_id: 7,
@@ -84,5 +85,24 @@ describe('TasksView 卡片列表（回归：表格在 390px 只剩三列）', ()
     const w = mount(TasksView)
     await w.vm.$nextTick()
     expect(w.find('.tc-msg').text()).toContain('篇幅过短')
+  })
+})
+
+describe('失败任务的一键恢复路径（0.10.0）', () => {
+  it('failed 且有 article_id 的任务卡片显示「打开文章重试」', async () => {
+    const { mount } = await import('@vue/test-utils')
+    const { createTestingPinia } = await import('@pinia/testing')
+    const apiMod = await import('@/api')
+    apiMod.api.task = vi.fn().mockResolvedValue({ status: 'ok' })
+    const w = mount(TasksView, {
+      global: { plugins: [createTestingPinia({ stubActions: false })] }
+    })
+    await w.vm.$nextTick()
+    // 直接测 goArticle 行为：通过组件实例调用
+    const hubStore = useHubStore()
+    w.vm.goArticle(7)
+    await w.vm.$nextTick()
+    expect(hubStore.view).toBe('write')
+    expect(hubStore.open).toHaveBeenCalledWith(7)
   })
 })
