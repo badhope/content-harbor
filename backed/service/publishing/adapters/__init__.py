@@ -20,9 +20,11 @@ from . import (  # noqa: F401
     metaweblog,
     oschina,
     segmentfault,
+    telegraph,
     toutiao,
     wechat,
     wuyi_cto,
+    xiaohongshu,
     zhihu,
 )
 

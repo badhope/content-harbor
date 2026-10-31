@@ -34,6 +34,7 @@ dependencies = [
     "trafilatura>=1.12",
     "pillow>=10.3",
     "markdown-it-py>=3.0",
+    "telegraph>=2.0",
 ]
 
 [dependency-groups]

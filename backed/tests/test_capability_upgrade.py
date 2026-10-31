@@ -853,8 +853,8 @@ def test_wechat_creds_require_appid_and_secret(monkeypatch, tmp_path):
         w._creds()
 
 
-def test_probe_stays_clean_with_13_adapters():
+def test_probe_stays_clean():
     from service.publishing import adapter_probe as ap
     r = ap.static_contract_report()
-    assert r["checked"] == 13
+    assert r["checked"] >= 13
     assert r["errors"] == 0

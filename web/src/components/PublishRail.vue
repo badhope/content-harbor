@@ -241,7 +241,7 @@ const isAiArticle = computed(() => hub.current?.source === 'ai')
 const PLAT_MARKS = {
   zhihu: '知', bilibili: 'B', cnblogs: '博', csdn: 'C', metaweblog: '站',
   juejin: '掘', oschina: '开', segmentfault: '思', toutiao: '头', wuyi_cto: 'CTO',
-  devto: 'D', github: 'GH', wechat: '微'
+  devto: 'D', github: 'GH', wechat: '微', telegraph: 'T', xiaohongshu: '红'
 }
 const CAT_OPTIONS = {
   juejin: ['后端', '前端', 'android', 'ios', '人工智能', '开发工具', '代码人生', '阅读'],

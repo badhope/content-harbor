@@ -3,7 +3,7 @@
     <div class="hint-bar">
       <span class="dim small">
         浏览器平台扫码一次长期复用；API 平台在 config.json 填凭据
-        （devto / github / wechat 的字段见 README「平台接入」表），配完点「检测」验证。
+        （devto / github / wechat / telegraph 的字段见仓库 PLATFORM_CONNECTION.md），配完点「检测」验证。
         发布前每个平台的登录态会在写作台发布轨里实时显示。
       </span>
       <span class="spacer" />
@@ -69,6 +69,8 @@ const ACCT_HINTS = {
   devto: 'config.json 填 api_key（dev.to/settings/extensions 生成）',
   github: 'config.json 填 token + owner + repo（PAT 勾 repo 权限）',
   wechat: 'config.json 填 appid + secret（公众号后台基本配置；IP 需加白名单）',
+  telegraph: '免注册：首次发布自动创建账号，token 回写 config.json',
+  xiaohongshu: '浏览器登录（App 扫码一次长期有效）',
 }
 const acctHint = (p) => ACCT_HINTS[p.id]
   || (p.needs_browser ? '需要浏览器登录（扫码一次长期有效）' : '免登 API，凭据在 config.json')

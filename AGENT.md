@@ -75,7 +75,7 @@ harbour/
 │   │   ├── crypto.py              # Fernet 加密（Webhook secret）
 │   │   ├── humanize.py            # 人机模拟（WPM/延迟）
 │   │   ├── cnblogs_login.py       # 博客园浏览器登录 + MetaWeblog 令牌提取
-│   │   ├── adapters/              # 平台适配器（13 个）
+│   │   ├── adapters/              # 平台适配器（15 个）
 │   │   │   ├── __init__.py        # @register 注册器
 │   │   │   ├── base.py            # PlatformAdapter 基类（527 行）
 │   │   │   ├── bilibili.py        # B站专栏
@@ -87,9 +87,11 @@ harbour/
 │   │   │   ├── metaweblog.py     # 博客园元数据
 │   │   │   ├── oschina.py         # 开源中国
 │   │   │   ├── segmentfault.py   # SegmentFault
+│   │   │   ├── telegraph.py      # Telegraph（telegra.ph，免注册即时发布）
 │   │   │   ├── toutiao.py         # 头条号
 │   │   │   ├── wechat.py          # 微信公众号（官方草稿箱 API）
 │   │   │   ├── wuyi_cto.py       # 51CTO
+│   │   │   ├── xiaohongshu.py    # 小红书（浏览器自动化，选择器待实机验证）
 │   │   │   └── zhihu.py          # 知乎
 │   │   ├── ai_providers.py        # AI 多 Provider 路由（8 家：DeepSeek/Kimi/GLM/…）
 │   │   ├── ai_config.py           # AI 配置读写（掩码/白名单原子写/连通性测试）
@@ -172,7 +174,7 @@ SQLite (db.py, WAL 模式, LockedConnection 线程安全)
 **REST 异步模型**：`submit()` 立即返回 `task_id`，客户端轮询 `GET /api/v1/hub/tasks/{id}`。
 **MCP 同步模型**：`mcp_server.py` 直接调 `hub.publish(...)`，同步返回结果。
 
-## 3. 适配器列表（10 个，由 test_docs_links.py 校验）
+## 3. 适配器列表（15 个，由 test_docs_links.py 校验）
 
 | 适配器 | 文件 | needs_browser | 认证方式 |
 |--------|------|:---:|---|
@@ -180,11 +182,16 @@ SQLite (db.py, WAL 模式, LockedConnection 线程安全)
 | bilibili | bilibili.py | True | 浏览器 |
 | cnblogs | cnblogs.py | False | XML-RPC |
 | csdn | csdn.py | True | 浏览器 |
+| devto | devto.py | False | API（api-key） |
+| github | github_pages.py | False | API（PAT） |
 | juejin | juejin.py | True | 浏览器 |
 | metaweblog | metaweblog.py | False | XML-RPC |
 | oschina | oschina.py | True | 浏览器 |
 | segmentfault | segmentfault.py | True | 浏览器 |
+| telegraph | telegraph.py | False | API（免注册 token） |
 | toutiao | toutiao.py | True | 浏览器 |
+| wechat | wechat.py | False | API（AppSecret） |
+| xiaohongshu | xiaohongshu.py | True | 浏览器（扫码） |
 | zhihu | zhihu.py | True | 浏览器 |
 
 新增平台：在 `adapters/` 下创建 `{platform}.py`，继承 `PlatformAdapter`，末尾 `@register`，
