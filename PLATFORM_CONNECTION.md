@@ -17,7 +17,14 @@
 
 ## 一、cnblogs（推荐优先接，最简单）
 
-### 1. 获取三件套
+### 0. 应用内自动抠令牌（推荐，免手贴）
+
+设置 → 平台账号 → 博客园卡片 →「自动抠令牌」：填博客园账号密码，应用弹浏览器登录一次，
+MetaWeblog 三件套自动写进 config.json，账号标在线——全程不用手贴任何字段。
+凭据只在内存 job 里流转，任务库与日志零痕迹；接口为
+`POST /accounts/cnblogs/bootstrap` + 轮询 `GET /accounts/cnblogs/bootstrap/{job_id}`。
+
+### 1. 手动获取三件套（备选）
 
 去博客园网页：
 

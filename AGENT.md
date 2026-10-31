@@ -22,9 +22,10 @@ harbour/
 │   │       ├── __init__.py
 │   │       ├── system.py          # /health /status /metrics /jobs /publications /pending-human
 │   │       ├── articles.py        # 文章 CRUD + 分页 + 搜索 + 导入 + 版本历史 + AI 增强 + 质检
-│   │       ├── accounts.py        # 登录/登出/诊断/验证码/辅助/刷新（含 SSRF 防护 + 能力矩阵）
+│   │       ├── accounts.py        # 登录/登出/诊断/验证码/辅助/刷新 + cnblogs bootstrap（SSRF 防护 + 能力矩阵）
+│   │       ├── browser.py         # 浏览器操控面：/browser/{platform}/fetch|screenshot
 │   │       ├── media.py           # 图片上传/抓取/托管
-│       └── system.py 额外含 /adapters/probe、/mcp/bridge、/platform-cooldowns
+│       └── system.py 额外含 /adapters/probe、/mcp/bridge、/platform-cooldowns、/status.auth_sweep
 │   │       ├── publishing.py      # 发布/更新/同步 + 任务查询/恢复
 │   │       ├── tags.py            # 标签治理
 │   │       ├── schedules.py       # 定时发布
@@ -69,6 +70,8 @@ harbour/
 │   │   ├── ratelimit.py           # 平台限流冷却（Retry-After 落库共享）
 │   │   ├── mcp_bridge.py          # 外部 MCP Server 桥接（Client，白名单）
 │   │   ├── adapter_probe.py       # 适配器离线契约探针（选择器/DOM 漂移）
+│   │   ├── browser_ops.py         # 浏览器操控面：带登录态抓取/截图（/browser/*）
+│   │   ├── auth_sweep.py          # 登录态自动巡检（过期标离线 + auth.expired 事件）
 │   │   ├── article_ops.py         # Hub mixin：文章 CRUD 与导入
 │   │   ├── ai_ops.py              # Hub mixin：AI 委托
 │   │   └── publish_ops.py         # Hub mixin：发布/更新/同步编排

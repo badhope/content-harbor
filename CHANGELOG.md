@@ -2,6 +2,47 @@
 
 ---
 
+## [0.12.0] - 2026-10-31（自动化工作流补全：操控面 / 巡检 / bootstrap / 带登录态导入）
+
+> 主题：**内置浏览器从"发布专用"升级为"随便操控"——登录态既是发布资产也是爬虫资产。**
+> 测试：后端 486 → 506；前端 58 → 62；MCP 工具 30 → 32。
+
+### 内置浏览器操控面（`browser_ops.py` + `/browser/*`）
+
+- `POST /browser/{platform}/fetch`：带平台登录态抓页面 → 标题 + 正文（trafilatura）。
+  登录墙后的内容 trafilatura 纯 HTTP 拿不到，现在可以了；`want_html=true` 返回原始 HTML。
+- `POST /browser/{platform}/screenshot`：带登录态截图，落盘 `data/exports/screenshots/`。
+- 安全口径与 assist 一致：scheme 白名单 + SSRF 黑名单；per-key 互斥贯穿整个操作，
+  不与发布/登录任务抢浏览器；needs_browser=False 的纯协议平台同样可操控。
+- MCP 新增 `browser_fetch` / `browser_screenshot` 工具（30 → 32），AI 可直接调用。
+
+### cnblogs 应用内自动抠令牌（免手贴 config.json）
+
+- `POST /accounts/cnblogs/bootstrap` + 轮询 `GET .../bootstrap/{job_id}`：
+  填账号密码 → 弹浏览器登录 → MetaWeblog 三件套自动写 config.json → 账号标在线。
+- **凭据零痕迹**：内存 job 注册表，密码不进任务库/日志/config.json（测试断言反证）。
+- 前端：博客园卡片「自动抠令牌」按钮 + 表单 + 3s 轮询 + 成功/失败提示（62 前端测试含 4 条新回归）。
+
+### 登录态自动巡检（持续记忆登录的"活"部分）
+
+- `auth_sweep.py`：daemon 线程默认 30 分钟一轮（`HUB_AUTH_SWEEP_MINUTES` 可调，0=禁用），
+  核查全部 logined 账号；过期 → 标 offline + webhook `auth.expired` 事件，前端就绪摘要自动变灰。
+- check 抛异常 ≠ 过期（浏览器弹不出来/网络抖动），只记日志不动状态——误标比晚发现伤害大。
+- 平台忙（登录/发布进行中）时跳过该账号本轮，不抢浏览器；`/status` 暴露 `auth_sweep` 状态。
+
+### 带登录态导入（登录墙文章一键入库）
+
+- `POST /articles/import` 新增 `browser: true + platform` 参数：走该平台登录态浏览器抓取，
+  与 HTTP 通道共用同一套 trafilatura 抽取与后处理；缺 platform 422。
+
+### 验证
+
+- 后端 506 passed / ruff 全绿；前端 62 passed / eslint 0 error；MCP 32 工具。
+- e2e（真实后端重启后实测）：`/status.auth_sweep` 在线、`/browser/juejin/fetch` 真实驱动
+  Edge 抓回 example.com 标题+正文、file:// 422、未知 job 404、import 缺 platform 422。
+
+---
+
 ## [0.11.0] - 2026-10-31（平台扩容二：Telegraph / 小红书——15 平台）
 
 > 主题：**平台 13 → 15；telegraph 走成熟库零手搓，xiaohongshu 补上中文最热图文平台。**

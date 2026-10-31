@@ -27,6 +27,7 @@ from .routers import (  # noqa: F401
     webhooks_router,
     ai_router,
     media_router,
+    browser_router,
 )
 
 hub_router = APIRouter()
@@ -41,6 +42,7 @@ hub_router.include_router(schedules_router)
 hub_router.include_router(webhooks_router)
 hub_router.include_router(ai_router)
 hub_router.include_router(media_router)
+hub_router.include_router(browser_router)
 
 
 # ---------------- CORS（默认仅同源；跨域部署时用环境变量 CORS_ORIGINS 白名单） ----------------

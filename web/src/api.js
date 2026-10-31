@@ -76,6 +76,10 @@ export const api = {
   logout: (platform, account = 'default') =>
     http.delete(`/accounts/${platform}`, { params: { account } }),
   diagnose: (platform) => http.get(`/accounts/${platform}/diagnose`),
+  bootstrapCnblogs: (username, password) =>
+    http.post('/accounts/cnblogs/bootstrap', { username, password }),
+  bootstrapCnblogsJob: (jobId) =>
+    http.get(`/accounts/cnblogs/bootstrap/${jobId}`),
 
   // ---------------- 统一任务查询 ----------------
   tasks: (limit = 50, kind, status) =>

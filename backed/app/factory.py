@@ -25,14 +25,26 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """日志初始化。HTTPS/TLS 由反向代理负责，此处不强制跳转。"""
     logger.info("正在启动应用...")
+    sweeper = None
     try:
         setup_logging(level=getattr(settings, "log_level", "INFO"))
+        # 登录态自动巡检（HUB_AUTH_SWEEP_MINUTES=0 禁用；默认 30 分钟一轮）。
+        # 启动失败不阻塞应用——巡检是增值能力，不能拖死主链路。
+        try:
+            from service.publishing.auth_sweep import AuthSweeper
+            from api.deps import get_hub
+            sweeper = AuthSweeper(get_hub())
+            sweeper.start()
+        except Exception as e:
+            logger.warning("登录态巡检未启动: %s", e)
         logger.info("应用启动成功 - 环境: %s", settings.environment)
         yield
     except Exception as e:
         logger.error("应用启动失败: %s", e)
         raise
     finally:
+        if sweeper is not None:
+            sweeper.stop()
         logger.info("正在关闭应用资源...")
         logger.info("应用已安全关闭")
 

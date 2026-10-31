@@ -2,6 +2,7 @@
 
 一个后台管所有内容平台：知乎 / 掘金 / CSDN / B站 / 博客园 / 头条 / 开源中国 / SegmentFault / 51CTO / MetaWeblog 自建博客 / 微信公众号 / GitHub Pages / Dev.to / Telegraph / 小红书。
 AI 写稿、一键多投、原地更新、定时发布、AIGC 合规门禁、人工兜底——全在这里。
+内置浏览器带登录态随便操控（`/browser/*` 抓取/截图 + MCP 工具），登录态自动巡检，过期即知。
 
 ## 形态对照
 

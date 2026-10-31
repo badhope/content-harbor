@@ -37,6 +37,8 @@ class ImportIn(BaseModel):
     path: str = ""
     url: str = ""
     tags: str = ""
+    browser: bool = False      # True 走内置浏览器通道（带平台登录态）
+    platform: str = ""         # browser=True 时必填（哪个平台的登录态）
 
 
 class AIModelIn(BaseModel):
@@ -111,6 +113,8 @@ def search(keyword: str):
 def import_md(body: ImportIn):
     """导入文章：`path` 读本地 Markdown，`url` 抓网页转 Markdown（二选一）。
 
+    url 通道默认 trafilatura 纯 HTTP；`browser: true` 改走内置浏览器
+    （带 `platform` 的登录态），登录墙后的内容也能导。
     先试本地路径，再试 URL；两者都给时以 path 为准（本地导入更可控）。
     """
     hub = get_hub()
@@ -120,6 +124,25 @@ def import_md(body: ImportIn):
         except ValueError as e:
             raise HTTPException(422, str(e))
     if body.url:
+        if body.browser:
+            if not body.platform:
+                raise HTTPException(422, "browser 导入必须指定 platform（用哪个平台的登录态）")
+            from .accounts import _check_platform
+            _check_platform(body.platform)
+            from service.publishing import importing
+            from service.publishing import db
+            try:
+                meta, content = importing.fetch_url_browser(body.url,
+                                                            body.platform, hub)
+            except importing.ImportError_ as e:
+                raise HTTPException(422, str(e))
+            aid = db.create_article(hub.conn, meta["title"], content,
+                                    tags=body.tags or meta.get("tags", ""),
+                                    summary=meta.get("summary", ""),
+                                    source="import", origin_url=body.url)
+            return {"id": aid, "title": meta["title"], "chars": len(content),
+                    "sitename": meta.get("sitename", ""),
+                    "author": meta.get("author", ""), "source": "browser"}
         try:
             return {**hub.import_url(body.url, tags=body.tags), "source": "url"}
         except ValueError as e:

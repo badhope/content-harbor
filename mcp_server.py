@@ -258,6 +258,28 @@ def ingest_image(url: str) -> dict:
             "bytes": asset["bytes"]}
 
 
+# ── 内置浏览器操控面（带平台登录态抓取 / 截图）────────────────────────────
+
+@mcp.tool()
+def browser_fetch(platform: str, url: str, account: str = "default") -> dict:
+    """带平台登录态的内置浏览器抓取页面：标题 + 正文（登录墙后的内容也能拿）。
+
+    例：browser_fetch("juejin", "https://juejin.cn/user/123/posts")
+    """
+    from service.publishing import browser_ops
+    return browser_ops.browser_fetch(_get_hub(), platform, url, account=account)
+
+
+@mcp.tool()
+def browser_screenshot(platform: str, url: str, full_page: bool = False,
+                       account: str = "default") -> dict:
+    """带平台登录态打开页面截图，落盘 data/exports/screenshots/，返回路径。"""
+    from service.publishing import browser_ops
+    return browser_ops.browser_screenshot(_get_hub(), platform, url,
+                                          account=account,
+                                          full_page=full_page)
+
+
 # ── 外部 MCP Server 桥接（把别人的 MCP 工具当后端用）────────────────────
 
 @mcp.tool()

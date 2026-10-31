@@ -26,6 +26,8 @@
                      @click="hub.startLogin(p.id)">
             {{ hub.loginTasks[p.id]?.status === 'running' ? '等待扫码…' : (online(p.id) ? '重新登录' : '去登录') }}
           </el-button>
+          <el-button v-if="p.id === 'cnblogs'" size="small" text type="primary"
+                     @click="bsOpen = true">自动抠令牌</el-button>
           <el-button size="small" text :loading="busy === 'check:' + p.id" @click="doCheck(p)">检测</el-button>
           <el-button size="small" text :loading="busy === 'refresh:' + p.id" @click="doRefresh(p)">抓取入库</el-button>
           <el-button size="small" text @click="doDiagnose(p)">诊断</el-button>
@@ -33,6 +35,30 @@
         </div>
       </div>
     </div>
+
+    <!-- cnblogs 自动抠令牌：浏览器登录一次，三件套自动写 config.json -->
+    <el-dialog v-model="bsOpen" title="博客园 · 自动抠令牌" width="min(460px, 94vw)">
+      <p class="dim small" style="margin: 0 0 12px">
+        输入博客园账号密码，弹出浏览器登录一次，MetaWeblog 三件套（endpoint/username/token）
+        自动写进 config.json，之后发布走纯协议免扫码。
+      </p>
+      <el-form label-width="72px">
+        <el-form-item label="用户名">
+          <el-input v-model="bsForm.username" placeholder="博客园登录名" autocomplete="off" />
+        </el-form-item>
+        <el-form-item label="密码">
+          <el-input v-model="bsForm.password" type="password" show-password
+                    placeholder="博客园登录密码" autocomplete="new-password" />
+        </el-form-item>
+      </el-form>
+      <p v-if="bsRunning" class="dim small">正在弹出浏览器登录（最长 10 分钟），可关此窗口，完成后会自动刷新状态。</p>
+      <p v-if="bsError" class="small" style="color: var(--el-color-danger)">{{ bsError }}</p>
+      <template #footer>
+        <el-button @click="bsOpen = false">关闭</el-button>
+        <el-button type="primary" :loading="bsRunning" :disabled="!bsForm.username || !bsForm.password"
+                   @click="startBootstrap">开始</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="diagOpen" :title="`接入诊断 · ${diagData?.platform || ''}`" width="min(560px, 94vw)">
       <el-descriptions v-if="diagData" :column="1" border size="small">
@@ -48,11 +74,47 @@ import { ref, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
+import { api } from '@/api'
 
 const hub = useHubStore()
 const busy = ref('')
 const diagOpen = ref(false)
 const diagData = ref(null)
+
+// cnblogs 自动抠令牌：内存 job 轮询（凭据只经 POST 传给后端线程，不落库）
+const bsOpen = ref(false)
+const bsRunning = ref(false)
+const bsError = ref('')
+const bsForm = ref({ username: '', password: '' })
+
+async function startBootstrap() {
+  bsRunning.value = true
+  bsError.value = ''
+  try {
+    const { job_id } = await api.bootstrapCnblogs(bsForm.value.username, bsForm.value.password)
+    const deadline = Date.now() + 660000
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 3000))
+      const j = await api.bootstrapCnblogsJob(job_id)
+      if (j.status === 'succeeded') {
+        ElMessage.success('博客园三件套已自动写进 config.json')
+        bsForm.value = { username: '', password: '' }
+        bsOpen.value = false
+        await reload()
+        return
+      }
+      if (j.status === 'failed') {
+        bsError.value = j.error || '登录未成功，检查账号密码或验证码'
+        return
+      }
+    }
+    bsError.value = '等待超时（11 分钟），后台可能仍在跑，稍后点「检测」确认'
+  } catch (e) {
+    bsError.value = e?.response?.data?.detail || String(e)
+  } finally {
+    bsRunning.value = false
+  }
+}
 
 // 每个平台的接入方式一句话说清（与 adapters 的真实凭据模型一致）
 const ACCT_HINTS = {
@@ -63,7 +125,7 @@ const ACCT_HINTS = {
   toutiao: '浏览器扫码登录（标题限 30 字）',
   oschina: '浏览器账密登录',
   segmentfault: '浏览器账密登录',
-  cnblogs: 'config.json 填 MetaWeblog 令牌；或「bootstrap-cnblogs」一条命令自动抠',
+  cnblogs: '浏览器登录后自动抠 MetaWeblog 三件套（点「自动抠令牌」），无需手贴 config.json',
   metaweblog: 'config.json 填 endpoint + 用户名 + 应用密码（WordPress/Typecho）',
   '51cto': 'config.json 填 endpoint + 用户名 + 登录密码',
   devto: 'config.json 填 api_key（dev.to/settings/extensions 生成）',
@@ -117,6 +179,9 @@ async function doLogout(p) {
     ElMessage.success(`${p.name} 已登出`)
   } catch { /* 取消 */ }
 }
+
+// 测试缝：el-dialog 在 jsdom 里不 teleport 落地，轮询逻辑只能从实例驱动
+defineExpose({ startBootstrap, bsForm, bsOpen, bsError })
 </script>
 
 <style scoped lang="scss">

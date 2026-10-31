@@ -72,6 +72,43 @@ def read_markdown_file(path: Path, allow_root: Path = None) -> tuple[dict, str]:
     return meta, body.lstrip("\n")
 
 
+def _extract_from_html(html: str, url: str) -> tuple[dict, str]:
+    """HTML → (meta, Markdown)。fetch_url 与浏览器通道共用。
+
+    抽不到有效正文时抛 ImportError_（含下一步建议）。
+    """
+    import trafilatura
+
+    parsed = urlparse(url)
+    body = trafilatura.extract(
+        html, output_format="markdown", include_links=True,
+        include_images=True, include_tables=True, favor_recall=True) or ""
+    if len(body.strip()) < MIN_CONTENT_CHARS:
+        host = (parsed.hostname or "").lower()
+        hint = ("该站正文由 JS 渲染或需要登录，建议用浏览器打开后复制正文"
+                if host in _JS_HEAVY_HOSTS or not body.strip()
+                else "正文过短，可能抓到了导航/提示页")
+        raise ImportError_(f"未能提取到有效正文（{len(body.strip())} 字符）：{hint}")
+
+    meta = trafilatura.extract_metadata(html)
+    title = (getattr(meta, "title", "") or "").strip()
+    author = (getattr(meta, "author", "") or "").strip()
+    sitename = (getattr(meta, "sitename", "") or "").strip()
+    date = (getattr(meta, "date", "") or "").strip()
+    summary = (getattr(meta, "description", "") or "").strip()
+    tags = _normalize_tags(getattr(meta, "tags", "") or "")
+
+    return {
+        "title": title or (parsed.hostname or "导入文章"),
+        "summary": summary[:300],
+        "tags": tags,
+        "origin_url": url,
+        "author": author,
+        "sitename": sitename,
+        "date": date,
+    }, _clean_markdown(body)
+
+
 def fetch_url(url: str, timeout: int = 30) -> tuple[dict, str]:
     """抓取网页并转成 Markdown。返回 (meta, 正文)。
 
@@ -93,33 +130,29 @@ def fetch_url(url: str, timeout: int = 30) -> tuple[dict, str]:
     if not downloaded:
         raise ImportError_(f"页面抓取为空（可能需要登录或禁止抓取）: {url}")
 
-    body = trafilatura.extract(
-        downloaded, output_format="markdown", include_links=True,
-        include_images=True, include_tables=True, favor_recall=True) or ""
-    if len(body.strip()) < MIN_CONTENT_CHARS:
-        host = (parsed.hostname or "").lower()
-        hint = ("该站正文由 JS 渲染或需要登录，建议用浏览器打开后复制正文"
-                if host in _JS_HEAVY_HOSTS or not body.strip()
-                else "正文过短，可能抓到了导航/提示页")
-        raise ImportError_(f"未能提取到有效正文（{len(body.strip())} 字符）：{hint}")
+    return _extract_from_html(downloaded, url)
 
-    meta = trafilatura.extract_metadata(downloaded)
-    title = (getattr(meta, "title", "") or "").strip()
-    author = (getattr(meta, "author", "") or "").strip()
-    sitename = (getattr(meta, "sitename", "") or "").strip()
-    date = (getattr(meta, "date", "") or "").strip()
-    summary = (getattr(meta, "description", "") or "").strip()
-    tags = _normalize_tags(getattr(meta, "tags", "") or "")
 
-    return {
-        "title": title or (parsed.hostname or "导入文章"),
-        "summary": summary[:300],
-        "tags": tags,
-        "origin_url": url,
-        "author": author,
-        "sitename": sitename,
-        "date": date,
-    }, _clean_markdown(body)
+def fetch_url_browser(url: str, platform: str, hub, account="default",
+                      timeout=60) -> tuple[dict, str]:
+    """带平台登录态的浏览器通道导入——登录墙后的内容 trafilatura 拿不到。
+
+    走 browser_ops.browser_fetch（复用该平台 profile 登录态），HTML 交给
+    与 HTTP 通道同一套抽取后处理。
+    """
+    from service.publishing import browser_ops
+
+    try:
+        r = browser_ops.browser_fetch(hub, platform, url, account=account,
+                                      timeout=timeout, want_html=True)
+    except ValueError as e:
+        raise ImportError_(str(e))
+    except Exception as e:
+        raise ImportError_(f"浏览器抓取失败: {type(e).__name__}: {e}")
+    html = r.get("html") or ""
+    if not html.strip():
+        raise ImportError_(f"浏览器未取到页面内容: {r.get('url') or url}")
+    return _extract_from_html(html, r.get("url") or url)
 
 
 def _clean_markdown(text: str) -> str:

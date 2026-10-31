@@ -478,6 +478,8 @@ class Hub(ArticleOpsMixin, AIOpsMixin, PublishOpsMixin):
         pub_arts = self.conn.execute(
             "SELECT COUNT(*) c FROM articles WHERE status='published'").fetchone()["c"]
         # published = 已上线的平台实例数；published_articles = 已发布文章数（两个口径别混用）
+        from service.publishing import auth_sweep
         return {"articles": arts, "publications": pubs, "published": ok,
                 "published_articles": pub_arts,
-                "pending_sync": pend, "accounts": self.accounts()}
+                "pending_sync": pend, "accounts": self.accounts(),
+                "auth_sweep": auth_sweep.status()}
