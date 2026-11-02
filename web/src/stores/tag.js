@@ -6,10 +6,37 @@ import { api } from '@/api'
 export const useTagStore = defineStore('tag', {
   state: () => ({
     tags: [],
+    clusters: [],
+    loadingClusters: false,
   }),
 
   actions: {
     async loadTags(limit = 50) { this.tags = await api.tags(limit) },
+    async loadClusters(threshold = 72) {
+      this.loadingClusters = true
+      try {
+        this.clusters = await api.tagsClusters(threshold) || []
+      } finally {
+        this.loadingClusters = false
+      }
+    },
+    /** 把每个候选簇的成员合并到 canonical */
+    async mergeAllClusters() {
+      let affected = 0
+      for (const c of this.clusters) {
+        const target = c.canonical
+        if (!target) continue
+        for (const member of (c.members || [])) {
+          if (member === target) continue
+          const r = await api.mergeTag(member, target)
+          affected += r?.affected || 0
+        }
+      }
+      await this.loadTags()
+      await this.loadClusters()
+      ElMessage.success(`已合并近似标签，影响 ${affected} 篇文章`)
+      return affected
+    },
     async syncTags() {
       const r = await api.syncTags()
       ElMessage.success(`标签重新统计完成：${r.synced} 个标签`)

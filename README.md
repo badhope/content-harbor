@@ -35,6 +35,10 @@ drafting, a compliance gate, and a human in the loop when a platform fights back
 |---|---|
 | ![Settings](docs/screenshots/04-settings.png) | ![Mobile](docs/screenshots/05-mobile.png) |
 
+![Platform accounts](docs/screenshots/06-platforms.png)
+
+*Fifteen adapters, each declaring what it can actually do. Greyed-out actions are not supported by that platform, not missing features.*
+
 ## Quick start
 
 Requires Python 3.10+, [uv](https://docs.astral.sh/uv/), Node 20+ and pnpm.

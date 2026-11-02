@@ -186,7 +186,9 @@ export const api = {
 
   // ---------------- 标签治理 ----------------
   tags: (limit = 50, category) => http.get('/tags', { params: { limit, category } }),
+  clearCooldowns: (platform = '') => http.post('/platform-cooldowns/clear', null, { params: { platform } }),
   tagsTrending: (limit = 10) => http.get('/tags/trending', { params: { limit } }),
+  tagsClusters: (threshold = 72) => http.get('/tags/clusters', { params: { threshold } }),
   syncTags: () => http.post('/tags/sync'),
   renameTag: (oldName, newName) => http.post('/tags/rename', null, { params: { old: oldName, new: newName } }),
   mergeTag: (from, to) => http.post('/tags/merge', null, { params: { _from: from, to } }),
