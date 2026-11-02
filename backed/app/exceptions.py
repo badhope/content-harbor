@@ -8,6 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import settings
 from utils.logger import get_logger, log_security_event
+from service.publishing.gate import GateError
 from utils.custom_exceptions import BaseAPIException
 from utils.response_code import ResponseCode
 
@@ -35,6 +36,14 @@ class ValidationErrorResponse(BaseModel):
 
 
 def setup_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(GateError)
+    async def gate_exception_handler(request: Request, exc: GateError):
+        """合规门禁拒绝：语义 422（内容不合规），不是 500。"""
+        return JSONResponse(status_code=422,
+                            content={"code": 422,
+                                     "message": f"合规门禁拒绝发布: {exc}",
+                                     "success": False, "data": None})
+
     @app.exception_handler(BaseAPIException)
     async def api_exception_handler(request: Request, exc: BaseAPIException):
         log_security_event(

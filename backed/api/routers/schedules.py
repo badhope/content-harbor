@@ -56,25 +56,39 @@ def schedules_get(sid: int):
 def schedules_update(sid: int, body: SchedulePatch):
     data = {k: v for k, v in body.model_dump().items() if v is not None}
     ok = get_hub().scheduler.update(sid, **data)
-    return {"ok": ok, **get_hub().scheduler.get(sid)}
+    if not ok:
+        raise HTTPException(404, "定时任务不存在")
+    return {"ok": True, **get_hub().scheduler.get(sid)}
 
 
 @router.post("/schedules/{sid}/pause")
 def schedules_pause(sid: int):
-    return get_hub().scheduler.pause(sid)
+    if not get_hub().scheduler.pause(sid):
+        raise HTTPException(404, "定时任务不存在")
+    return {"ok": True, "id": sid, "enabled": False}
 
 
 @router.post("/schedules/{sid}/resume")
 def schedules_resume(sid: int):
-    return get_hub().scheduler.resume(sid)
+    if not get_hub().scheduler.resume(sid):
+        raise HTTPException(404, "定时任务不存在")
+    return {"ok": True, "id": sid, "enabled": True}
 
 
 @router.post("/schedules/{sid}/trigger")
 def schedules_trigger(sid: int):
-    """手动立即触发一次（不改调度计划）。"""
-    return get_hub().scheduler.trigger_now(sid)
+    """手动立即投递一次，不改调度计划。"""
+    try:
+        result = get_hub().scheduler.trigger_now(sid)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if result is None:
+        raise HTTPException(404, "定时任务不存在")
+    return result
 
 
 @router.delete("/schedules/{sid}")
 def schedules_delete(sid: int):
-    return get_hub().scheduler.delete(sid)
+    if not get_hub().scheduler.delete(sid):
+        raise HTTPException(404, "定时任务不存在")
+    return {"ok": True, "id": sid}

@@ -1,0 +1,76 @@
+name: Bug report
+description: Something behaves differently from what the documentation says
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please fill in every field — a bug without a version
+        and reproduction steps cannot be triaged.
+
+        **Do not paste tokens, cookies or passwords.** Redact them first.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `GET /health` (the `service` and version fields), or the git tag you are on
+      placeholder: "0.12.0"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, Node version, how you run it (Docker / local / Tauri)
+      placeholder: "Windows 11, Python 3.12, Node 20, local uvicorn"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact clicks or commands. Assume the maintainer has never seen your screen.
+      placeholder: |
+        1. Open Settings → Platform accounts
+        2. Click "Log in" on Zhihu
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include the error text. If there is a stack trace, paste the last 30 lines.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log excerpt
+      description: "`backed/logs/app.log` or the browser console. Redact credentials."
+      render: text
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I removed all tokens, cookies and personal data from this report
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md)
+          required: true

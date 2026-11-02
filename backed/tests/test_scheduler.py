@@ -213,9 +213,14 @@ def test_execute_failure_defers_five_minutes(sched):
 
 def test_trigger_now_does_not_change_schedule(sched):
     sid = _make(sched, schedule_type="daily", schedule_expr="08:00")
-    before = sched.get(sid)["next_run"]
-    assert sched.trigger_now(sid) is True
-    assert sched.get(sid)["next_run"] == before
+    before = sched.get(sid)
+    plan_fields = {k: before[k] for k in (
+        "next_run", "last_run", "run_count", "enabled", "last_task_id")}
+    result = sched.trigger_now(sid)
+    assert result == {"ok": True, "schedule_id": sid,
+                      "task_id": "task1", "mode": "manual"}
+    after = sched.get(sid)
+    assert {k: after[k] for k in plan_fields} == plan_fields
     assert len(sched.hub.tasks.submitted) == 1
     assert sched.trigger_now(9999) is None
 

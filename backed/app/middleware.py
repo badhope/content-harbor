@@ -14,12 +14,17 @@ from middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
     AuditMiddleware,
+    PublicBaseMiddleware,
 )
 
 logger = get_logger(__name__)
 
 
 def setup_middleware(app: FastAPI) -> None:
+    # 对外地址推断：媒体改写要在后台线程里知道"平台该访问哪个域名"，
+    # 那里没有 request 上下文，只能靠这层把最近一次访问的 Host 记下来。
+    app.add_middleware(PublicBaseMiddleware)
+
     cors_config = AppConfig.get_cors_config()
     app.add_middleware(CORSMiddleware, **cors_config)
     logger.info("中间件已启用: CORSMiddleware")

@@ -29,6 +29,11 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+try:                      # croniter 是成熟 cron 解析器（6.x，纯 Python，无额外依赖）
+    from croniter import croniter as _croniter
+except Exception:         # 未安装时退回内置最小解析器，功能不丢
+    _croniter = None
+
 
 
 # scheduled_tasks 表的 DDL（由 ensure_schema 建表，不走 MIGRATIONS 因为它不在 hub.db 里）
@@ -123,8 +128,15 @@ def _calc_next_run(schedule_type: str, schedule_expr: str, base: float = None) -
             return candidate.timestamp()
 
         elif schedule_type == "cron":
-            # 简化 cron：只做一次性下次计算（标准 cron 库太重，手撸最小集）
-            return _cron_next(schedule_expr.strip(), now)
+            # 优先 croniter：完整 5 段语义（含 L/W/#、秒级扩展、夏令时），
+            # 手撸解析器保留为兜底（无第三方依赖环境）。
+            expr = schedule_expr.strip()
+            if _croniter is not None:
+                try:
+                    return _croniter(expr, now).get_next(datetime).timestamp()
+                except Exception:
+                    pass
+            return _cron_next(expr, now)
 
     except Exception:
         pass
@@ -218,7 +230,10 @@ class Scheduler:
         self._stop_evt.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=10)
-            self._thread = None
+            if self._thread.is_alive():
+                return False
+        self._thread = None
+        return True
 
     def _loop(self):
         """主轮循环：检查到期任务、execute、sleep。"""
@@ -335,15 +350,17 @@ class Scheduler:
             cur_row = self.conn.execute(
                 "SELECT schedule_type, schedule_expr FROM scheduled_tasks WHERE id=?",
                 (sid,)).fetchone()
+            if cur_row is None:
+                return False
             st = kw.get("schedule_type", cur_row["schedule_type"])
             se = kw.get("schedule_expr", cur_row["schedule_expr"]) or ""
             kw["next_run"] = _calc_next_run(st, se)
         kw["updated_at"] = time.time()
         sets = ", ".join(f"{k}=?" for k in kw)
-        self.conn.execute(f"UPDATE scheduled_tasks SET {sets} WHERE id=?",
-                          (*kw.values(), sid))
+        cur = self.conn.execute(f"UPDATE scheduled_tasks SET {sets} WHERE id=?",
+                                (*kw.values(), sid))
         self.conn.commit()
-        return True
+        return cur.rowcount > 0
 
     def pause(self, sid):
         return self.update(sid, enabled=0)
@@ -364,17 +381,25 @@ class Scheduler:
         return True
 
     def delete(self, sid):
-        self.conn.execute("DELETE FROM scheduled_tasks WHERE id=?", (sid,))
+        cur = self.conn.execute("DELETE FROM scheduled_tasks WHERE id=?", (sid,))
         self.conn.commit()
-        return True
+        return cur.rowcount > 0
 
     def trigger_now(self, sid):
-        """手动触发一次立即执行（不改调度计划）。"""
+        """手动投递一次，不修改调度计划字段。"""
         row = self.conn.execute("SELECT * FROM scheduled_tasks WHERE id=?", (sid,)).fetchone()
         if not row:
             return None
-        self._execute(dict(row))
-        return True
+        row = dict(row)
+        article = self.conn.execute(
+            "SELECT id FROM articles WHERE id=?", (row["article_id"],)).fetchone()
+        if not article:
+            raise ValueError("定时任务关联文章不存在")
+        task_id = self.hub.tasks.submit(
+            "publish", article_id=row["article_id"],
+            platforms=json.loads(row["platforms"]), account=row["account"],
+            draft_only=bool(row["draft_only"]))
+        return {"ok": True, "schedule_id": sid, "task_id": task_id, "mode": "manual"}
 
 
 def init_scheduler(hub):

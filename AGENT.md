@@ -1,11 +1,11 @@
 # AGENT.md — 开发者指南
 
-面向 AI 编码助手和人类开发者的项目结构说明。**反映 0.7.0 架构**（2026-10-12）。
+面向 AI 编码助手和人类开发者的项目结构说明。**反映 0.13.0 架构**（2026-11-02）。
 
-## 1. 目录结构（0.7.0 真实）
+## 1. 目录结构（0.13.0 真实）
 
 ```
-content-harbor/
+harbour/
 ├── backed/
 │   ├── app/
 │   │   ├── factory.py              # FastAPI 应用工厂 (create_app)
@@ -21,15 +21,18 @@ content-harbor/
 │   │   └── routers/               # 按领域拆分的子路由器
 │   │       ├── __init__.py
 │   │       ├── system.py          # /health /status /metrics /jobs /publications /pending-human
-│   │       ├── articles.py        # 文章 CRUD + 搜索 + 导入 + 版本历史 + AI 增强 + 质检
-│   │       ├── accounts.py        # 登录/登出/诊断/验证码/辅助/刷新（含 SSRF 防护）
+│   │       ├── articles.py        # 文章 CRUD + 分页 + 搜索 + 导入 + 版本历史 + AI 增强 + 质检
+│   │       ├── accounts.py        # 登录/登出/诊断/验证码/辅助/刷新 + cnblogs bootstrap（SSRF 防护 + 能力矩阵）
+│   │       ├── browser.py         # 浏览器操控面：/browser/{platform}/fetch|screenshot
+│   │       ├── media.py           # 图片上传/抓取/托管
+│       └── system.py 额外含 /adapters/probe、/mcp/bridge、/platform-cooldowns、/status.auth_sweep
 │   │       ├── publishing.py      # 发布/更新/同步 + 任务查询/恢复
 │   │       ├── tags.py            # 标签治理
 │   │       ├── schedules.py       # 定时发布
 │   │       ├── webhooks.py        # Webhook CRUD + 站内通知 + SSE
 │   │       └── ai.py             # AI 写稿/Provider/模板/门禁状态
 │   ├── middleware/
-│   │   ├── rate_limiter.py        # 令牌桶限流（含 XFF 绕过防护）
+│   │   ├── rate_limiter.py        # 令牌桶限流（含 XFF 绕过防护 + 桶表上限）
 │   │   ├── security_headers.py    # 安全响应头（CSP/X-Frame-Options 等）
 │   │   └── audit_middleware.py    # HTTP 审计日志
 │   ├── core/
@@ -49,7 +52,7 @@ content-harbor/
 │   │   ├── browser.py             # Patchright Chromium（729 行）
 │   │   ├── browser_pool.py        # 浏览器实例池（LRU + per-key 互斥）
 │   │   ├── gate.py                # AIGC 合规门禁（四道闸门）
-│   │   ├── ai.py                  # OpenAI 兼容 LLM 调用
+│   │   ├── ai.py                  # OpenAI 兼容 LLM 调用（tenacity 退避重试）
 │   │   ├── ai_service.py          # AI 增强操作（写稿/改写/润色/翻译/工具）
 │   │   ├── ai_enhancements.py     # AI 工具函数（大纲/SEO/配图/克隆/模板）
 │   │   ├── observability.py       # 日志/指标/可观测（585 行）
@@ -60,22 +63,38 @@ content-harbor/
 │   │   ├── _account_ops.py        # 账号操作（登录/登出/验证码/辅助）
 │   │   ├── versions.py            # 版本管理（快照/回滚/diff）
 │   │   ├── tags.py                # 标签治理
-│   │   ├── content_qa.py          # 内容质检（可读性/SEO/重复度）
+│   │   ├── content_qa.py          # 内容质检（可读性/SEO/重复度，签名缓存）
+│   │   ├── media.py               # 媒体资产：内容寻址存储 + 图片改写 + SSRF 防护下载
+│   │   ├── importing.py           # 导入：front-matter 解析 + 网页正文提取
+│   │   ├── content_transform.py   # AST 级平台内容变换（markdown-it-py）
+│   │   ├── ratelimit.py           # 平台限流冷却（Retry-After 落库共享）
+│   │   ├── mcp_bridge.py          # 外部 MCP Server 桥接（Client，白名单）
+│   │   ├── adapter_probe.py       # 适配器离线契约探针（选择器/DOM 漂移）
+│   │   ├── browser_ops.py         # 浏览器操控面：带登录态抓取/截图（/browser/*）
+│   │   ├── auth_sweep.py          # 登录态自动巡检（过期标离线 + auth.expired 事件）
+│   │   ├── article_ops.py         # Hub mixin：文章 CRUD 与导入
+│   │   ├── ai_ops.py              # Hub mixin：AI 委托
+│   │   └── publish_ops.py         # Hub mixin：发布/更新/同步编排
 │   │   ├── crypto.py              # Fernet 加密（Webhook secret）
 │   │   ├── humanize.py            # 人机模拟（WPM/延迟）
 │   │   ├── cnblogs_login.py       # 博客园浏览器登录 + MetaWeblog 令牌提取
-│   │   ├── adapters/              # 平台适配器（10 个）
+│   │   ├── adapters/              # 平台适配器（15 个）
 │   │   │   ├── __init__.py        # @register 注册器
 │   │   │   ├── base.py            # PlatformAdapter 基类（527 行）
 │   │   │   ├── bilibili.py        # B站专栏
 │   │   │   ├── cnblogs.py         # 博客园（XML-RPC）
 │   │   │   ├── csdn.py            # CSDN
+│   │   │   ├── devto.py           # Dev.to（官方 REST API）
+│   │   │   ├── github_pages.py    # GitHub Pages / Jekyll（Contents API）
 │   │   │   ├── juejin.py          # 掘金
 │   │   │   ├── metaweblog.py     # 博客园元数据
 │   │   │   ├── oschina.py         # 开源中国
 │   │   │   ├── segmentfault.py   # SegmentFault
+│   │   │   ├── telegraph.py      # Telegraph（telegra.ph，免注册即时发布）
 │   │   │   ├── toutiao.py         # 头条号
+│   │   │   ├── wechat.py          # 微信公众号（官方草稿箱 API）
 │   │   │   ├── wuyi_cto.py       # 51CTO
+│   │   │   ├── xiaohongshu.py    # 小红书（浏览器自动化，选择器待实机验证）
 │   │   │   └── zhihu.py          # 知乎
 │   │   ├── ai_providers.py        # AI 多 Provider 路由（8 家：DeepSeek/Kimi/GLM/…）
 │   │   ├── ai_config.py           # AI 配置读写（掩码/白名单原子写/连通性测试）
@@ -85,7 +104,7 @@ content-harbor/
 │   │   │   ├── bilibili.py        # B站 API Provider
 │   │   │   ├── registry.py        # Provider 注册 + 路由
 │   │   │   └── toutiao.py         # 头条 API Provider
-│   │   └── tools/                 # 平台 API 工具（0.7.0 新增）
+│   │   └── tools/                 # 平台 API 工具（0.12.0 新增，0.13.0 保留）
 │   │       ├── juejin_api.py      # 掘金 OpenAPI
 │   │       └── metaweblog.py      # MetaWeblog XML-RPC 客户端
 │   ├── utils/
@@ -109,8 +128,9 @@ content-harbor/
 ├── scripts/
 │   ├── check_all.ps1            # 一键门禁（Windows）
 │   ├── check_all.sh             # 一键门禁（Linux/macOS）
-│   └── backup_data.py           # 数据备份（在线一致性快照）
-├── mcp_server.py                # MCP Server（16 Tool，stdio + SSE）
+│   ├── backup_data.py           # 数据备份（在线一致性快照）
+│   └── login_probe.py           # 登录页诊断（导出二维码 / 复检登录态，不代替扫码）
+├── mcp_server.py                # MCP Server（30 Tool，stdio + SSE；可桥接外部 MCP Server）
 ├── deploy/                      # Docker 部署
 └── docs/
     ├── architecture/ARCHITECTURE.md
@@ -119,7 +139,7 @@ content-harbor/
     └── writing-style.md
 ```
 
-## 2. 数据流（0.7.0）
+## 2. 数据流（0.13.0）
 
 ```
 HTTP Request
@@ -157,7 +177,7 @@ SQLite (db.py, WAL 模式, LockedConnection 线程安全)
 **REST 异步模型**：`submit()` 立即返回 `task_id`，客户端轮询 `GET /api/v1/hub/tasks/{id}`。
 **MCP 同步模型**：`mcp_server.py` 直接调 `hub.publish(...)`，同步返回结果。
 
-## 3. 适配器列表（10 个，由 test_docs_links.py 校验）
+## 3. 适配器列表（15 个，由 test_docs_links.py 校验）
 
 | 适配器 | 文件 | needs_browser | 认证方式 |
 |--------|------|:---:|---|
@@ -165,11 +185,16 @@ SQLite (db.py, WAL 模式, LockedConnection 线程安全)
 | bilibili | bilibili.py | True | 浏览器 |
 | cnblogs | cnblogs.py | False | XML-RPC |
 | csdn | csdn.py | True | 浏览器 |
+| devto | devto.py | False | API（api-key） |
+| github | github_pages.py | False | API（PAT） |
 | juejin | juejin.py | True | 浏览器 |
 | metaweblog | metaweblog.py | False | XML-RPC |
 | oschina | oschina.py | True | 浏览器 |
 | segmentfault | segmentfault.py | True | 浏览器 |
+| telegraph | telegraph.py | False | API（免注册 token） |
 | toutiao | toutiao.py | True | 浏览器 |
+| wechat | wechat.py | False | API（AppSecret） |
+| xiaohongshu | xiaohongshu.py | True | 浏览器（扫码） |
 | zhihu | zhihu.py | True | 浏览器 |
 
 新增平台：在 `adapters/` 下创建 `{platform}.py`，继承 `PlatformAdapter`，末尾 `@register`，
@@ -198,22 +223,26 @@ pnpm run tauri dev
 cd backed
 uv run python -m backed.cli <command>
 uv run python -m backed.cli sync              # 同步平台状态
-uv run python -m backed.cli list-tasks        # 查看任务
-uv run python -m backed.cli approve-task <id> # 批准待人工任务
+uv run --project backed python -m backed.cli status             # 查看中台状态
+# 任务查询/人工恢复请使用 REST 或 MCP 接口
 ```
 
 ### 测试
 
 ```bash
-# 一键门禁（四道：compileall → ruff → pytest → vite build）
+# 一键门禁（六道：compileall → ruff → pytest → eslint → vitest → vite build）
 pwsh -File scripts/check_all.ps1        # Windows
 bash scripts/check_all.sh              # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                        # 全部 (379 用例)
+uv run pytest -q                        # 当前约 506 个展开用例，以命令输出为准
 uv run pytest tests/test_tasks.py -q    # 任务引擎
 uv run ruff check .                     # 静态门禁
+
+# 前端（在仓库根执行）
+pnpm --dir web lint                     # eslint
+pnpm --dir web test                     # vitest（当前约 62 个展开用例，以命令输出为准）
 ```
 
 `conftest.py` 的 `sandbox` fixture（autouse）把 DB/事件日志/Webhook 派发线程
@@ -223,7 +252,7 @@ uv run ruff check .                     # 静态门禁
 
 ```bash
 cd backed
-uv run python ../scripts/backup_data.py              # 到 ~/harbor-backups
+uv run python ../scripts/backup_data.py              # 到 ~/harbour-backups
 uv run python ../scripts/backup_data.py --dry-run    # 只看计划
 ```
 
@@ -240,8 +269,8 @@ uv run python ../scripts/backup_data.py --dry-run    # 只看计划
 
 | 环境变量 | 说明 | 默认 |
 |---|---|---|
-| `HARBOR_API_TOKEN` | REST 鉴权 Token | 自动生成 UUID |
-| `HARBOR_SECRET_KEY` | 签名密钥（生产必须设） | 开发随机 |
+| `HARBOUR_API_TOKEN` | REST 鉴权 Token（优先于 config.json） | 未配置时首启自动生成 UUID 并落盘 |
+| `HARBOUR_SECRET_KEY` | 签名密钥（生产必须设） | 开发随机 |
 | `TRUSTED_NETS` | 受信代理网段（XFF 校验） | 127.0.0.0/8,::1/128 |
 | `TRUSTED_PROXIES` | 受信反向代理 IP（限流键） | 空 |
 | `CORS_ORIGINS` | 跨域白名单（逗号分隔） | 同源 |
@@ -250,3 +279,16 @@ uv run python ../scripts/backup_data.py --dry-run    # 只看计划
 | `AI_BASE_URL` | LLM 端点 | deepseek |
 | `ASSIST_ALLOW_LOCAL=1` | 允许 assist 打开 localhost（桌面版调试） | 0 |
 | `FERNET_KEY` | Webhook secret 加密主密钥 | 自动生成 |
+
+### 登录诊断
+
+```bash
+# 打开平台登录页，导出二维码 PNG（不代替人扫码）
+uv run --project backed python scripts/login_probe.py --platform juejin
+uv run --project backed python scripts/login_probe.py --platform csdn --headed --wait 30
+# 复检本地 profile 的登录态是否还在
+uv run --project backed python scripts/login_probe.py --platform juejin --check-cookie
+```
+
+只回答两件事：登录页是否可用、二维码/登录态是否真的生成。真实扫码仍走应用内
+「设置 → 平台账号 → 去登录」。

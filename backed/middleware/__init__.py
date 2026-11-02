@@ -14,10 +14,12 @@
 from .rate_limiter import RateLimitMiddleware, RateLimiter
 from .security_headers import SecurityHeadersMiddleware
 from .audit_middleware import AuditMiddleware
+from .public_base import PublicBaseMiddleware
 
 __all__ = [
     "RateLimitMiddleware",
     "RateLimiter",
     "SecurityHeadersMiddleware",
     "AuditMiddleware",
+    "PublicBaseMiddleware",
 ]

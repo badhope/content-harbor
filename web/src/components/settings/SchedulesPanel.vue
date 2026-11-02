@@ -37,11 +37,11 @@
                 desc="例：每周一 9 点把某个专栏文章发到知乎 + 掘金"
                 :px="60" />
 
-    <el-dialog v-model="createOpen" title="新建定时任务" width="520px">
+    <el-dialog v-model="createOpen" title="新建定时任务" width="min(520px, 94vw)">
       <el-form label-width="92px">
         <el-form-item label="文章">
           <el-select v-model="form.article_id" filterable placeholder="选一篇" style="width:100%">
-            <el-option v-for="a in hub.articles" :key="a.id" :label="`#${a.id} ${a.title}`" :value="a.id" />
+            <el-option v-for="a in articleOptions" :key="a.id" :label="`#${a.id} ${a.title}`" :value="a.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="平台">
@@ -86,11 +86,15 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
+import { api } from '@/api'
 import EmptyState from '@/components/EmptyState.vue'
+import { fmtDateTime } from '@/utils/format'
 
 const hub = useHubStore()
 
 const createOpen = ref(false)
+// 文章库列表本身是分页的，定时任务要能选到任意一篇，这里单独翻页取全量
+const articleOptions = ref([])
 const creating = ref(false)
 const form = reactive({ article_id: null, platforms: [], schedule_type: 'once',
                         schedule_expr: '', draft_only: false, title: '' })
@@ -109,9 +113,20 @@ const exprHelp = computed(() => ({
   cron: '分 时 日 月 周',
 }[form.schedule_type] || ''))
 
+async function loadArticleOptions() {
+  const seen = new Map()
+  for (let offset = 0; offset < 5000; offset += 200) {
+    const r = await api.articlesPage({ limit: 200, offset }) || {}
+    const items = r.items || []
+    for (const a of items) seen.set(a.id, { id: a.id, title: a.title })
+    if (!r.has_more || !items.length) break
+  }
+  articleOptions.value = [...seen.values()]
+}
+
 onMounted(async () => {
   hub.loadSchedules()
-  if (!hub.articles.length) await hub.loadArticles()
+  await loadArticleOptions()
   if (!hub.platforms.length) await hub.loadPlatforms()
 })
 
@@ -141,12 +156,7 @@ const label = (type, expr) => ({ once: '一次性', daily: '每天', weekly: '�
   + (expr ? ' · ' + expr : '')
 const parsePlats = (p) => { try { return JSON.parse(p || '[]') } catch { return [] } }
 const platName = (id) => hub.platforms.find(p => p.id === id)?.name || id
-const fmtTime = (ts) => {
-  if (!ts) return '—'
-  const d = new Date(ts * 1000)
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+const fmtTime = (ts) => fmtDateTime(ts)
 </script>
 
 <style scoped lang="scss">

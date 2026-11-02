@@ -16,7 +16,17 @@ from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
 
 ROOT = Path(__file__).resolve().parent.parent
-_KEY_FILE = ROOT / "data" / ".fernet_key"
+
+
+def _key_file() -> Path:
+    """与 db.data_root() 同源：桌面版跟随 HUB_DATA_DIR，避免密钥落在安装目录。"""
+    from service.publishing.db import data_root
+    d = data_root()
+    d.mkdir(parents=True, exist_ok=True)
+    return d / ".fernet_key"
+
+
+_KEY_FILE = _key_file()
 
 log = logging.getLogger(__name__)
 

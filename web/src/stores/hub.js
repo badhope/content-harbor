@@ -37,6 +37,9 @@ export const useHubStore = defineStore('hub', {
     dirty() { return useArticleStore().dirty },
     saving() { return useArticleStore().saving },
     loadingList() { return useArticleStore().loadingList },
+    total() { return useArticleStore().total },
+    hasMore() { return useArticleStore().hasMore },
+    loadingMore() { return useArticleStore().loadingMore },
     filtered() { return useArticleStore().filtered },
     updatable() { return useArticleStore().updatable },
 
@@ -46,6 +49,8 @@ export const useHubStore = defineStore('hub', {
     pendingHuman() { return useAccountStore().pendingHuman },
 
     tasks() { return useTaskStore().tasks },
+    taskTotal() { return useTaskStore().total },
+    taskTruncated() { return useTaskStore().truncated },
     loginTasks() { return useTaskStore().loginTasks },
     waitingTasks() { return useTaskStore().waitingTasks },
 
@@ -95,8 +100,11 @@ export const useHubStore = defineStore('hub', {
     },
 
     newArticle() { return useArticleStore().newArticle() },
+    markDirty() { useArticleStore().markDirty() },
+
     async save() { return await useArticleStore().save() },
     async open(id) { return await useArticleStore().open(id) },
+    async removeArticle(id) { return await useArticleStore().remove(id) },
     async loadPubs() { return await useArticleStore().loadPubs() },
     async loadAllPubs() { return await useArticleStore().loadAllPubs() },
     async loadStatus() { return await useAccountStore().loadStatus() },
@@ -116,7 +124,8 @@ export const useHubStore = defineStore('hub', {
       const article = useArticleStore()
       const account = useAccountStore()
       if (!platforms.length) return null
-      if (!article.currentId) await article.save()
+      // 审计 B2：已有文章改过也必须先保存，否则发布会发旧稿
+      if (!article.currentId || article.dirty) await article.save()
       if (!article.currentId) return null
 
       this.publishing = true
@@ -160,6 +169,10 @@ export const useHubStore = defineStore('hub', {
       return await useArticleStore().loadList()
     },
 
+    async loadMore() {
+      return await useArticleStore().loadMore()
+    },
+
     async syncPending() {
       const account = useAccountStore()
       const article = useArticleStore()
@@ -198,7 +211,7 @@ export const useHubStore = defineStore('hub', {
 
     async assistOpen(platform, url) {
       if (!url) { ElMessage.warning('没有可打开的平台页地址'); return }
-      const t = await api.assistOpen(platform, url)
+      await api.assistOpen(platform, url)
       ElMessage.success('已在内置浏览器打开平台页（带登录态）——完成操作后任务自动结束')
     },
 

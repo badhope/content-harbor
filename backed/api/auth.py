@@ -9,10 +9,12 @@ import os
 from ipaddress import ip_address, ip_network
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request as FastAPIRequest
+from fastapi import FastAPI, Request as FastAPIRequest
 from starlette.requests import Request
 
 from service.publishing import observability as obs
+
+from service.publishing.db import config_file
 
 ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 
@@ -22,18 +24,38 @@ ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 _api_token_cache: Optional[tuple[float, str]] = None
 
 
+def _resolve_token() -> str:
+    """Token 解析：HARBOUR_API_TOKEN 环境变量 > config.json；都缺失时自动生成并落盘。"""
+    tok = os.environ.get("HARBOUR_API_TOKEN", "").strip()
+    if tok:
+        return tok
+    try:
+        cfg_path = (ROOT / "config.json") if ROOT != __import__("pathlib").Path(__file__).resolve().parent.parent else config_file()
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+        tok = (cfg or {}).get("api_token") or ""
+        if not tok:
+            import uuid as _uuid
+            tok = str(_uuid.uuid4())
+            cfg_path.write_text(json.dumps({**(cfg or {}), "api_token": tok},
+                                           ensure_ascii=False, indent=2),
+                                encoding="utf-8")
+            obs.get_logger(__name__).warning(
+                "api_token 未配置：已自动生成并写入 config.json（生产环境建议改设 HARBOUR_API_TOKEN）")
+    except Exception:  # aqg: top-level boundary
+        import secrets as _secrets
+        tok = _secrets.token_hex(16)
+    return tok
+
+
 def _api_token() -> str:
-    """读取 API Token（带 1s 缓存，避免每次请求读盘）。"""
+    """读取 API Token（带 1s 缓存，避免每次请求读盘；conftest 打桩点）。"""
     global _api_token_cache
     import time as _t
-    if _api_token_cache and (_t.monotonic() - _api_token_cache[0]) < 1.0:
+    now = _t.monotonic()
+    if _api_token_cache and (now - _api_token_cache[0]) < 1.0:
         return _api_token_cache[1]
-    try:
-        tok = (json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
-               or {}).get("api_token") or ""
-    except Exception:
-        tok = ""
-    _api_token_cache = (_t.monotonic(), tok)
+    tok = _resolve_token()
+    _api_token_cache = (now, tok)
     return tok
 
 
@@ -62,9 +84,10 @@ def get_client_ip(request: FastAPIRequest):
             if any(host_ip in ip_network(net, strict=False) for net in trusted):
                 fwd = request.headers.get("x-forwarded-for")
                 if fwd:
-                    first = fwd.split(",")[0].strip()
+                    # 只采信由受信代理追加的最后一跳，客户端自带的 XFF 前缀不可信。
+                    last = fwd.split(",")[-1].strip()
                     try:
-                        return ip_address(first)
+                        return ip_address(last)
                     except ValueError:
                         pass
         except (ValueError, TypeError):
@@ -99,7 +122,12 @@ def attach_auth_middleware(app: FastAPI) -> None:
         token = _api_token()
         if token and not is_trusted(request) \
                 and request.headers.get("X-API-Token") != token:
-            raise HTTPException(status_code=401, detail="无效的 API Token")
+            # 中间件层抛 HTTPException 不走 FastAPI 异常处理器，会退化成 500；
+            # 必须直接返回 JSONResponse（审计 B4）。
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=401,
+                                content={"code": 401, "message": "无效的 API Token",
+                                         "success": False, "data": None})
         return await call_next(request)
 
     _LOG_SKIP = ("/metrics", "/health", "/docs", "/openapi.json", "/redoc")

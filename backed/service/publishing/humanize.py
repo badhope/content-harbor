@@ -40,19 +40,6 @@ def human_pause(a=0.4, b=1.4):
     time.sleep(gaussian_delay(center, spread, min_ms=0.05, max_ms=8.0))
 
 
-def human_type(page, selector, text, wpm_range=(240, 420)):
-    """逐字符输入，速度按 WPM 换算并加随机波动。
-
-    一次性 fill() 是最明显的行为指纹之一——没有任何人能在 0ms 内输入 11 个字符。
-    """
-    el = page.query_selector(selector)
-    if el:
-        el.click()
-    for char in text:
-        chars_per_minute = random.uniform(*wpm_range)
-        delay_ms = 60_000 / chars_per_minute
-        delay = max(0.04, min(0.32, delay_ms / 1000))
-        page.keyboard.type(char, delay=delay)
 
 
 def human_mouse_move(page, x, y, steps=None):

@@ -22,11 +22,28 @@
     "Rota 代理": "https://www.rota.fans/v1"
   },
 
-  "api_token": "_说明：留空=不启用鉴权（本机 127.0.0.1 使用够用）。把服务暴露到局域网/公网时必须设一串随机值，此后所有请求都要带 X-API-Token 头",
+  "api_token": "",
+
+  "MCP_BRIDGE": {
+    "_说明": "外部 MCP Server 桥接（可选）。配了才会拉起子进程；不配则完全关闭。tools 是白名单，空数组=不授权任何工具。",
+    "_用法": "先去掉某个 server 前导下划线，再填 tools 白名单。用 GET /api/v1/hub/mcp/bridge/<server>/tools 查看实际工具名。",
+    "_playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--headless"],
+      "tools": ["browser_navigate", "browser_snapshot", "browser_take_screenshot"],
+      "timeout": 60
+    },
+    "_fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "tools": ["fetch"],
+      "timeout": 30
+    }
+  },
 
   "platforms": {
     "cnblogs": {
-      "_说明": "纯协议接入（XML-RPC），推荐一条命令自动填充：cd backed && uv run python -m backed.cli --headed bootstrap-cnblogs --username 登录名 --password 密码",
+      "_说明": "纯协议接入（XML-RPC），推荐从仓库根执行：uv run --project backed python -m backed.cli bootstrap-cnblogs --username 登录名 --password-stdin < password.txt",
       "endpoint": "https://rpc.cnblogs.com/metaweblog/你的博客地址名",
       "username": "你的登录用户名",
       "token": "MetaWeblog 访问令牌（不是登录密码，登录密码无效）"
@@ -44,15 +61,34 @@
       "password": "你的登录密码"
     },
 
-    "_浏览器类平台_说明": "以下 7 个平台均走 Playwright 浏览器登录态，登录一次即可（扫码/账密），登录态自动保存到 data/profiles/ 目录，config.json 里不需要填任何字段。用法：cd backed && uv run python -m backed.cli --headed login --platform <平台名>",
+    "devto": {
+      "_说明": "Dev.to（Forem 官方 API）。去 dev.to/settings/extensions 生成 API Key，或设环境变量 DEVTO_API_KEY",
+      "api_key": "你的 dev.to API Key"
+    },
+    "github": {
+      "_说明": "GitHub Pages / Jekyll 仓库（Contents API 直接 commit Markdown）。PAT 勾 repo 权限；也可设环境变量 GITHUB_TOKEN",
+      "token": "ghp_xxx",
+      "owner": "你的用户名",
+      "repo": "你的用户名.github.io",
+      "branch": "main",
+      "path_prefix": "_posts",
+      "site_base": "你的用户名.github.io"
+    },
+    "wechat": {
+      "_说明": "微信公众号（官方草稿箱 API，免扫码）。公众号后台 → 设置与开发 → 基本配置；服务器 IP 需加白名单；个人订阅号默认只进草稿箱",
+      "appid": "wx_xxx",
+      "secret": "你的 secret"
+    },
+
+    "_浏览器类平台_说明": "以下 7 个平台均走 Playwright 浏览器登录态，登录一次即可（扫码/账密），登录态自动保存到 data/profiles/ 目录，config.json 里不需要填任何字段。用法：uv run --project backed python -m backed.cli --headed login --platform <平台名>",
     "_浏览器类平台_列表": {
-      "juejin": "cd backed && uv run python -m backed.cli --headed login --platform juejin   # 掘金（扫码或手机号短信）",
-      "csdn":   "cd backed && uv run python -m backed.cli --headed login --platform csdn     # CSDN（账密或微信扫码）",
-      "zhihu":  "cd backed && uv run python -m backed.cli --headed login --platform zhihu    # 知乎（扫码，发布后自动抓文章ID）",
-      "segmentfault": "cd backed && uv run python -m backed.cli --headed login --platform segmentfault  # 思否（账密）",
-      "bilibili": "cd backed && uv run python -m backed.cli --headed login --platform bilibili   # B站（扫码，仅草稿，发表需到编辑页二次选分区）",
-      "toutiao":  "cd backed && uv run python -m backed.cli --headed login --platform toutiao    # 头条号（扫码，标题限30字）",
-      "oschina":  "cd backed && uv run python -m backed.cli --headed login --platform oschina    # 开源中国（账密，UEditor富文本）"
+      "juejin": "uv run --project backed python -m backed.cli --headed login --platform juejin   # 掘金（扫码或手机号短信）",
+      "csdn":   "uv run --project backed python -m backed.cli --headed login --platform csdn     # CSDN（账密或微信扫码）",
+      "zhihu":  "uv run --project backed python -m backed.cli --headed login --platform zhihu    # 知乎（扫码，发布后自动抓文章ID）",
+      "segmentfault": "uv run --project backed python -m backed.cli --headed login --platform segmentfault  # 思否（账密）",
+      "bilibili": "uv run --project backed python -m backed.cli --headed login --platform bilibili   # B站（扫码，仅草稿，发表需到编辑页二次选分区）",
+      "toutiao":  "uv run --project backed python -m backed.cli --headed login --platform toutiao    # 头条号（扫码，标题限30字）",
+      "oschina":  "uv run --project backed python -m backed.cli --headed login --platform oschina    # 开源中国（账密，UEditor富文本）"
     },
 
     "_平台能力矩阵": {

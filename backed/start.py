@@ -14,7 +14,7 @@ import uvicorn
 
 
 def main():
-    parser = argparse.ArgumentParser(description="内容港 Harbor 后端")
+    parser = argparse.ArgumentParser(description="内容港 Harbour 后端")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--tauri-port-file", default=None,

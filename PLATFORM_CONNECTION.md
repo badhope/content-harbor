@@ -2,21 +2,29 @@
 
 ## 总览
 
-10 个平台适配器分两类，连接方式完全不同：
+15 个平台适配器分两类，连接方式完全不同：
 
 | 类型 | 平台 | 连接方式 | 登录态有效期 |
 |------|------|----------|-------------|
-| 纯协议 | **cnblogs** | 读 `config.json` 的 endpoint/username/token，XML-RPC 直连 | 永不过期 |
-| 浏览器 | csdn / juejin / zhihu / segmentfault / bilibili / toutiao / oschina |
-| 纯协议 | cnblogs / metaweblog | 配置一次，免扫码 | `cd backed && uv run python -m backed.cli login --platform <名>` 扫码一次，Playwright 登录态存本地 profile | 长期（数周~数月，视平台） |
+| 浏览器登录（扫码/账密/验证码，按平台页面为准） | csdn / juejin / zhihu / segmentfault / bilibili / toutiao / oschina / xiaohongshu | `uv run --project backed python -m backed.cli --headed login --platform <名>`，登录态存本地 profile | 长期（数周~数月，视平台） |
+| 纯协议（config.json 填凭据） | cnblogs / metaweblog / 51cto / devto / github / wechat / telegraph | 填 `config.json` 的 `platforms.<名>` 字段，免扫码 | 永不过期（token 类凭据失效才需换） |
 
-统一发布入口：`cd backed && uv run python -m backed.cli publish --id <文章ID> --platforms <逗号分隔>`。
+统一发布入口：`uv run --project backed python -m backed.cli publish --id <文章ID> --platforms <逗号分隔>`。
+
+每个平台的凭据字段一句话说明见应用内「设置 → 平台账号」卡片提示；能力矩阵（支持发布/草稿/更新/列表/标签/封面）由代码级 `CAPABILITIES` 声明，`GET /api/v1/hub/platforms` 原样下发。
 
 ---
 
 ## 一、cnblogs（推荐优先接，最简单）
 
-### 1. 获取三件套
+### 0. 应用内自动抠令牌（推荐，免手贴）
+
+设置 → 平台账号 → 博客园卡片 →「自动抠令牌」：填博客园账号密码，应用弹浏览器登录一次，
+MetaWeblog 三件套自动写进 config.json，账号标在线——全程不用手贴任何字段。
+凭据只在内存 job 里流转，任务库与日志零痕迹；接口为
+`POST /accounts/cnblogs/bootstrap` + 轮询 `GET /accounts/cnblogs/bootstrap/{job_id}`。
+
+### 1. 手动获取三件套（备选）
 
 去博客园网页：
 
@@ -42,21 +50,21 @@
 ### 2. 验证连接
 
 ```bash
-cd backed && uv run python -m backed.cli check --platform cnblogs
+uv run --project backed python -m backed.cli check --platform cnblogs
 # 输出 ✓ 已登录 即凭据有效
 ```
 
 ### 3. 发布
 
 ```bash
-cd backed && uv run python -m backed.cli publish --id 4 --platforms cnblogs --draft
+uv run --project backed python -m backed.cli publish --id 4 --platforms cnblogs --draft
 # 先草稿；确认无误后去掉 --draft 正式发布
 ```
 
 ### 自动抠令牌（替代手贴）
 
 ```bash
-python cli.py bootstrap-cnblogs --username <登录名> --password <登录密码>
+uv run --project backed python -m backed.cli bootstrap-cnblogs --username <登录名> --password-stdin < password.txt
 # 有头浏览器登录一次，自动把 endpoint/username/token 写进 config.json
 ```
 
@@ -67,7 +75,7 @@ python cli.py bootstrap-cnblogs --username <登录名> --password <登录密码>
 ### 1. 首次登录（每个平台各做一次）
 
 ```bash
-cd backed && uv run python -m backed.cli login --platform juejin --headed
+uv run --project backed python -m backed.cli --headed login --platform juejin
 # 弹出有头 Chromium，扫码/输密码登录
 # 登录态存到 data/profiles/<platform>/<account>/，之后 publish 自动复用
 ```
@@ -81,75 +89,99 @@ cd backed && uv run python -m backed.cli login --platform juejin --headed
 | bilibili | 扫码 | 草稿 API（FormData + csrf），正式发布需选分区 |
 | toutiao | 扫码 | 编辑器 UI 注入，发布后 URL 在 `article` 路径 |
 | oschina | 扫码 | UEditor iframe 注入，发布后 URL 在 `/blog/` 路径 |
+| xiaohongshu | App 扫码 | 小红书 Creator 页发布；选择器未实机验证（见适配器 `selector_version`），不支持原地更新（平台限制） |
 
 ### 2. 检查登录态
 
 ```bash
-cd backed && uv run python -m backed.cli check --platform juejin
+uv run --project backed python -m backed.cli check --platform juejin
 # ✓ 已登录 / ✗ 未登录
 ```
 
 ### 3. 发布
 
 ```bash
-cd backed && uv run python -m backed.cli publish --id 4 --platforms juejin,csdn --draft
+uv run --project backed python -m backed.cli publish --id 4 --platforms juejin,csdn --draft
 # 多平台逗号分隔；--draft 只发草稿
 ```
 
 ### 4. 排查
 
 ```bash
-python cli.py diagnose --platform <名>
+uv run --project backed python -m backed.cli diagnose --platform <名>
 # 输出该平台的登录页、是否需要浏览器、验证码策略、推荐接入方式
 ```
 
 ### 5. 验证码专项
 
 ```bash
-python cli.py solve-captcha --platform <名> --wait 180
+uv run --project backed python -m backed.cli solve-captcha --platform <名> --wait 180
 # 打开页面就地处理验证码：先半自动点，不行暂停等人工
 ```
 
 ---
 
-## 三、端到端示例（AI 写稿 → 多平台发布）
+## 三、纯 API 平台（devto / github / wechat / telegraph）
+
+凭据填进 `config.json` 的 `platforms` 段（应用内「设置 → 平台账号」也有每平台提示）：
+
+```json
+{
+  "platforms": {
+    "devto":     { "api_key": "<dev.to/settings/extensions 生成>" },
+    "github":    { "token": "<PAT，勾 repo 权限>", "owner": "<用户/组织>", "repo": "<仓库名>" },
+    "wechat":    { "appid": "<公众号 appid>", "secret": "<公众号 secret，IP 需加白名单>" },
+    "telegraph": { "token": "", "author_name": "Harbour" }
+  }
+}
+```
+
+- **telegraph 免注册**：token 留空即可，首次发布会自动创建账号并把 token 回写进 config.json。
+- **wechat**：个人订阅号默认只能进草稿箱（API 返回 48001 时如实降级并提示）。
+- **github**：发布即 commit 到仓库 Markdown 源；同 path 再 PUT = 原地更新。
+
+验证：`uv run python -m backed.cli check --platform devto`（其余同理）。
+
+---
+
+## 四、端到端示例（AI 写稿 → 多平台发布）
 
 ```bash
 # 1. AI 写 3000 字并入库（不发布）
-python cli.py ai-write --topic "用 Python 实现一个轻量级任务调度器" --words 3000
+uv run --project backed python -m backed.cli ai-write --topic "用 Python 实现一个轻量级任务调度器" --words 3000
 # 输出：{"id": 5, ...}
 
 # 2. 人工确认内容无误后，发布到多个平台（草稿）
-cd backed && uv run python -m backed.cli publish --id 5 --platforms cnblogs,juejin,csdn --draft
+uv run --project backed python -m backed.cli publish --id 5 --platforms cnblogs,juejin,csdn --draft
 
 # 3. 确认后正式发布
-cd backed && uv run python -m backed.cli publish --id 5 --platforms cnblogs,juejin,csdn
+uv run --project backed python -m backed.cli publish --id 5 --platforms cnblogs,juejin,csdn
 ```
 
 > **合规门禁**：AI 源文章发布时自动强制 `draft_only=True`（人审闸门）。想正式上线须单独调 `publish(draft_only=False)`。
 
 ---
 
-## 四、REST API（不跑 CLI 时）
+## 五、REST API（不跑 CLI 时）
 
-服务起在 `127.0.0.1:8800`，关键端点：
+Web/工厂入口默认监听 `127.0.0.1:8000`；仅 `backed.cli serve` 默认使用 `127.0.0.1:8800`。关键端点：
 
 | 端点 | 方法 | 用途 |
 |------|------|------|
-| `/api/hub/health` | GET | 服务健康检查（db/events_log/ai_ready） |
-| `/api/hub/platforms` | GET | 列出 9 个平台适配器 |
-| `/api/hub/articles` | POST | 新建文章 |
-| `/api/hub/articles/{id}/publish` | POST | 发布 `{"platforms":["cnblogs"],"draft_only":false}` |
-| `/api/hub/ai/write` | POST | AI 写稿 `{"topic":"...","words":3000}` |
-| `/api/hub/ai/gate` | POST | 合规门禁检查 |
-| `/api/hub/metrics` | GET | Prometheus 格式指标 |
-| `/api/hub/jobs` | GET | 发布任务列表 |
+| `/api/v1/hub/health` | GET | 服务健康检查（db/events_log/ai_ready） |
+| `/api/v1/hub/platforms` | GET | 平台清单 + 代码级能力矩阵 |
+| `/api/v1/hub/articles` | POST | 新建文章 |
+| `/api/v1/hub/articles/{id}/publish` | POST | 发布 `{"platforms":["cnblogs"],"draft_only":false}` |
+| `/api/v1/hub/ai/write` | POST | AI 写稿 `{"topic":"...","words":3000}` |
+| `/api/v1/hub/ai/gate` | POST | 合规门禁检查 |
+| `/api/v1/hub/metrics` | GET | Prometheus 格式指标 |
+| `/api/v1/hub/jobs` | GET | 发布任务列表 |
 
 ---
 
-## 五、当前状态
+## 六、首次接入检查单
 
-- 服务在 `127.0.0.1:8800` 运行中，`/api/hub/health` 全绿
-- `config.json` 里 cnblogs 三项还是**模板占位符**，需填入真实值才能发布
-- 浏览器平台均未扫码登录，需先 `login --headed` 各做一次
-- AI API 已配置（Agnes 3.0-flash），`/api/hub/ai/status` 返回 ready
+1. `GET /api/v1/hub/health` 全绿；
+2. 纯协议平台先填 `config.json`（见第三节），`check --platform <名>` 返回 ✓；
+3. 浏览器平台逐个 `--headed login` 扫码（见第二节），扫码完点「检测」确认登录态；
+4. 发一篇草稿到目标平台，回读确认无误后再正式发布。

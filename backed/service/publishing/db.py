@@ -9,12 +9,66 @@
 """
 
 import json
+import os
 import sqlite3
 import threading
 import time
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "hub.db"
+def data_root() -> Path:
+    """数据根目录：优先 HUB_DATA_DIR（Tauri/Docker 传入持久目录）。"""
+    env = os.environ.get("HUB_DATA_DIR", "").strip()
+    if env:
+        p = Path(env)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    return Path(__file__).resolve().parent.parent / "data"
+
+
+def config_file() -> Path:
+    """运行配置路径：与数据库/媒体/登录态共用同一持久数据根。
+
+    显式 HARBOUR_CONFIG_FILE 优先；否则固定使用数据根内的 config.json。
+    旧版 backed/config.json 只由 ``legacy_config_file`` 提供只读回退，
+    避免"新路径不存在就永远写回旧路径"的粘滞行为。
+    """
+    configured = os.environ.get("HARBOUR_CONFIG_FILE", "").strip()
+    if configured:
+        path = Path(configured)
+    elif "HUB_DATA_DIR" in os.environ:
+        path = data_root() / "config.json"
+    else:
+        return legacy_config_file()
+    legacy = legacy_config_file()
+    if path != legacy and not path.exists() and legacy.is_file():
+        import shutil
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with legacy.open("rb") as source, path.open("xb") as target:
+                shutil.copyfileobj(source, target)
+        except FileExistsError:
+            pass
+    return path
+
+
+def legacy_config_file() -> Path:
+    """旧版配置位置（只读迁移来源）。"""
+    return Path(__file__).resolve().parents[2] / "config.json"
+
+
+def load_config_dict() -> dict:
+    """Read runtime config, falling back to the legacy file without writing it."""
+    for path in (config_file(), legacy_config_file()):
+        if path.is_file():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return {}
+            return data if isinstance(data, dict) else {}
+    return {}
+
+
+DB_PATH = data_root() / "hub.db"
 
 
 class LockedConnection(sqlite3.Connection):
@@ -155,6 +209,37 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at DESC);
 """
 
+# 全文检索：SQLite 自带 FTS5（trigram 分词，中文按 3 字滑窗，无需外部分词器）。
+# 之前 search_articles 用 `LIKE '%kw%'` 全表扫 + 无法走索引，文章上千篇后
+# 每次搜索都是 O(n) 的整表读。FTS5 把检索变成倒排索引查询，并能按相关度排序。
+# 外部内容表（content='articles'）不重复存正文，只存索引。
+FTS_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
+    title, content_md, summary,
+    content='articles', content_rowid='id',
+    tokenize='trigram'
+);
+CREATE TRIGGER IF NOT EXISTS articles_ai AFTER INSERT ON articles BEGIN
+    INSERT INTO articles_fts(rowid, title, content_md, summary)
+    VALUES (new.id, new.title, new.content_md, new.summary);
+END;
+CREATE TRIGGER IF NOT EXISTS articles_ad AFTER DELETE ON articles BEGIN
+    INSERT INTO articles_fts(articles_fts, rowid, title, content_md, summary)
+    VALUES ('delete', old.id, old.title, old.content_md, old.summary);
+END;
+CREATE TRIGGER IF NOT EXISTS articles_au AFTER UPDATE ON articles BEGIN
+    INSERT INTO articles_fts(articles_fts, rowid, title, content_md, summary)
+    VALUES ('delete', old.id, old.title, old.content_md, old.summary);
+    INSERT INTO articles_fts(rowid, title, content_md, summary)
+    VALUES (new.id, new.title, new.content_md, new.summary);
+END;
+"""
+
+# 列表投影：列表页只需要元信息，正文（可能几十 KB/篇）不参与列表查询。
+# 100 篇 × 20KB 正文 = 2MB 无谓序列化 + JSON 传输，列表接口因此慢且吃内存。
+LIST_COLUMNS = ("id, title, summary, tags, cover, status, source, ai_model, "
+                "origin_url, created_at, updated_at, length(content_md) AS chars")
+
 # 增量迁移：按版本号从小到大执行；已执行过的版本跳过。
 # 每项是 (版本号, 需要执行的 SQL 列表)。迁移只增不改，禁止删除已有列。
 MIGRATIONS = [
@@ -225,8 +310,33 @@ def connect(db_path=None):
     conn.executescript(SCHEMA)
     # 建表后再跑增量迁移（v2+ 列变更），migrate 幂等，多开无副作用
     migrate(conn)
+    _ensure_fts(conn)
     prune_jobs(conn, keep=500)
     return conn
+
+
+def _ensure_fts(conn):
+    """建 FTS5 索引并做一次性回填。FTS5 不可用时静默降级到 LIKE 检索。"""
+    try:
+        conn.executescript(FTS_SCHEMA)
+        conn.commit()
+    except Exception:
+        return False
+    try:
+        # 回填：外部内容表的索引不会自动包含建表前已存在的行。
+        # 用 meta 标记只做一次（同时覆盖"索引被手动删掉"的自愈场景）。
+        done = conn.execute(
+            "SELECT value FROM meta WHERE key='fts_backfilled'").fetchone()
+        count = conn.execute("SELECT COUNT(*) FROM articles_fts").fetchone()[0]
+        total = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        if count != total or not done:
+            conn.execute("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')")
+            conn.execute("INSERT INTO meta(key,value) VALUES('fts_backfilled','1') "
+                         "ON CONFLICT(key) DO UPDATE SET value='1'")
+            conn.commit()
+    except Exception:
+        pass
+    return True
 
 
 def prune_jobs(conn, keep=500):
@@ -265,8 +375,10 @@ def update_article(conn, article_id, **kw):
         return False
     kw["updated_at"] = now()
     sets = ", ".join(f"{k}=?" for k in kw)
-    conn.execute(f"UPDATE articles SET {sets} WHERE id=?", (*kw.values(), article_id))
+    cur = conn.execute(f"UPDATE articles SET {sets} WHERE id=?", (*kw.values(), article_id))
     conn.commit()
+    if cur.rowcount == 0:
+        return False
     # 内容变了，已发布的实例全部标记待更新
     if "content_md" in kw or "title" in kw:
         conn.execute(
@@ -280,21 +392,76 @@ def get_article(conn, article_id):
     return conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
 
 
-def list_articles(conn, status=None, limit=100, offset=0):
-    sql = "SELECT * FROM articles"
+def delete_article(conn, article_id):
+    """删除文章及其版本历史与发布账本，单事务完成。
+
+    平台侧已发布的副本不受影响——那是平台自己的内容，本地只清账本。
+    返回各表删除行数，调用方据此报告影响面。
+    """
+    with conn:
+        versions = conn.execute(
+            "DELETE FROM version_history WHERE article_id=?", (article_id,)).rowcount
+        publications = conn.execute(
+            "DELETE FROM publications WHERE article_id=?", (article_id,)).rowcount
+        articles = conn.execute(
+            "DELETE FROM articles WHERE id=?", (article_id,)).rowcount
+    return {"articles": articles, "publications": publications, "versions": versions}
+
+
+def list_articles(conn, status=None, limit=100, offset=0, slim=False):
+    """列出文章。slim=True 时只取列表元信息（不取正文），列表页专用。
+
+    limit<=0 在 SQLite 里等于"不限量"，会把整表拉出来；统一夹到 1..1000。
+    """
+    limit = max(1, min(int(limit), 1000))
+    offset = max(0, min(int(offset), 1_000_000))
+    sql = f"SELECT {LIST_COLUMNS} FROM articles" if slim else "SELECT * FROM articles"
     args = []
     if status:
         sql += " WHERE status=?"
         args.append(status)
-    sql += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+    # id 作次键：updated_at 相同（批量导入常见）时保证分页顺序稳定
+    sql += " ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?"
     args += [limit, offset]
     return conn.execute(sql, args).fetchall()
 
 
-def search_articles(conn, keyword):
+def count_articles(conn, status=None):
+    sql = "SELECT COUNT(*) FROM articles"
+    args = []
+    if status:
+        sql += " WHERE status=?"
+        args.append(status)
+    return conn.execute(sql, args).fetchone()[0]
+
+
+def search_articles(conn, keyword, limit=50):
+    """全文检索。优先 FTS5（相关度排序），不可用/无命中时回退 LIKE。
+
+    trigram 分词要求查询词至少 3 个字符；中文 2 字词（如「异步」）走
+    LIKE 兜底更准，所以两个字符以下直接走 LIKE。
+    """
+    kw = (keyword or "").strip()
+    if not kw:
+        return []
+    limit = max(1, min(int(limit), 200))
+    if len(kw) >= 3:
+        try:
+            # 引号包裹避免 FTS5 把用户输入当语法（NEAR/OR/前缀 * 等）
+            match = '"' + kw.replace('"', '""') + '"'
+            rows = conn.execute(
+                """SELECT a.* FROM articles_fts f
+                   JOIN articles a ON a.id = f.rowid
+                   WHERE articles_fts MATCH ?
+                   ORDER BY rank LIMIT ?""", (match, limit)).fetchall()
+            if rows:
+                return rows
+        except Exception:
+            pass   # FTS 不可用或查询语法异常：回退 LIKE
     return conn.execute(
-        "SELECT * FROM articles WHERE title LIKE ? OR content_md LIKE ? ORDER BY updated_at DESC LIMIT 50",
-        (f"%{keyword}%", f"%{keyword}%")).fetchall()
+        """SELECT * FROM articles WHERE title LIKE ? OR content_md LIKE ?
+           ORDER BY updated_at DESC LIMIT ?""",
+        (f"%{kw}%", f"%{kw}%", limit)).fetchall()
 
 
 # ------------------------- publications -------------------------
@@ -404,7 +571,9 @@ def get_task(conn, task_id):
     return dict(row)
 
 
-def list_tasks(conn, limit=50, kind=None, status=None):
+def list_tasks(conn, limit=50, kind=None, status=None, offset=0):
+    limit = max(1, min(int(limit), 1000))
+    offset = max(0, min(int(offset), 1_000_000))
     sql = "SELECT * FROM tasks"
     where, args = [], []
     if kind:
@@ -415,18 +584,41 @@ def list_tasks(conn, limit=50, kind=None, status=None):
         args.append(status)
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY id DESC LIMIT ?"
-    args.append(limit)
+    sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
+    args += [limit, offset]
     return [dict(r) for r in conn.execute(sql, args).fetchall()]
+
+
+def count_tasks(conn, kind=None, status=None):
+    sql = "SELECT COUNT(*) FROM tasks"
+    where, args = [], []
+    if kind:
+        where.append("kind=?")
+        args.append(kind)
+    if status:
+        where.append("status=?")
+        args.append(status)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    return conn.execute(sql, args).fetchone()[0]
+
+
+def next_pending_tasks(conn, limit=10):
+    """按创建时间升序取待跑任务（FIFO）。审计 B5：原实现取 id DESC 再排序，
+    超 10 条积压时最早的会被永久饿死。"""
+    return [dict(r) for r in conn.execute(
+        "SELECT * FROM tasks WHERE status='pending' ORDER BY created_at ASC, id ASC LIMIT ?",
+        (limit,)).fetchall()]
 
 
 def update_task(conn, task_id, **kw):
     if not kw:
-        return
+        return False
     kw["updated_at"] = now()
     sets = ", ".join(f"{k}=?" for k in kw)
-    conn.execute(f"UPDATE tasks SET {sets} WHERE task_id=?", (*kw.values(), task_id))
+    cur = conn.execute(f"UPDATE tasks SET {sets} WHERE task_id=?", (*kw.values(), task_id))
     conn.commit()
+    return cur.rowcount > 0
 
 
 def prune_tasks(conn, keep=200):

@@ -142,12 +142,15 @@ def test_service_publish_human_confirmed_stamps_ext(demo_hub):
 
 
 def test_service_publish_unconfirmed_ai_rejected_422(demo_hub):
-    """R2/S2.1: 未确认的 AI 稿正式发布 → 422，发布记录不产生。"""
-    from fastapi import HTTPException
+    """R2/S2.1: 未确认的 AI 稿正式发布 → GateError（HTTP 层映射 422），发布记录不产生。
+
+    I5 起 service 层抛领域异常而非 HTTPException：MCP/CLI 同一路径也能识别业务错误；
+    422 由 app/exceptions.py 的 GateError handler 保证（见 test_audit_20261027）。
+    """
+    from service.publishing.gate import GateError
     aid = db.create_article(demo_hub.conn, "AI 稿2", SAFE_CONTENT, source="ai")
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(GateError):
         demo_hub.publish(aid, ["zhihu"])
-    assert ei.value.status_code == 422
 
 
 def test_dispatch_passes_human_confirmed():
@@ -218,7 +221,7 @@ def ai_cfg_file(tmp_path, monkeypatch):
     """ai_config 与 gate 的 CONFIG_FILE 都指到临时文件；清掉可能存在的 env key。"""
     from service.publishing import ai_config
     cfg = tmp_path / "ai-config.json"
-    cfg.write_text(json.dumps({"HARBOR_API_TOKEN": "secret-token-keepme"}),
+    cfg.write_text(json.dumps({"HARBOUR_API_TOKEN": "secret-token-keepme"}),
                    encoding="utf-8")
     monkeypatch.setattr(ai_config, "CONFIG_FILE", cfg)
     monkeypatch.setattr(gate, "CONFIG_FILE", cfg)
@@ -246,7 +249,7 @@ def test_ai_config_mask_and_roundtrip(ai_cfg_file):
     assert out["review"]["ai_direct_publish"] is True
     # 文件：无关键保留 + 明文 key 确实落盘（本地文件本来就是明文存储面）
     raw = json.loads(ai_cfg_file.read_text(encoding="utf-8"))
-    assert raw["HARBOR_API_TOKEN"] == "secret-token-keepme"
+    assert raw["HARBOUR_API_TOKEN"] == "secret-token-keepme"
     assert raw["providers"]["deepseek"]["api_key"] == "sk-1234567890abcdef"
     assert raw["AI_DIRECT_PUBLISH"] is True
     assert raw["REVIEW_MODEL"] == "glm-4-air"

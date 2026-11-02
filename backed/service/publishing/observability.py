@@ -36,9 +36,18 @@ from fastapi import Request
 
 from utils.logger import get_logger, setup_logger
 
-ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
-OBS_DIR = DATA / "observability"
+def _data_dir() -> Path:
+    """事件日志跟随 `db.data_root()`：桌面版走 %APPDATA%，容器走挂载卷。
+
+    回归：旧实现硬编码 `service/data`，而 DB/Fernet/profile 都走 data_root()，
+    桌面版于是出现"数据库在 APPDATA、日志/验证码截图留在安装目录"的分裂，
+    卸载重装会丢排障现场，备份脚本也漏掉这些产物。
+    """
+    from service.publishing.db import data_root
+    return data_root()
+
+
+OBS_DIR = _data_dir() / "observability"
 EVENT_LOG = OBS_DIR / "events.log"
 
 # 单文件 10MB，留 5 份备份；发布链路是低频事件，一年也不会撑爆
@@ -94,13 +103,16 @@ class MetricRegistry:
         METRICS.snapshot()  # -> {name: value}
     """
 
+    # 固定分桶：毫秒级 API 到分钟级发布都覆盖，避免低端只有一个桶导致分位失真
+    BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60,
+               float("inf")]
+
     def __init__(self):
         self._lock = threading.Lock()
         self._counters = {}
         self._gauge = {}
-        self._hist = {}   # name -> {"sum": float, "n": int, "buckets": {label: int}}
-        # 固定分桶，覆盖"快/慢/崩"三档
-        self._BUCKETS = [0.5, 1, 2, 5, 10, 30, 60, float("inf")]
+        self._hist = {}   # name -> {"sum": float, "n": int, "max": float, "buckets": {label: int}}
+        self._BUCKETS = self.BUCKETS
 
     def incr(self, name: str, delta: int = 1):
         with self._lock:
@@ -113,16 +125,46 @@ class MetricRegistry:
     def observe(self, name: str, value: float):
         """记录一次耗时（秒），进固定分桶。"""
         with self._lock:
-            h = self._hist.setdefault(name, {"sum": 0.0, "n": 0, "max": 0.0, "buckets": {}})
+            h = self._hist.setdefault(name, {"sum": 0.0, "n": 0, "max": 0.0,
+                                             "buckets": {}})
             h["sum"] += value
             h["n"] += 1
             if value > h["max"]:
                 h["max"] = value
+            # 累积语义：一次观测会同时落进所有 >= value 的桶
             for b in self._BUCKETS:
                 if value <= b:
                     label = str(b) if b != float("inf") else "+Inf"
                     h["buckets"][label] = h["buckets"].get(label, 0) + 1
-                    break
+
+    def _quantile(self, buckets: dict, total: int, q: float,
+                  max_value: float = 0.0) -> float:
+        """按累积桶线性插值估算分位（Prometheus histogram_quantile 同款思路）。
+
+        分位落进 +Inf 桶（超出最大有限边界 60s）时无法插值出上界，返回实测 max：
+        否则 120s 的观测会被报成 p99=60s，尾部被系统性低估。
+        """
+        if not total:
+            return 0.0
+        rank = q * total
+        upper = 0.0
+        for b in self._BUCKETS:
+            label = str(b) if b != float("inf") else "+Inf"
+            cum = buckets.get(label, 0)
+            if cum >= rank:
+                lower = upper
+                if b == float("inf"):
+                    return max_value if max_value > lower else lower
+                if b == lower:
+                    return upper
+                # 桶内均匀分布假设
+                prev = buckets.get(str(lower), 0) if lower else 0
+                span = cum - prev
+                if span <= 0:
+                    return upper
+                return lower + (b - lower) * (rank - prev) / span
+            upper = b if b != float("inf") else upper
+        return upper
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -135,12 +177,70 @@ class MetricRegistry:
                     "sum": h["sum"],
                     "avg": (h["sum"] / h["n"]) if h["n"] else 0.0,
                     "max": h.get("max", 0.0),
-                    "buckets": dict(h["buckets"]),
+                    "buckets": {label: h["buckets"].get(label, 0)
+                                for label in (str(b) if b != float("inf") else "+Inf"
+                                              for b in self._BUCKETS)},
+                    "quantiles": {
+                        "p50": round(self._quantile(h["buckets"], h["n"], 0.50, h["max"]), 4),
+                        "p90": round(self._quantile(h["buckets"], h["n"], 0.90, h["max"]), 4),
+                        "p99": round(self._quantile(h["buckets"], h["n"], 0.99, h["max"]), 4),
+                    },
                 }
             return out
 
 
 METRICS = MetricRegistry()
+
+
+# ---------------------------------------------------------------------------
+# Prometheus 标准导出（/metrics 双格式）
+#
+# 自研 snapshot 的 JSON 便于人看，但 Prometheus / Grafana 只吃文本 exposition
+# 格式；之前要接监控得自己写 exporter。这里用官方 prometheus_client 生成
+# 标准文本（counter/gauge/histogram），指标名与原 JSON 的 key 一一对应，
+# 已有的 `/metrics?format=json` 行为完全不变。
+# ---------------------------------------------------------------------------
+def prometheus_exposition() -> str:
+    """把内存指标渲染成 Prometheus 文本格式（每次调用重建，指标基数受控）。"""
+    from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
+
+    reg = CollectorRegistry()
+    snap = METRICS.snapshot()
+    for name, value in snap["counters"].items():
+        safe = _prom_name(name)
+        c = Counter(safe, f"Harbour counter {name}", registry=reg)
+        # prometheus_client 不允许直接 set，用 _value 的接口保持精确值
+        c.inc(value)
+    for name, value in snap["gauge"].items():
+        g = Gauge(_prom_name(name), f"Harbour gauge {name}", registry=reg)
+        g.set(value)
+    for name, hist in snap["histograms"].items():
+        safe = _prom_name(name)
+        h = Histogram(safe, f"Harbour histogram {name}",
+                      buckets=MetricRegistry.BUCKETS, registry=reg)
+        # 直接写桶计数：snapshot 里已是累积桶语义
+        for label, count in hist["buckets"].items():
+            if label == "+Inf":
+                continue
+            try:
+                h.labels()._buckets[float(label)] = count
+            except Exception:
+                continue
+        try:
+            h.labels()._sum = hist["sum"]
+            h.labels()._count = hist["count"]
+        except Exception:
+            pass
+    return generate_latest(reg).decode("utf-8")
+
+
+def _prom_name(name: str) -> str:
+    """指标名规范化：只保留 [a-zA-Z0-9_]，点号换下划线。"""
+    import re as _re
+    out = _re.sub(r"[^a-zA-Z0-9_]", "_", name)
+    if not out or out[0].isdigit():
+        out = "harbour_" + out
+    return out
 
 
 # ---------------------------------------------------------------------------
