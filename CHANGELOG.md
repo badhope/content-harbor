@@ -2,13 +2,69 @@
 
 ---
 
-## [未发布]（安全边界、生命周期与文档口径修复）
+## [未发布]
 
-- 浏览器操控与网页导入增加 DNS/IP 和重定向校验，但仍存在 DNS 重绑定风险；Markdown 导入限制在安全根和 Markdown 扩展名内。
-- MCP SSE 默认回环监听，远程模式必须配置 `HARBOUR_MCP_TOKEN`；外部 MCP 子进程不再继承完整父环境。
-- Hub shutdown 关闭巡检、调度、任务、浏览器、事件 dispatcher 与数据库；手动定时触发不再修改计划字段，缺失任务统一返回 404。
-- cnblogs bootstrap/CLI 不再回传访问令牌，CLI 密码改为隐藏输入或 stdin；生产/Docker 配置不再依赖公开默认密钥。
-- README、平台连接指南、版本元数据和 Docker 数据/鉴权说明与当前实现同步。真实平台发布、Tauri sidecar 和自动更新仍需按环境单独验收。
+（下一版本尚未定项，见 `docs/ROADMAP.md`。）
+
+---
+
+## [0.13.0] - 2026-11-02（安全边界收口、浏览器能力恢复、工程治理）
+
+> 主题：**把"暂时禁用"换成"真正修好"，并让仓库具备可重复的项目管理。**
+> 测试：后端 506 → 529；前端 62 → 63；新增 4 个安全回归测试文件。
+
+### Added
+
+- 新增 `url_safety` 模块：公网 IP 校验（拒绝回环/私网/链路本地/CGNAT/保留地址）、
+  超时钳制、连接钉扎抓取 `fetch_pinned`、逐跳重定向再校验、并发槽与响应体积上限。
+- 网页导入与浏览器操控共用同一套网络校验，不再是两处各写一份的黑名单。
+- 项目管理体系：`docs/PROJECT_MANAGEMENT.md`（分支模型、完成定义、三道门禁、五仓同步、
+  技术债政策）、`docs/VERSIONING.md`（SemVer 与发布清单）、`docs/ROADMAP.md`、
+  `docs/REPO_METADATA.md`、`docs/verification/`。
+- 工具链：`scripts/bump_version.py`（五处版本号原子更新与校验）、
+  `scripts/scan_secrets.py`（高熵与已知 token 前缀扫描）、
+  `scripts/capture_screenshots.py`（README 截图可重复生成）。
+- 开源治理：三种 Issue 模板、PR 模板、CI 拆成版本一致性 / 密钥扫描 / 后端 / 前端四个 job。
+- 双语 README：英文为主 `README.md`，中文 `README.zh-CN.md`，互链切换。
+
+### Changed
+
+- **浏览器抓取与截图真正恢复。** 此前因 DNS 重绑定风险整块抛错禁用；现在用 Chromium
+  `--host-resolver-rules` 把目标主机钉在已校验公网 IP 上，并加请求级守卫拦截解析到
+  内网的子资源与跨域跳转。已实测 example.com 抓取成功，5 类内网目标全部拦截。
+- 运行配置与数据库/媒体/登录态统一到同一数据根；旧 `backed/config.json` 只作只读迁移来源。
+- 关闭流程按 scheduler → tasks → browser → dispatcher → DB 顺序幂等执行；任一步停不下来
+  就保留连接并报错，不伪装成功。
+- MCP SSE 默认只绑定回环，远程必须配置 `HARBOUR_MCP_TOKEN`；外部 MCP 子进程改用白名单
+  环境，不再继承父进程密钥。
+- 前端访问令牌存本机浏览器；SSE 改用 fetch 流以携带 `X-API-Token`。
+- `check_all` 从六道扩到八道：新增版本一致性与密钥扫描。
+
+### Fixed
+
+- 移动端设置页在 375px 宽度下，150px 固定标签列把说明文字压成逐字折行并溢出；
+  窄屏改为标签与内容上下堆叠。
+- 手动定时触发不再修改 `next_run`/`last_run`/`run_count` 等计划字段；缺失任务统一 404。
+- cnblogs bootstrap 与 CLI 不再回传访问令牌，密码改为隐藏输入或 stdin。
+- Markdown 导入限制在安全根内，只允许 `.md/.markdown`，拒绝配置/数据库/日志文件。
+
+### Removed
+
+- 删除 README 中"单文件 exe 双击即用""8 个 Provider""30 个 Tool""掘金纯 API 发布"
+  等无法被代码或验证支撑的表述。
+- `review-findings.md` 迁入 `docs/audit/archive/`；三篇技术文章从 `backed/service/`
+  迁入 `docs/articles/`。
+
+### Security
+
+- 修复浏览器通道的 DNS 重绑定暴露面（校验与连接之间不再存在可替换窗口）。
+- 修复 MCP SSE 在远程监听时的未鉴权暴露。
+- 修复外部 MCP 子进程继承父进程 API Key / Token 的问题。
+- 生产与 Docker 启动改为快速失败：缺 `HARBOUR_API_TOKEN` / `SECRET_KEY` 直接拒绝启动。
+
+### Verification
+
+见 `docs/verification/2026-11-02-regression.md`。真实平台发布、Docker 与 Tauri 构建仍未验证。
 
 ---
 

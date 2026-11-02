@@ -5,11 +5,38 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # 五个清单的版本号必须一致，否则发布时会出现"标签和界面显示不同版本"。
+  version-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: 版本一致性
+        run: uv run --project backed python scripts/bump_version.py --check
+
+  # 密钥扫描独立成 job：它在任何代码执行之前就能拦住"提交里带 token"。
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: 密钥扫描
+        run: uv run --project backed python scripts/scan_secrets.py
+
   backend:
     runs-on: ubuntu-latest
     defaults:
@@ -20,18 +47,18 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - name: 安装依赖（uv sync，含 dev 组）
+      - name: 安装依赖
         run: uv sync
-      - name: 语法检查（compileall）
-        run: uv run python -m compileall -q .
-      - name: 静态门禁（ruff：未定义名 / 运行时错误）
+      - name: 语法检查
+        run: uv run python -m compileall -q -x '(^|[\\/])(\.venv|node_modules|__pycache__)($|[\\/])' .
+      - name: 静态门禁
         run: uv run ruff check .
-      - name: 依赖安全扫描（pip-audit，仅报告不阻断）
+      - name: 依赖漏洞（仅报告）
         continue-on-error: true
         run: uv run --with pip-audit pip-audit --strict --index-url https://pypi.org/simple
-      - name: 单元测试（pytest）
-        run: uv run pytest -q --no-header
-      - name: 启动冒烟（应用可装配）
+      - name: 单元测试
+        run: uv run pytest -q --no-header -p no:cacheprovider
+      - name: 启动冒烟
         run: uv run python -c "from app.factory import create_app; assert create_app(); print('app assembled ok')"
 
   frontend:
@@ -51,9 +78,9 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
-      - name: 前端 lint（eslint）
+      - name: lint
         run: pnpm lint
-      - name: 前端单测（vitest）
+      - name: 单元测试
         run: pnpm test
-      - name: 构建（vite build，产物须能在 FastAPI /static 下挂载）
+      - name: 构建
         run: pnpm build

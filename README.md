@@ -1,165 +1,176 @@
-# 港 Harbour —— 桌面 + Web 双形态 AI 内容发布中枢
+# Harbour
 
-一个后台管所有内容平台：知乎 / 掘金 / CSDN / B站 / 博客园 / 头条 / 开源中国 / SegmentFault / 51CTO / MetaWeblog 自建博客 / 微信公众号 / GitHub Pages / Dev.to / Telegraph / 小红书。
-提供 AI 写稿、多平台发布、定时任务和人工审核等功能；各平台能力不同，实际发布前请先验证登录态并试发草稿。
+**English** · [简体中文](README.zh-CN.md)
 
-**当前限制**：浏览器抓取与截图暂因安全问题禁用；平台适配器的静态探针不代表所有平台都已真实发布验证。
+Self-hosted publishing hub for people who write in Chinese and publish everywhere.
+Write once, ship to fifteen platforms, and keep every published copy in sync — with AI
+drafting, a compliance gate, and a human in the loop when a platform fights back.
 
-## 形态对照
+[![CI](https://github.com/badhope/content-harbor/actions/workflows/ci.yml/badge.svg)](https://github.com/badhope/content-harbor/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-| | Web 形态 | 桌面形态 |
-|---|---|---|
-| 前端 | Vue 3 + Vite 浏览器 | Vue 3 + Tauri 系统 WebView |
-| 后端 | FastAPI + uvicorn 手动启 | 由 Tauri 内嵌启动，对外不可见 |
-| 访问 | http://localhost:8000 | Tauri 应用与后端 sidecar（打包尚待验证） |
+![Write workspace](docs/screenshots/01-write.png)
 
-桌面形态基于 Tauri 2.0，复用 100% 前端代码与后端代码——不写两套业务逻辑。
+---
 
-## 快速开始
+## What it does
 
-### 桌面端（推荐）
+| | |
+|---|---|
+| **Fifteen platforms, one publish action** | Zhihu, Juejin, CSDN, Bilibili, Cnblogs, Toutiao, OSChina, SegmentFault, 51CTO, MetaWeblog blogs, WeChat Official Accounts, GitHub Pages, Dev.to, Telegraph, Xiaohongshu. Each adapter declares what it can actually do — publish, draft, update, tags, cover, Q&A — and the UI greys out the rest. |
+| **Update in place** | Edit once; every already-published copy is updated rather than duplicated. |
+| **AI drafting with a compliance gate** | Seven provider routes with failover, plus a four-stage gate before anything ships: safety scan → AIGC disclosure → dual-model review → human confirmation. |
+| **Pauses instead of guessing** | CAPTCHA, risk control, expired session: the task stops, tells you, and resumes where it left off. |
+| **Session persistence** | Log in once per platform. Cookies live in a local profile plus an atomic snapshot, so a wiped profile does not force a re-scan. |
+| **MCP server, 32 tools** | Drive the whole pipeline from Claude Code, Cursor or any MCP client. stdio by default; remote SSE requires a bearer token. |
+| **Everything local** | SQLite with FTS5 full-text search, local media store with content-addressed dedupe, no vendor account, no telemetry. |
+
+## Screens
+
+| Publish center | Task center |
+|---|---|
+| ![Publish](docs/screenshots/02-publish.png) | ![Tasks](docs/screenshots/03-tasks.png) |
+
+| Settings | Mobile |
+|---|---|
+| ![Settings](docs/screenshots/04-settings.png) | ![Mobile](docs/screenshots/05-mobile.png) |
+
+## Quick start
+
+Requires Python 3.10+, [uv](https://docs.astral.sh/uv/), Node 20+ and pnpm.
+
+```bash
+git clone https://github.com/badhope/content-harbor.git
+cd content-harbor
+
+# Terminal 1 — backend
+cd backed
+uv sync
+uv run uvicorn app.factory:create_app --factory --host 127.0.0.1 --port 8000 --reload
+
+# Terminal 2 — frontend
+cd web
+pnpm install
+pnpm dev            # http://127.0.0.1:5173
+```
+
+Open <http://127.0.0.1:5173>. The Vite dev server proxies `/api` to port 8000.
+
+### Desktop shell (experimental)
 
 ```bash
 cd web
 pnpm install
 pnpm run tauri dev
 ```
-桌面启动时，Tauri 自动以 sidecar 模式启动 `backed/` Python 后端，前端自动连接
-本地后端，不需要手动开命令行窗口。
 
-### 桌面端构建
+Tauri launches the Python backend as a sidecar. **Packaging is not verified across
+platforms** — see [Known limits](#known-limits).
 
-桌面端需要为目标平台构建并准备后端 sidecar。当前仓库的打包链路尚未完成跨平台验证，不能保证单文件安装或自动更新可用。Windows 构建可先检查 `scripts/build_sidecar.ps1` 和 MSVC 工具链，再运行 `pnpm --dir web tauri build`。
+## Connect a platform
 
-### Web 开发
+Two connection styles, decided per platform:
+
+**Browser login** — for platforms without a usable API. Open *Settings → Platform
+accounts*, click **Log in** on the platform, and complete the scan or password step in
+the window that opens. The session is stored in a local profile and reused.
 
 ```bash
-# 终端 1：前端
-cd web
-pnpm install
-pnpm dev          # http://localhost:5173
-
-# 终端 2：后端
-cd backed
-uv sync            # 首次安装依赖
-uv run uvicorn app.factory:create_app --factory --host 127.0.0.1 --port 8000 --reload
+uv run --project backed python -m backed.cli --headed login --platform zhihu
 ```
-浏览器打开 http://localhost:5173（vite 代理自动转发 API 到 :8000）。
 
-## 核心能力
+**Protocol credentials** — for platforms with a stable API. Fill in
+`platforms.<name>` in `config.json`; no browser needed. See
+[PLATFORM_CONNECTION.md](PLATFORM_CONNECTION.md) for the field list per platform.
 
-| 能力 | 说明 |
-|---|---|
-| 一键多投 | 选平台 → 发布 → 全平台同步，间隔 8-20s 防风控 |
-| 回答问题 | 知乎：发布轨粘贴问题链接即写回答（留空则发专栏文章），回读+发布双验证 |
-| 原地更新 | 改一处，已发布文章全平台同步，不产生重复内容 |
-| 定时发布 | 一次性 / 每天 / 每周 / cron，到期自动投递 |
-| AI 写稿 | 7 个内置 Provider 路由，支持配置扩展与故障转移 |
-| AI 改写/润色 | 改完自动标记待同步，点一下全平台更新 |
-| AIGC 合规 | 四道闸门：安全扫描 → AIGC 标识 → 双模型审查 → 人审 in-the-loop |
-| 人工兜底 | 验证码/风控/登录失效 → 任务自动暂停，人工处理完点恢复 |
-| 版本管理 | 每次改前自动快照，误改一键回滚 |
-| 标签治理 | 同义合并 / 别名映射 / 词云 / 智能推荐 |
-| 内容质检 | 可读性 + SEO + 近似重复检测，一键出报告 |
-| MCP Server | 32 个 Tool（另可桥接外部 MCP Server）；stdio 默认可用，SSE 默认只监听回环，远程 SSE 必须配置 Bearer Token |
-| 媒体资产 | 图片内容寻址去重、Markdown 改写、本地托管（配 `PUBLIC_BASE_URL` 后平台可直接抓取） |
-| 全文检索 | SQLite FTS5（trigram，中文免分词）+ 相关度排序 |
-| 网页导入 | 粘贴 URL 直接抓正文转 Markdown（trafilatura），带 SSRF 防护 |
-| 能力矩阵 | 每个平台声明 publish/draft/update/list/tags/cover/question，前端按此置灰 |
-| Webhook | 任务完成/失败/等人工 10 种事件，HMAC 签名，自动禁僵尸 |
-| SSE 实时流 | 前端 EventSource 长连接，任务进度实时推送 |
+```bash
+uv run --project backed python -m backed.cli publish --id <article-id> --platforms zhihu,juejin
+```
 
-## 配置
+## Configuration
 
-编辑 `backed/config.json`（首次启动自动生成模板）或用环境变量：
+Edit `backed/config.json`, or use environment variables:
 
-| 变量 | 说明 | 默认 |
+| Variable | Purpose | Default |
 |---|---|---|
-| `HARBOUR_API_TOKEN` | REST 鉴权 Token（优先于 config.json） | 开发回环可自动生成；生产/Docker 必须显式设置 |
-| `SECRET_KEY` / `HARBOUR_SECRET_KEY` | 应用签名/JWT 配置（生产必须显式设置） | 不使用公开默认值 |
-| `TRUSTED_NETS` | 免 API Token 的客户端网段（谨慎配置） | 仅回环 |
-| `TRUSTED_PROXIES` | 允许采信 X-Forwarded-For 的反向代理网段 | 空 |
-| `CORS_ORIGINS` | 跨域白名单 | 同源 |
-| `DEMO=1` | 演示模式（不开浏览器不调外部 API） | 0 |
-| `AI_API_KEY` | LLM API 密钥 | 空 |
-| `AI_BASE_URL` | LLM 端点 | deepseek |
-| `FERNET_KEY` | Webhook secret 加密主密钥 | 自动生成 |
-| `PUBLIC_BASE_URL` | 媒体/图片对外基地址（如 `https://harbour.example.com`） | 空（只入库不改写） |
+| `HARBOUR_API_TOKEN` | REST authentication token | Auto-generated on loopback; **required** in production/Docker |
+| `SECRET_KEY` / `HARBOUR_SECRET_KEY` | Signing / JWT key | **Required** in production; no public default |
+| `TRUSTED_NETS` | Client networks exempt from the API token | Loopback only |
+| `TRUSTED_PROXIES` | Reverse proxies whose `X-Forwarded-For` is trusted | Empty |
+| `CORS_ORIGINS` | Allowed cross-origin origins | Same-origin |
+| `ALLOWED_HOSTS` | Accepted `Host` headers | Loopback |
+| `HUB_DATA_DIR` | Persistent root for DB, media, profiles, config | Repo-local `data/` |
+| `HUB_BROWSER_CHANNEL` | Reuse a system browser (`msedge` / `chrome`) | Bundled Chromium |
+| `PUBLIC_BASE_URL` | Public base URL for hosted media | Empty (media stored, not rewritten) |
+| `DEMO=1` | Demo mode: no browser, no external API calls | Off |
 
-## 登录平台
+## Deployment
 
-1. 打开 Web UI → 点平台名 → 点「登录」
-2. 弹出有头浏览器窗口（Linux 服务器自动起 Xvfb）
-3. 扫码/输密码/过验证码（系统先试半自动，过不了转人工）
-4. 登录态存本地 profile，之后长期复用，不用每次重登
-
-纯协议平台（博客园 MetaWeblog、51CTO、自建 MetaWeblog、Dev.to、GitHub Pages、微信公众号、Telegraph）按 `PLATFORM_CONNECTION.md` 配置凭据；掘金主适配器仍走浏览器登录，不要把独立 API 工具当作已接入发布通道。
-
-## 发布流程
-
-```
-AI 写稿 / 手工编辑 → 保存 → 选平台 → 发布
-                                    │
-                    ┌───────────────┤
-                    │               │
-              draft_only=False  draft_only=True
-                    │               │
-              过 AIGC 门禁      直接进草稿
-                    │               │
-              AI 源→拒(须 draft)  等人确认
-              人写源→放行            │
-                    │               ▼
-              平台 API / 浏览器   管理页点「确认发布」
-                    │
-              成功 → publications 落库
-              失败 → Triage 分流（重试/人工/永久失败）
-```
-## 测试
+Docker Compose runs the backend behind nginx, with the token injected server-side:
 
 ```bash
-# 一键门禁（六道全绿才能提交）
-pwsh -File scripts/check_all.ps1      # Windows
-bash scripts/check_all.sh            # Linux/macOS
-
-# 单跑
-cd backed
-uv run pytest -q                     # 当前源码约 506 个展开用例，以命令输出为准
-cd ..
-pnpm --dir web test                  # 当前源码约 62 个展开用例，以命令输出为准（含 a11y 静态门禁）
-pnpm --dir web lint                  # 前端 eslint
-uv run ruff check .                  # 静态
+export SECRET_KEY=$(openssl rand -hex 32)
+export HARBOUR_API_TOKEN=$(openssl rand -hex 32)
+docker compose -f deploy/docker-compose.yml --profile web up -d --build
 ```
-## 安全部署边界
 
-- 生产或 Docker 部署必须显式设置 `HARBOUR_API_TOKEN`、`SECRET_KEY`、`ALLOWED_HOSTS` 和 CORS 白名单；不要依赖自动生成的临时 Token。
-- `TRUSTED_NETS` 是免 Token 的客户端网段，不是代理网段；只有 `TRUSTED_PROXIES` 决定是否采信 `X-Forwarded-For`。
-- MCP SSE 默认只绑定 `127.0.0.1`；需要远程访问时必须设置 `HARBOUR_MCP_TOKEN`，并通过 TLS 反向代理暴露。
-- 浏览器操控和网页导入会校验目标地址，但当前尚未消除 DNS 重绑定风险；不要在不受信任的网络环境中开放这些功能。
-- 当前没有自动更新、签名发布清单或可复现的跨平台 Tauri release；Tauri/sidecar 仍需按目标平台构建并验收。
+The backend is not exposed to the host; nginx terminates and injects the token. Data
+lives in the `hub_data` volume.
 
-## 备份
+## Testing
 
 ```bash
-cd backed
-uv run python ../scripts/backup_data.py              # 到 ~/harbour-backups
-uv run python ../scripts/backup_data.py --dry-run    # 只看计划
+bash scripts/check_all.sh          # all gates; Linux/macOS
+pwsh -File scripts/check_all.ps1   # all gates; Windows
+
+cd backed && uv run pytest -q      # backend only
+pnpm --dir web test                # frontend only
 ```
-走 `sqlite3.Connection.backup()` 做在线一致性快照，不用停服务。
-拒绝备份到仓库内（防凭据被 commit）。
 
-## 架构
+`check_all` runs eight gates: compileall, ruff, version consistency, secret scan,
+pytest, eslint, vitest, vite build.
 
-详见 [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)。
+## Architecture
 
-## 文档
+```
+Vue 3 SPA  ──REST/SSE──►  FastAPI  ──►  Publishing hub
+(Tauri shell)             (uvicorn)      ├── 15 platform adapters
+                                         ├── task engine + scheduler
+                                         ├── SQLite (WAL + FTS5)
+                                         └── MCP bridge (stdio/SSE)
+```
 
-- [架构详解](docs/architecture/ARCHITECTURE.md)
-- [0.8.0 能力审计与补全报告](docs/audit/CAPABILITY_AUDIT_2026-10-29.md)
-- [审计报告](docs/audit/AUDIT.md)
-- [技术债台账](docs/design/tech-debt.md)
-- [平台接入指南](docs/PLATFORM_PUBLISH_GUIDE.md)
-- [MCP 接入](PLATFORM_CONNECTION.md)
+Details in [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md).
+
+## Known limits
+
+Read this before trusting any claim above.
+
+- **Browser fetch and screenshot are enabled but network-restricted.** The target host
+  is pinned to its validated public IP inside Chromium and every sub-resource is
+  checked. Private, loopback and link-local targets are rejected.
+- **Real publishing is not regression-tested against live platform DOM.** Adapters pass
+  a static contract probe; only Juejin has a captured DOM sample. Verify with a draft
+  before relying on any platform.
+- **Docker and Tauri builds are unverified on this machine.** Docker daemon unavailable;
+  Tauri fails with a local linker error. The compose file and sidecar script exist but
+  have not produced a tested artifact here.
+- **No auto-update, no signed release manifest, no cross-platform installer.**
+
+## Documentation
+
+| | |
+|---|---|
+| [Project management](docs/PROJECT_MANAGEMENT.md) | Branch model, DoD, gates, five-remote sync |
+| [Versioning](docs/VERSIONING.md) | SemVer policy and release checklist |
+| [Roadmap](docs/ROADMAP.md) | Shipped, next, backlog, out of scope |
+| [Platform guide](PLATFORM_CONNECTION.md) | Per-platform credentials and CLI |
+| [Architecture](docs/architecture/ARCHITECTURE.md) | Module boundaries and data flow |
+| [Verification records](docs/verification/) | Dated evidence for manual checks |
+| [Audit reports](docs/audit/AUDIT.md) | Historical defect audits and fixes |
+| [Contributing](CONTRIBUTING.md) | How to send a change |
+| [Security](SECURITY.md) | Reporting vulnerabilities |
 
 ## License
 
-MIT — 见 [LICENSE](LICENSE)。
+MIT — see [LICENSE](LICENSE).

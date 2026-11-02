@@ -3,7 +3,7 @@
 
 [project]
 name = "harbour-backend"
-version = "0.12.0"
+version = "0.13.0"
 description = "Harbour 后端：基于 FastAPI 的文章库 / 多平台发布 / AIGC 合规门禁"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,0 +1,54 @@
+name: Feature request
+description: A capability you need that Harbour does not have
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests are evaluated against the product definition in
+        [docs/PROJECT_MANAGEMENT.md](../blob/main/docs/PROJECT_MANAGEMENT.md).
+        Requests that fit the personas there move faster.
+
+  - type: dropdown
+    id: persona
+    attributes:
+      label: Who are you in this scenario?
+      options:
+        - Writer publishing to several platforms
+        - Developer running a self-hosted content pipeline
+        - Team maintaining a content operation
+        - AI agent / automation integrator
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the job, not the solution. What do you do today instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would solve it for you?
+      description: A concrete shape is helpful, but the problem above matters more.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried or considered?
+      description: Other tools, workarounds, scripts.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked the roadmap and this is not already planned
+          required: true
+        - label: I searched existing issues for the same request
+          required: true

@@ -1,8 +1,8 @@
 # AGENT.md — 开发者指南
 
-面向 AI 编码助手和人类开发者的项目结构说明。**反映 0.12.0 架构**（2026-10-12）。
+面向 AI 编码助手和人类开发者的项目结构说明。**反映 0.13.0 架构**（2026-11-02）。
 
-## 1. 目录结构（0.12.0 真实）
+## 1. 目录结构（0.13.0 真实）
 
 ```
 harbour/
@@ -104,7 +104,7 @@ harbour/
 │   │   │   ├── bilibili.py        # B站 API Provider
 │   │   │   ├── registry.py        # Provider 注册 + 路由
 │   │   │   └── toutiao.py         # 头条 API Provider
-│   │   └── tools/                 # 平台 API 工具（0.12.0 新增）
+│   │   └── tools/                 # 平台 API 工具（0.12.0 新增，0.13.0 保留）
 │   │       ├── juejin_api.py      # 掘金 OpenAPI
 │   │       └── metaweblog.py      # MetaWeblog XML-RPC 客户端
 │   ├── utils/
@@ -139,7 +139,7 @@ harbour/
     └── writing-style.md
 ```
 
-## 2. 数据流（0.12.0）
+## 2. 数据流（0.13.0）
 
 ```
 HTTP Request

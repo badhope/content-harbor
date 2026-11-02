@@ -1,0 +1,52 @@
+name: Platform adapter issue
+description: A platform adapter is broken, or you want a new platform supported
+title: "[platform] "
+labels: ["platform"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adapters break when a platform changes its DOM. The most useful thing you can
+        provide is the page HTML after the change.
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "zhihu / juejin / csdn / ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of issue is this?
+      options:
+        - Existing adapter is broken
+        - Requesting a new platform
+        - Login / session problem
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: What happens?
+      description: The task status, the error message, and which step failed (login / open editor / fill / publish / update).
+    validations:
+      required: true
+
+  - type: textarea
+    id: dom
+    attributes:
+      label: Page HTML (if the adapter is broken)
+      description: |
+        Save the failing page's HTML and attach it. Do this **after redacting** any
+        token, cookie or personal data — the file is a full DOM dump.
+
+  - type: input
+    id: probe
+    attributes:
+      label: Adapter probe output
+      description: "Result of `GET /api/v1/hub/adapters/probe` for this platform"
+      placeholder: '{"ok": false, "missing": ["editor"]}'
