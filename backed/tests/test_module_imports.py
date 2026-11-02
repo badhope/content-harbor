@@ -120,7 +120,7 @@ def test_mcp_main_wires_sse_port_into_settings(monkeypatch):
         mcp_server.main()
         assert seen == {"transport": "sse"}
         assert mcp_server.mcp.settings.port == 8971
-        assert mcp_server.mcp.settings.host == "0.0.0.0"
+        assert mcp_server.mcp.settings.host == "127.0.0.1"
 
         monkeypatch.setattr("sys.argv", ["mcp_server.py"])
         mcp_server.main()

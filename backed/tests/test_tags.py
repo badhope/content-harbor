@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """标签治理回归：归一化、别名合并、同义合并、热门排序。
 
-`tags.py` 三个写操作（merge/rename/add_alias）都会读写一个由
-`Path(__file__)` 现算出来的 config.json，测试里把 `__file__` 指到临时目录，
-否则跑一次测试就在仓库里留下真实配置文件。
+`tags.py` 三个写操作（merge/rename/add_alias）都会读写 `_config_path()`
+返回的 config.json；测试里把该函数指向临时目录，否则跑一次测试就在
+仓库里留下真实配置文件。
 """
 
 import json
@@ -17,9 +17,9 @@ from service.publishing import db, tags
 @pytest.fixture
 def tag_env(sandbox, monkeypatch, tmp_path):
     """指向临时配置目录的 tags 模块状态 + 一篇带标签的文章。"""
-    fake_module_dir = tmp_path / "svc" / "publishing"
-    fake_module_dir.mkdir(parents=True)
-    monkeypatch.setattr(tags, "__file__", str(fake_module_dir / "tags.py"))
+    cfg_dir = tmp_path / "svc"
+    cfg_dir.mkdir(parents=True)
+    monkeypatch.setattr(tags, "_config_path", lambda: cfg_dir / "config.json")
     conn = db.connect(sandbox["db_file"])
     yield {"conn": conn, "config": tmp_path / "svc" / "config.json"}
     conn.close()
@@ -158,3 +158,16 @@ def test_suggest_falls_back_to_local_hot_when_ai_unavailable(tag_env, monkeypatc
     monkeypatch.setattr("service.publishing.ai.chat", boom)
     # 同分标签按 tag ASC 排序：Python / Redis / Sql（count 都是 1）
     assert tags.suggest_for_article(conn, "标题", "正文") == "Python,Redis,Sql"
+
+
+def test_alias_map_lives_next_to_real_config(tag_env, monkeypatch):
+    """别名映射必须落在 backed/config.json。
+
+    回归：曾用 Path(__file__).parent.parent 算成 backed/service/config.json，
+    该路径既不是其它模块读的配置，也不在 .gitignore 里——点一次「合并」
+    就在仓库里凭空多出一个未跟踪文件。
+    """
+    monkeypatch.undo()
+    real = tags._config_path()
+    assert real.parent.name == "backed", f"应为 backed/config.json，实际 {real}"
+    assert real.name == "config.json"

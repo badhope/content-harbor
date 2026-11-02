@@ -22,9 +22,13 @@ class StubHub:
         self.demo = True
         self.tasks = TaskManager(self, conn)
 
-    def list(self, status=None, limit=100):
+    def list(self, status=None, limit=100, offset=0, slim=False):
         return [dict(r) for r in db.list_articles(self.conn, status=status,
-                                                  limit=limit)]
+                                                  limit=limit, offset=offset,
+                                                  slim=slim)]
+
+    def count_articles(self, status=None):
+        return db.count_articles(self.conn, status=status)
 
     def create(self, title, **kw):
         return db.create_article(self.conn, title, kw.get("content_md", ""),
@@ -143,6 +147,41 @@ def test_tasks_lifecycle_over_rest(client, monkeypatch):
     assert any(t["task_id"] == tid for t in client.get("/api/v1/hub/tasks").json())
 
 
+def test_task_pagination_endpoint(client):
+    """任务列表分页：/tasks/page 给出 total/has_more，且不抢 /tasks/{task_id} 路由。"""
+    for i in range(3):
+        client.post("/api/v1/hub/articles",
+                    json={"title": f"任务分页{i}"})
+    from service.publishing import db
+    conn = _hub().conn
+    for i in range(3):
+        db.create_task(conn, f"tkpage{i}", "publish", article_id=1)
+
+    p1 = client.get("/api/v1/hub/tasks/page?limit=2&offset=0").json()
+    assert len(p1["items"]) == 2
+    assert p1["total"] == 3
+    assert p1["has_more"] is True
+
+    p2 = client.get("/api/v1/hub/tasks/page?limit=2&offset=2").json()
+    assert len(p2["items"]) == 1
+    assert p2["has_more"] is False
+
+
+def test_article_pagination(client):
+    """R4：/articles/page 必须给出 total/has_more，且不被 /articles/{aid} 抢路由。"""
+    for i in range(3):
+        client.post("/api/v1/hub/articles", json={"title": f"分页{i}"})
+
+    p1 = client.get("/api/v1/hub/articles/page?limit=2&offset=0").json()
+    assert len(p1["items"]) == 2
+    assert p1["total"] == 3
+    assert p1["has_more"] is True
+
+    p2 = client.get("/api/v1/hub/articles/page?limit=2&offset=2").json()
+    assert len(p2["items"]) == 1
+    assert p2["has_more"] is False
+
+
 def test_webhooks_rest_crud(client):
     created = client.post("/api/v1/hub/webhooks",
                           json={"url": "https://example.com/hook",
@@ -216,3 +255,24 @@ def test_jobs_endpoint(client):
     db.add_job(hub.conn, "publish", article_id=1)
     rows = client.get("/api/v1/hub/jobs").json()
     assert rows[0]["type"] == "publish"
+
+
+def test_tasks_list_parses_platforms(client):
+    """列表端点必须把 platforms 解析成数组。
+
+    回归：/tasks 与 /tasks/page 直接返回 DB 原始行，platforms 是 JSON 字符串；
+    前端 `(row.platforms || []).join()` 会抛 TypeError，整个单元格渲染失败
+    ——实测任务表「对象」列空白且后续列错位，状态标签跑到对象列。
+    """
+    from service.publishing import db
+    conn = _hub().conn
+    db.create_task(conn, "tkplat0001", "publish", article_id=1,
+                   platforms=["juejin", "csdn"])
+
+    rows = client.get("/api/v1/hub/tasks").json()
+    row = [r for r in rows if r["task_id"] == "tkplat0001"][0]
+    assert row["platforms"] == ["juejin", "csdn"], f"应为数组，实际 {type(row['platforms'])}"
+
+    page = client.get("/api/v1/hub/tasks/page?limit=50").json()
+    prow = [r for r in page["items"] if r["task_id"] == "tkplat0001"][0]
+    assert prow["platforms"] == ["juejin", "csdn"]

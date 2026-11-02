@@ -4,7 +4,7 @@
       <div class="pane-head">
         <span class="title">设置</span>
         <span class="spacer" />
-        <span class="dim small">配置一次，长期有效：AI 模型 / 平台账号 / 定时 / 通知</span>
+        <span class="dim small set-hint">配置一次，长期有效：AI 模型 / 平台账号 / 定时 / 通知</span>
       </div>
       <div class="pane-body">
         <el-tabs v-model="tab" class="set-tabs">
@@ -23,6 +23,19 @@
           <el-tab-pane label="标签治理" name="tags" lazy>
             <TagsPanel />
           </el-tab-pane>
+          <el-tab-pane label="访问令牌" name="token" lazy>
+            <div class="token-panel">
+              <p class="dim small">
+                仅当后端启用了 HARBOUR_API_TOKEN 时需要。令牌保存在本机浏览器，不写入构建产物。
+              </p>
+              <el-input v-model="tokenInput" type="password" show-password
+                        placeholder="粘贴后端 X-API-Token" style="max-width: 420px" />
+              <div class="token-ops">
+                <el-button type="primary" size="small" @click="saveToken">保存</el-button>
+                <el-button size="small" @click="clearToken">清除</el-button>
+              </div>
+            </div>
+          </el-tab-pane>
         </el-tabs>
       </div>
     </div>
@@ -31,13 +44,35 @@
 
 <script setup>
 import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import AIPanel from '@/components/settings/AIPanel.vue'
 import AccountsPanel from '@/components/settings/AccountsPanel.vue'
 import SchedulesPanel from '@/components/settings/SchedulesPanel.vue'
 import WebhooksPanel from '@/components/settings/WebhooksPanel.vue'
 import TagsPanel from '@/components/settings/TagsPanel.vue'
+import { getApiToken, setApiToken } from '@/api'
+import { useHubStore } from '@/stores/hub'
 
+const hub = useHubStore()
 const tab = ref('ai')
+const tokenInput = ref(getApiToken())
+
+async function saveToken() {
+  setApiToken(tokenInput.value.trim())
+  hub.dispose()
+  try {
+    await hub.boot()
+    ElMessage.success('令牌已保存并重新连接')
+  } catch {
+    ElMessage.error('连接失败，请检查令牌与后端服务')
+  }
+}
+
+function clearToken() {
+  setApiToken('')
+  tokenInput.value = ''
+  ElMessage.success('令牌已清除')
+}
 </script>
 
 <style scoped lang="scss">
@@ -47,6 +82,18 @@ const tab = ref('ai')
 .set-pane { flex: 1; }
 :deep(.el-tabs__header) { padding: 0 18px; margin-bottom: 4px; }
 :deep(.el-tabs__content) { padding: 8px 18px 18px; overflow-y: auto; }
-.dim { color: var(--tx-4); }
+.dim { color: var(--tx-3); }
 .small { font-size: var(--fs-xs); }
+.pane-head { flex-wrap: nowrap; }
+.pane-head .title { white-space: nowrap; flex-shrink: 0; }
+.token-panel { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; }
+.token-ops { display: flex; gap: 8px; }
+
+@media (max-width: 767px) {
+  .settings-wrap { padding: 8px; }
+  // 窄屏没有横向空间放这句解释，藏掉才能让标题一行显示（否则「设置」被挤成竖排）
+  .set-hint { display: none; }
+  :deep(.el-tabs__header) { padding: 0 10px; }
+  :deep(.el-tabs__content) { padding: 8px 10px 14px; }
+}
 </style>

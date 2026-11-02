@@ -310,6 +310,16 @@ config = get_config()
 config_manager = get_config_manager()
 
 
+def validate_startup_config() -> None:
+    """Fail fast only for explicit production/docker startup."""
+    environment = str(getattr(config, "environment", "")).lower()
+    if environment not in {"production", "environment.production", "docker"}:
+        return
+    result = config_manager.validate_config()
+    if not result["valid"]:
+        raise RuntimeError("配置校验失败: " + "; ".join(result["errors"]))
+
+
 class Settings:
     """兼容门面：属性访问转发到当前环境的 config（config_unified 实例）。
 

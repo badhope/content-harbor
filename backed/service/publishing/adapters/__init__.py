@@ -14,12 +14,17 @@ from . import (  # noqa: F401
     bilibili,
     cnblogs,
     csdn,
+    devto,
+    github_pages,
     juejin,
     metaweblog,
     oschina,
     segmentfault,
+    telegraph,
     toutiao,
+    wechat,
     wuyi_cto,
+    xiaohongshu,
     zhihu,
 )
 

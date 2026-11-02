@@ -1,17 +1,17 @@
 {
-  "productName": "内容港 Harbor",
-  "version": "0.6.5",
-  "identifier": "com.contentharbor.hub",
+  "productName": "内容港 Harbour",
+  "version": "0.13.0",
+  "identifier": "com.harbour.hub",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "pnpm build",
-    "frontendDist": "../dist"
+    "frontendDist": "../../server/static"
   },
   "app": {
     "windows": [
       {
-        "title": "内容港 Harbor",
+        "title": "内容港 Harbour",
         "width": 1280,
         "height": 800,
         "minWidth": 960,
@@ -28,9 +28,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi", "app"],
     "externalBin": [
-      "binaries/content-harbor-backend"
+      "binaries/harbour-backend"
     ],
     "icon": [
       "icons/32x32.png",
@@ -41,8 +41,8 @@
     ],
     "resources": [],
     "shortDescription": "AI 多平台内容发布中枢",
-    "longDescription": "港 Harbor：AI 写稿 + AIGC 合规门禁 + 10 平台一键分发与原地更新",
-    "copyright": "content-harbor",
+    "longDescription": "港 Harbour：AI 写稿 + AIGC 合规门禁 + 15 个内容平台分发与更新" ,
+    "copyright": "harbour",
     "category": "Productivity"
   }
 }

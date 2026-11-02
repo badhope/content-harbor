@@ -2,7 +2,7 @@
 """命令行入口：基于 click 重写。
 
 - 业务命令复用发布引擎 ``service.publishing.service.Hub``；
-- ``serve`` 子命令复用 FastAPI 应用 ``api.hub:app`` 起服务，不再自建 HTTP 服务。
+- ``serve`` 子命令复用 ``app.factory:create_app`` 工厂起服务，确保生命周期与鉴权中间件一致。
 """
 
 import json
@@ -80,15 +80,23 @@ def solve_captcha(ctx, platform, account, wait):
 
 @cli.command(help="浏览器登录博客园并自动抠出 MetaWeblog 令牌写进 config.json")
 @click.option("--username", required=True, help="博客园登录用户名/邮箱")
-@click.option("--password", required=True, help="登录密码")
+@click.option("--password-stdin", is_flag=True, help="从 stdin 读取登录密码")
 @click.option("--account", default="default")
 @click.option("--timeout", type=int, default=600)
 @click.option("--on-captcha", type=click.Choice(["handoff", "abort"]), default="handoff")
 @click.pass_context
-def bootstrap_cnblogs(ctx, username, password, account, timeout, on_captcha):
+def bootstrap_cnblogs(ctx, username, password_stdin, account, timeout, on_captcha):
+    if password_stdin:
+        password = click.get_text_stream("stdin").read().rstrip("\r\n")
+    else:
+        password = click.prompt("博客园登录密码", hide_input=True, confirmation_prompt=False)
     r = _hub(ctx.obj["headed"]).bootstrap_cnblogs(
         username, password, account, timeout, on_captcha)
-    _echo_json(r)
+    _echo_json({
+        "outcome": r.get("outcome"),
+        "config_written": bool(r.get("config_written")),
+        "has_credentials": bool(r.get("has_credentials")),
+    })
 
 
 @cli.command(help="导入本地 Markdown")
@@ -311,8 +319,8 @@ def status(ctx):
 @click.option("--port", type=int, default=8800)
 def serve(host, port):
     import uvicorn
-    from api.hub import app
-    uvicorn.run(app, host=host, port=port, reload=False)
+    uvicorn.run("app.factory:create_app", factory=True,
+                host=host, port=port, reload=False)
 
 
 if __name__ == "__main__":

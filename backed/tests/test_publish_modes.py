@@ -98,6 +98,11 @@ def test_publish_single_passes_ai_assist_and_mode(monkeypatch):
         conn = None
         delay_platform = (0, 0)
 
+        # publish_single 现在会先做平台级内容变换，再进适配器。
+        # 这里用真实方法（纯函数，无副作用），只是把宿主换成极简 stub。
+        _prepare_article_for_platform = (
+            service_mod.Hub._prepare_article_for_platform)
+
         def _with_adapter(self, platform, account, fn, page_hook=None):
             return fn(_Ad(), None)
 

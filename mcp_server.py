@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Content Harbor MCP Server — 让任意 AI Agent 通过 MCP 协议操控内容港。
+"""Harbour MCP Server — 让任意 AI Agent 通过 MCP 协议操控内容港。
 
 启动（stdio 模式）：
     python mcp_server.py
@@ -9,18 +9,21 @@
     python mcp_server.py --transport sse --port 8900
 
 注册到 Claude Code / Cursor / Windsurf：
-    claude mcp add --transport stdio content-harbor python /path/to/mcp_server.py
+    claude mcp add --transport stdio harbour python /path/to/mcp_server.py
     # 或 .mcp.json:
     {
       "mcpServers": {
-        "content-harbor": {
+        "harbour": {
           "command": "python",
-          "args": ["/path/to/content-harbor/mcp_server.py"]
+          "args": ["/path/to/harbour/mcp_server.py"]
         }
       }
     }
 """
 
+import hmac
+import hmac
+import os
 import sys
 from pathlib import Path
 
@@ -28,9 +31,21 @@ from pathlib import Path
 _THIS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_THIS_DIR / "backed"))
 
+from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 from service.publishing.service import Hub
+
+
+class _StaticTokenVerifier:
+    """Minimal Bearer verifier for explicitly configured remote SSE."""
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        expected = os.environ.get("HARBOUR_MCP_TOKEN", "").strip()
+        if not expected or not hmac.compare_digest(token, expected):
+            return None
+        return AccessToken(token=token, client_id="harbour", scopes=["mcp"])
 
 # ── 单例 Hub（MCP server 进程内只启一次）──────────────────────────
 _hub = None
@@ -43,7 +58,17 @@ def _get_hub() -> Hub:
     return _hub
 
 
-mcp = FastMCP("content-harbor")
+_MCP_TOKEN = os.environ.get("HARBOUR_MCP_TOKEN", "").strip()
+_mcp_auth = AuthSettings(
+    issuer_url="http://127.0.0.1:8900",
+    resource_server_url="http://127.0.0.1:8900",
+    validate_token_resource=False,
+) if _MCP_TOKEN else None
+mcp = FastMCP(
+    "harbour",
+    token_verifier=_StaticTokenVerifier() if _MCP_TOKEN else None,
+    auth=_mcp_auth,
+)
 
 
 # ── 文章 ────────────────────────────────────────────────────────────
@@ -159,9 +184,9 @@ def list_platforms() -> list:
     # 适配器"导入即注册"，注册动作在 service.py 导入时发生；MCP 进程里若还没
     # 创建过 Hub，这里必须显式触发一次注册。
     from service.publishing import adapters as _adapters  # noqa: F401
-    from service.publishing.adapters.base import ADAPTERS
-    return [{"id": a.id, "name": a.name, "needs_browser": a.needs_browser}
-            for a in ADAPTERS.values()]
+    from service.publishing.adapters.base import ADAPTERS, capability_of
+    return [{"id": a.id, "name": a.name, "needs_browser": a.needs_browser,
+             "capabilities": capability_of(a.id)} for a in ADAPTERS.values()]
 
 
 @mcp.tool()
@@ -226,6 +251,89 @@ def import_markdown(path: str, tags: str = "") -> dict:
     """导入本地 Markdown 文件，自动提取 front-matter 元数据。"""
     aid = _get_hub().import_md(path, tags=tags)
     return {"id": aid}
+
+
+@mcp.tool()
+def search_articles(keyword: str, limit: int = 20) -> list:
+    """全文检索文章库（FTS5 相关度排序），返回匹配文章列表。"""
+    return _get_hub().search(keyword)[:max(1, min(limit, 100))]
+
+
+@mcp.tool()
+def import_from_url(url: str, tags: str = "") -> dict:
+    """从网页抓取正文导入为文章（trafilatura 提取，需公网可访问）。"""
+    return _get_hub().import_url(url, tags=tags)
+
+
+@mcp.tool()
+def list_media(limit: int = 50) -> dict:
+    """列出已入库的图片资产（内容寻址去重）与统计。"""
+    from service.publishing import media
+    hub = _get_hub()
+    return {"items": media.list_assets(hub.conn, limit=limit),
+            "stats": media.stats(hub.conn)}
+
+
+@mcp.tool()
+def ingest_image(url: str) -> dict:
+    """把远程图片抓进本地媒体库，返回可长期引用的稳定 URL。"""
+    from service.publishing import media
+    asset = media.ingest_url(_get_hub().conn, url)
+    return {"sha256": asset["sha256"], "url": media.asset_url(asset),
+            "bytes": asset["bytes"]}
+
+
+# ── 内置浏览器操控面（带平台登录态抓取 / 截图）────────────────────────────
+
+@mcp.tool()
+def browser_fetch(platform: str, url: str, account: str = "default") -> dict:
+    """带平台登录态的内置浏览器抓取页面：标题 + 正文（登录墙后的内容也能拿）。
+
+    例：browser_fetch("juejin", "https://juejin.cn/user/123/posts")
+    """
+    from service.publishing import browser_ops
+    return browser_ops.browser_fetch(_get_hub(), platform, url, account=account)
+
+
+@mcp.tool()
+def browser_screenshot(platform: str, url: str, full_page: bool = False,
+                       account: str = "default") -> dict:
+    """带平台登录态打开页面截图，落盘 data/exports/screenshots/，返回路径。"""
+    from service.publishing import browser_ops
+    return browser_ops.browser_screenshot(_get_hub(), platform, url,
+                                          account=account,
+                                          full_page=full_page)
+
+
+# ── 外部 MCP Server 桥接（把别人的 MCP 工具当后端用）────────────────────
+
+@mcp.tool()
+def external_mcp_status() -> dict:
+    """已配置的外部 MCP Server（Playwright / fetch / filesystem 等）状态与能力覆盖。
+
+    默认关闭；在 config.json 的 MCP_BRIDGE 段配置后才会拉起子进程。
+    """
+    from service.publishing import mcp_bridge
+    out = mcp_bridge.status()
+    out["coverage"] = mcp_bridge.capability_coverage()
+    return out
+
+
+@mcp.tool()
+def external_mcp_tools(server: str) -> dict:
+    """列出一个外部 MCP Server 实际提供的工具（配白名单前先看）。"""
+    from service.publishing import mcp_bridge
+    return mcp_bridge.list_tools(server)
+
+
+@mcp.tool()
+def external_mcp_call(server: str, tool: str, arguments: dict = None) -> dict:
+    """调用外部 MCP Server 的工具（仅白名单内）。
+
+    例：external_mcp_call("playwright", "browser_navigate", {"url": "https://..."})
+    """
+    from service.publishing import mcp_bridge
+    return mcp_bridge.call_tool(server, tool, arguments or {})
 
 
 # ── 外部执行器：Wechatsync（可选后端，不可用时优雅降级）──────────────────
@@ -328,7 +436,7 @@ def wechatsync_publish(article_id: int, platforms: str,
     if not platforms.strip():
         raise ValueError("platforms 不能为空")
 
-    tmp = Path(os.environ.get("TEMP", "/tmp")) / f"harbor-ws-{article_id}.md"
+    tmp = Path(os.environ.get("TEMP", "/tmp")) / f"harbour-ws-{article_id}.md"
     try:
         tmp.write_text(art.get("content_md", ""), encoding="utf-8")
         args = ["sync", str(tmp), "-p", platforms]
@@ -364,14 +472,17 @@ def wechatsync_platforms() -> dict:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Content Harbor MCP Server")
+    parser = argparse.ArgumentParser(description="Harbour MCP Server")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8900)
     args = parser.parse_args()
 
     if args.transport == "sse":
-        # FastMCP.run() 只接 transport，host/port 由构造参数决定
-        mcp.settings.host = "0.0.0.0"
+        if args.host not in {"127.0.0.1", "::1", "localhost"} \
+                and not os.environ.get("HARBOUR_MCP_TOKEN", "").strip():
+            raise SystemExit("远程 SSE 必须设置 HARBOUR_MCP_TOKEN")
+        mcp.settings.host = args.host
         mcp.settings.port = args.port
     mcp.run(transport=args.transport)
 

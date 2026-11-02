@@ -15,13 +15,14 @@
         <div class="sc-lbl">已上线实例</div>
       </div>
       <div class="stat-card">
-        <div class="sc-num">{{ hub.articles.filter(a => a.status === 'published').length }}</div>
+        <div class="sc-num">{{ hub.stats?.published_articles || 0 }}</div>
         <div class="sc-lbl">已发布文章</div>
       </div>
-      <span class="spacer" />
-      <el-button :icon="Refresh" :loading="reloading" @click="reloadAll">刷新</el-button>
-      <el-button v-if="pendingSync.length" type="primary" :icon="Refresh"
-                 :loading="hub.publishing" @click="hub.syncPending()">一键同步全部</el-button>
+      <div class="stat-ops">
+        <el-button :icon="Refresh" :loading="reloading" @click="reloadAll">刷新</el-button>
+        <el-button v-if="pendingSync.length" type="primary" :icon="Refresh"
+                   :loading="hub.publishing" @click="hub.syncPending()">一键同步全部</el-button>
+      </div>
     </div>
 
     <!-- ① 等待人工（任务挂起 + 平台草稿等人点发布） -->
@@ -99,6 +100,23 @@
       </div>
     </section>
 
+    <!-- ③ 可视化概览 -->
+    <section class="viz-row">
+      <section class="pane blk viz-card">
+        <div class="pane-head"><span class="title">平台发布分布</span></div>
+        <div class="pane-body blk-body">
+          <ChartPanel v-if="platformChart.series[0].data.length" :option="platformChart" :h="210" />
+          <EmptyState v-else :px="34" title="暂无发布数据" desc="发布成功后这里按平台展示占比" />
+        </div>
+      </section>
+      <section class="pane blk viz-card">
+        <div class="pane-head"><span class="title">任务状态构成</span></div>
+        <div class="pane-body blk-body">
+          <ChartPanel :option="statusChart" :h="210" />
+        </div>
+      </section>
+    </section>
+
     <!-- ③ 发布记录 -->
     <section class="pane blk grow">
       <div class="pane-head">
@@ -148,6 +166,8 @@ import { Refresh } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
 import EmptyState from '@/components/EmptyState.vue'
+import ChartPanel from '@/components/ChartPanel.vue'
+import { fmtDateTime } from '@/utils/format'
 
 const hub = useHubStore()
 
@@ -179,6 +199,44 @@ const pendingUser = computed(() => {
   return [...groups.values()]
 })
 const okPubs = computed(() => hub.allPubs.filter(p => p.status === 'ok').length)
+
+const platformChart = computed(() => {
+  const counts = new Map()
+  for (const p of hub.allPubs) {
+    if (p.status !== 'ok') continue
+    const k = platName(p.platform) || p.platform
+    counts.set(k, (counts.get(k) || 0) + 1)
+  }
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    series: [{
+      type: 'pie', radius: ['46%', '68%'], center: ['50%', '44%'],
+      avoidLabelOverlap: true, label: { show: false },
+      emphasis: { label: { show: true, fontSize: 12, fontWeight: 600 } },
+      data: [...counts].map(([name, value]) => ({ name, value }))
+    }]
+  }
+})
+
+const statusChart = computed(() => {
+  const order = [['pending', '排队'], ['running', '执行中'], ['waiting_human', '等人工'], ['failed', '失败'], ['done', '完成']]
+  const counts = new Map(order)
+  const tally = new Map(order.map(([k]) => [k, 0]))
+  for (const t of hub.tasks) if (tally.has(t.status)) tally.set(t.status, tally.get(t.status) + 1)
+  const labels = [...tally.keys()].map(k => counts.get(k) || k)
+  const values = [...tally.values()]
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: 8, right: 14, top: 18, bottom: 8, containLabel: true },
+    xAxis: { type: 'category', data: labels, axisTick: { show: false }, axisLine: { lineStyle: { color: '#D3DAE5' } }, axisLabel: { fontSize: 11, color: '#5A6478' } },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#EDF1F7' } }, axisLabel: { fontSize: 11, color: '#5F6A78' } },
+    series: [{
+      type: 'bar', data: values, barMaxWidth: 34,
+      itemStyle: { color: '#2A5CE0', borderRadius: [6, 6, 0, 0] }
+    }]
+  }
+})
 const filteredPubs = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   if (!kw) return hub.allPubs
@@ -236,12 +294,7 @@ const pubText = (s) => ({
   ok: '已发布', pending: '待同步', failed: '失败',
   pending_human: '待人工', pending_user: '等你确认'
 }[s] || s)
-const fmtTime = (ts) => {
-  if (!ts) return '—'
-  const d = new Date(ts * 1000)
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+const fmtTime = (ts) => fmtDateTime(ts)
 </script>
 
 <style scoped lang="scss">
@@ -250,16 +303,35 @@ const fmtTime = (ts) => {
   gap: 12px; padding: 14px 16px; overflow-y: auto;
 }
 
-.stat-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+  align-items: stretch;
+  gap: 12px;
+}
+.stat-ops { display: flex; align-items: center; gap: 8px; }
+.viz-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.viz-card { min-height: 0; }
 .stat-card {
-  min-width: 120px;
   padding: 10px 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  .sc-num { font-size: 22px; font-weight: 700; color: var(--tx-1); font-variant-numeric: tabular-nums; }
+  box-shadow: var(--shadow);
+  .sc-num { font-size: 22px; font-weight: 700; color: var(--tx-1); font-variant-numeric: tabular-nums; line-height: 1.3; }
   .sc-lbl { font-size: var(--fs-xs); color: var(--tx-3); }
-  &.warn { border-color: rgba(232, 150, 74, .4); .sc-num { color: var(--warn); } }
+  &.warn { border-color: rgba(138, 85, 16, .35); .sc-num { color: var(--warn); } }
+}
+
+@media (max-width: 1023px) {
+  .viz-row { grid-template-columns: 1fr; }
+  .stat-row { grid-template-columns: repeat(2, 1fr); }
+  .stat-ops { grid-column: 1 / -1; }
+}
+@media (max-width: 767px) {
+  .center-wrap { padding: 8px; }
+  .stat-card { padding: 8px 12px; .sc-num { font-size: 19px; } }
+  .blk-body { padding: 4px 10px 12px; }
 }
 
 .blk { flex-shrink: 0; &.grow { flex: 1; min-height: 320px; } }

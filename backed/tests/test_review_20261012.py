@@ -297,9 +297,9 @@ def test_register_routers_removed():
 
 
 def test_hub_app_version_current():
-    """F-11: 独立运行的 app version 应是 0.7.x，不是 0.2.0。"""
+    """F-11: 独立运行的 app version 跟随当前发布版本。"""
     from api import hub as hub_mod
-    assert hub_mod.app.version.startswith("0.7")
+    assert hub_mod.app.version == "0.12.0"
 
 
 def test_browser_worker_catches_only_exception():

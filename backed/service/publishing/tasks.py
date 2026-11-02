@@ -63,16 +63,35 @@ class TaskManager:
         "econnaborted", "broken pipe",
     )
     MAX_ATTEMPTS = 3
+    # 退避参数：第 n 次失败后等待 BACKOFF_BASE * 2^(n-1) 秒，封顶 BACKOFF_MAX。
+    BACKOFF_BASE = 2.0
+    BACKOFF_MAX = 60.0
 
-    def __init__(self, hub, conn):
+    def __init__(self, hub, conn, backoff_base=None, backoff_max=None):
         self.hub = hub
         self.conn = conn
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._stop = threading.Event()
+        # 退避重试：记录 task_id -> 最早可执行时间（monotonic 秒）。
+        # 进程重启后这张表自然清空，任务立即重试——可接受（持久化退避没有收益）。
+        self._not_before = {}
+        self._not_before_lock = threading.Lock()
+        # 实例级覆盖，便于测试与特殊部署（0 = 立即重试）
+        self.backoff_base = self.BACKOFF_BASE if backoff_base is None else backoff_base
+        self.backoff_max = self.BACKOFF_MAX if backoff_max is None else backoff_max
         self._worker = threading.Thread(target=self._loop, daemon=True,
                                         name="task-manager")
         self._worker.start()
+
+    def _backoff_state(self):
+        """惰性保证退避状态存在（测试会用 __new__ 直接构造实例）。"""
+        if not hasattr(self, "_not_before"):
+            self._not_before = {}
+            self._not_before_lock = threading.Lock()
+            self.backoff_base = self.BACKOFF_BASE
+            self.backoff_max = self.BACKOFF_MAX
+        return self._not_before, self._not_before_lock
 
     # ---------------- 对外接口 ----------------
 
@@ -94,8 +113,12 @@ class TaskManager:
         """按 task_id 查任务状态。"""
         return db.get_task(self.conn, task_id)
 
-    def list(self, limit=50, kind=None, status=None):
-        return db.list_tasks(self.conn, limit=limit, kind=kind, status=status)
+    def list(self, limit=50, kind=None, status=None, offset=0):
+        return db.list_tasks(self.conn, limit=limit, kind=kind, status=status,
+                             offset=offset)
+
+    def count(self, kind=None, status=None):
+        return db.count_tasks(self.conn, kind=kind, status=status)
 
     def resume(self, task_id, approved=True):
         """恢复 waiting_human 任务。
@@ -134,7 +157,10 @@ class TaskManager:
         self._wake.set()
         # 等 worker 线程结束（最多 30 秒），避免浏览器资源未清理
         self._worker.join(timeout=30)
+        if self._worker.is_alive():
+            return False
         evt_mod.stop_dispatcher()
+        return True
 
     # ---------------- 内部实现 ----------------
 
@@ -149,15 +175,39 @@ class TaskManager:
 
     def _next_pending(self):
         with self._lock:
-            rows = db.list_tasks(self.conn, limit=10, status="pending")
+            rows = db.next_pending_tasks(self.conn, limit=50)
             if not rows:
                 return None
-            # 优先跑最老的
-            rows.sort(key=lambda t: t["created_at"])
-            task = rows[0]
-            db.update_task(self.conn, task["task_id"],
+            now = time.monotonic()
+            picked = None
+            not_before, nb_lock = self._backoff_state()
+            with nb_lock:
+                for row in rows:
+                    ready_at = not_before.get(row["task_id"])
+                    if ready_at is not None and ready_at > now:
+                        continue     # 还在退避窗口内，让后面已就绪的任务先跑
+                    not_before.pop(row["task_id"], None)
+                    picked = row
+                    break
+            if picked is None:
+                return None          # 全部都在退避中：让 _loop 睡到下一次轮询
+            # 平台冷却：任务声明的平台还在限流窗口内就整体延后（不占用 worker）
+            try:
+                from service.publishing import ratelimit
+                pfs = json.loads(picked.get("platforms") or "[]")
+                waits = [ratelimit.remaining(self.conn, pf) for pf in pfs or []]
+                wait = max(waits) if waits else 0.0
+                if wait > 0:
+                    not_before[picked["task_id"]] = time.monotonic() + wait
+                    db.update_task(self.conn, picked["task_id"],
+                                   status="pending",
+                                   message=f"平台限流冷却中（{wait:.0f}s 后重试）")
+                    return None
+            except Exception:   # aqg: top-level boundary（冷却查询失败按可执行处理）
+                pass
+            db.update_task(self.conn, picked["task_id"],
                            status="running", updated_at=time.time())
-            return task
+            return picked
 
     def _run_task(self, task):
         task_id = task["task_id"]
@@ -184,6 +234,11 @@ class TaskManager:
                         pass
                     evt_mod.on_task_complete(completed)
                 return
+            # 业务层可能用 (ok, msg) 表达成功/失败（login 就是这种）。不检查 ok
+            # 会把「等待登录超时」标成完成——任务中心显示成功，用户以为登录好了。
+            if isinstance(result, (tuple, list)) and len(result) == 2 \
+                    and isinstance(result[0], bool) and not result[0]:
+                raise RuntimeError(str(result[1] or "业务失败"))
             db.update_task(self.conn, task_id, status="ok",
                            result=json.dumps(result, ensure_ascii=False),
                            message="完成", finished_at=time.time())
@@ -198,14 +253,30 @@ class TaskManager:
                 evt_mod.on_task_complete(completed)
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
+            # 平台级限流：429/503 不只是"这次失败"，而是"这个平台现在不收请求"。
+            # 置入平台冷却，让同平台后续任务一起等，而不是继续撞窗口。
+            self._note_platform_cooldown(task.get("platforms"), err)
             action, reason = self._triage(kind, err, attempts)
             if action == "retry":
                 # 重试：任务回到 pending，不算终态，不 emit on_task_complete
                 # （旧实现在这里也调 on_task_complete，会把 "retry" 事件
                 # 发给订阅方，语义不对：任务并没结束）。
+                #
+                # 退避（2026-10-29 修复）：旧实现置 pending 后立刻 _wake.set()，
+                # 3 次重试在 1 秒内打完，对 429/503 这类"等一会儿就好"的错误
+                # 完全没有意义，还把平台的限流窗口越撞越死。现在按指数退避
+                # 2/4/8… 封顶 60s，配合 _next_pending 的时间过滤生效。
+                base = getattr(self, "backoff_base", self.BACKOFF_BASE)
+                cap = getattr(self, "backoff_max", self.BACKOFF_MAX)
+                delay = min(base * (2 ** max(0, attempts - 1)), cap)
+                not_before, nb_lock = self._backoff_state()
+                with nb_lock:
+                    if delay > 0:
+                        not_before[task_id] = time.monotonic() + delay
                 db.update_task(self.conn, task_id, status="pending",
-                               error=err, message=f"自动重试（第 {attempts} 次）")
-                self._wake.set()   # 立即再消费
+                               error=err,
+                               message=f"自动重试（第 {attempts} 次，{delay:.0f}s 后）")
+                self._wake.set()   # 唤醒 worker，由 _next_pending 做时间过滤
             else:
                 status = "waiting_human" if action == "human" else "failed"
                 db.update_task(self.conn, task_id, status=status,
@@ -254,9 +325,26 @@ class TaskManager:
                                         extra.get("url", ""), account=account)
         raise ValueError(f"未知任务类型: {kind}")
 
+    def _note_platform_cooldown(self, platforms_json, err):
+        """从错误串识别平台限流，命中则写平台冷却（失败不阻断任务）。"""
+        try:
+            from service.publishing import ratelimit
+            platforms = json.loads(platforms_json or "[]")
+            for pf in platforms or []:
+                secs = ratelimit.classify_and_mark(self.conn, pf, err)
+                if secs:
+                    evt_mod.emit("platform.rate_limited", {
+                        "platform": pf, "seconds": secs, "error": err[:200]})
+        except Exception:   # aqg: top-level boundary（冷却记录失败不能掩盖原始错误）
+            pass
+
     # 永久失败关键词：命中就立即 fail，不重试（重试也不会改变结果）。
     PERMANENT_HINTS = (
         "合规门禁", "422", "门禁拒绝", "安全扫描", "高危内容",
+    )
+    # login 特有的确定性失败：没人扫码就是没人扫码，立刻重开浏览器重试毫无意义
+    LOGIN_PERMANENT_HINTS = (
+        "等待登录超时", "没有可用的显示", "遇到验证码",
     )
 
     def _triage(self, kind, err, attempts):
@@ -267,6 +355,11 @@ class TaskManager:
         新增 PERMANENT_HINTS：合规门禁拒绝 / 422 等确定性错误立即 fail，不浪费重试。
         """
         low = (err or "").lower()
+        if kind == "login":
+            # 扫码登录是人工动作：超时不等于网络故障，重试只会再弹一次浏览器
+            for h in self.LOGIN_PERMANENT_HINTS:
+                if h.lower() in low:
+                    return "fail", "登录未完成（超时/未扫码），不再自动重试"
         for h in self.HUMAN_HINTS:
             if h.lower() in low:
                 return "human", "命中风控/验证码/登录失效，需要人工处理"
