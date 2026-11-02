@@ -21,8 +21,8 @@ importers:
         specifier: ^2.9.1
         version: 2.14.5(vue@3.5.42)
       markdown-it:
-        specifier: ^14.1.0
-        version: 14.3.2
+        specifier: ^14.3.3
+        version: 14.3.3
       md-editor-v3:
         specifier: ^7.0.0
         version: 7.0.0(vue@3.5.42)
@@ -1348,6 +1348,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -1633,8 +1634,8 @@ packages:
   markdown-it-sup@2.0.0:
     resolution: {integrity: sha512-5VgmdKlkBd8sgXuoDoxMpiU+BiEt3I49GItBzzw7Mxq9CxvnhE/k09HFli09zgfFDRixDQDfDxi0mgBCXtaTvA==}
 
-  markdown-it@14.3.2:
-    resolution: {integrity: sha512-sHHjZ5fJKlgrG4qns2YwVcdNep35h5fERrfkD2YNsb9UFk0UIHarbiTaHKVMlPuWAoiilyK8Fv/jAm11slsY7Q==}
+  markdown-it@14.3.3:
+    resolution: {integrity: sha512-L//tDAkjTjJCU6pBUSBTgs3Kg4InVaZuUZog/b6V12UKhcDQ7S78877ibbCanRExwPuYP1CZD7Gd2dxSy1GXRg==}
     hasBin: true
 
   math-intrinsics@1.1.0:
@@ -3694,15 +3695,15 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  markdown-it-image-figures@2.1.1(markdown-it@14.3.2):
+  markdown-it-image-figures@2.1.1(markdown-it@14.3.3):
     dependencies:
-      markdown-it: 14.3.2
+      markdown-it: 14.3.3
 
   markdown-it-sub@2.0.0: {}
 
   markdown-it-sup@2.0.0: {}
 
-  markdown-it@14.3.2:
+  markdown-it@14.3.3:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
@@ -3731,8 +3732,8 @@ snapshots:
       '@vavt/util': 2.1.2
       codemirror: 6.0.2
       json5: 2.2.3
-      markdown-it: 14.3.2
-      markdown-it-image-figures: 2.1.1(markdown-it@14.3.2)
+      markdown-it: 14.3.3
+      markdown-it-image-figures: 2.1.1(markdown-it@14.3.3)
       markdown-it-sub: 2.0.0
       markdown-it-sup: 2.0.0
       medium-zoom: 1.1.0
