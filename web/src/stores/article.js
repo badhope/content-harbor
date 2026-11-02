@@ -130,6 +130,35 @@ export const useArticleStore = defineStore('article', {
       this.publications = pubs
     },
 
+    /** 删除文章。已发布到平台的副本不受影响，只清本地账本。 */
+    async remove(id) {
+      const target = this.articles.find(a => a.id === id)
+      const label = target?.title || `#${id}`
+      try {
+        await ElMessageBox.confirm(
+          `删除《${label}》？本地版本历史与发布记录一并清除；平台侧已发布的文章不会删除。`,
+          '删除文章',
+          { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
+            confirmButtonClass: 'el-button--danger' }
+        )
+      } catch { return false }
+
+      await api.deleteArticle(id)
+      this.articles = this.articles.filter(a => a.id !== id)
+      this.total = Math.max(0, this.total - 1)
+      this.serverOffset = Math.max(0, this.serverOffset - 1)
+      if (this.currentId === id) {
+        this._openGen++
+        this.currentId = null
+        this.current = null
+        this.publications = []
+        this.dirty = false
+      }
+      ElMessage.success('已删除')
+      return true
+    },
+
+
     async loadAllPubs() {
       try { this.allPubs = await api.publications() || [] }
       catch { /* 静默降级 */ }

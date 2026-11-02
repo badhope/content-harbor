@@ -361,6 +361,31 @@ a:focus-visible,
     flex-wrap: wrap;
     font-variant-numeric: tabular-nums;
   }
+
+  // 删除按钮：平时隐形，悬停/聚焦时出现——避免列表看起来像一排垃圾桶
+  .del {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--tx-4);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .14s, color .14s, background .14s;
+  }
+  &:hover .del, &:focus-within .del { opacity: 1; }
+  .del:hover, .del:focus-visible {
+    color: var(--bad);
+    background: color-mix(in srgb, var(--bad) 12%, transparent);
+  }
+  // 触屏没有悬停态，直接常显，否则删除入口在手机上永远点不到
+  @media (hover: none) { .del { opacity: 1; } }
 }
 
 // 骨架屏（浅灰微光）

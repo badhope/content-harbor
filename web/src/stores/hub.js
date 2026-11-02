@@ -104,6 +104,7 @@ export const useHubStore = defineStore('hub', {
 
     async save() { return await useArticleStore().save() },
     async open(id) { return await useArticleStore().open(id) },
+    async removeArticle(id) { return await useArticleStore().remove(id) },
     async loadPubs() { return await useArticleStore().loadPubs() },
     async loadAllPubs() { return await useArticleStore().loadAllPubs() },
     async loadStatus() { return await useAccountStore().loadStatus() },

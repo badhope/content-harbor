@@ -104,6 +104,15 @@ def update_article(aid: int, patch: ArticlePatch):
     return {"ok": ok, "pending_sync": pending}
 
 
+@router.delete("/articles/{aid}")
+def delete_article(aid: int):
+    """删除本地文章记录。平台侧已发布的副本不会被动到。"""
+    result = get_hub().delete(aid)
+    if result is None:
+        raise HTTPException(404, "文章不存在")
+    return {"ok": True, **result}
+
+
 @router.get("/articles/search/{keyword}")
 def search(keyword: str):
     return get_hub().search(keyword)

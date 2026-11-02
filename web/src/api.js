@@ -116,6 +116,7 @@ export const api = {
   getArticle: (id) => http.get(`/articles/${id}`),
   createArticle: (data) => http.post('/articles', data),
   updateArticle: (id, data) => http.put(`/articles/${id}`, data),
+  deleteArticle: (id) => http.delete(`/articles/${id}`),
   search: (kw) => http.get(`/articles/search/${kw}`),
 
   // ---------------- 发布 / 更新 / 同步（统一任务语义） ----------------

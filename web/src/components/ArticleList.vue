@@ -48,6 +48,14 @@
             <el-tag v-if="a.source === 'ai'" size="small" type="primary" effect="plain">AI</el-tag>
             <el-tag v-else-if="a.source === 'import'" size="small" type="info" effect="plain">导入</el-tag>
             <span class="time">{{ fmt(a.updated_at) }}</span>
+            <!-- 删除是危险动作：放在列表项内但独立于点击区域，避免误触 -->
+            <button type="button" class="del" title="删除文章"
+                    :aria-label="`删除《${a.title}》`"
+                    @click.stop="$emit('remove', a.id)"
+                    @keydown.enter.stop.prevent="$emit('remove', a.id)"
+                    @keydown.space.stop.prevent="$emit('remove', a.id)">
+              <el-icon><Delete /></el-icon>
+            </button>
           </div>
         </div>
 
@@ -77,7 +85,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Delete, Plus, Search } from '@element-plus/icons-vue'
 import EmptyState from './EmptyState.vue'
 import { fmtShort } from '@/utils/format'
 import { api } from '@/api'
@@ -90,7 +98,7 @@ const props = defineProps({
   hasMore: Boolean,
   loadingMore: Boolean
 })
-defineEmits(['open', 'new-article', 'load-more'])
+defineEmits(['open', 'new-article', 'load-more', 'remove'])
 
 const keyword = ref('')
 const status = ref('')

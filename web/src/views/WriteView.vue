@@ -12,6 +12,7 @@
       @open="onOpen"
       @new-article="hub.newArticle()"
       @load-more="hub.loadMore()"
+      @remove="onRemove"
     />
 
     <!-- 中：编辑器 -->
@@ -64,6 +65,7 @@
       @open="id => { onOpen(id); listDrawer = false }"
       @new-article="hub.newArticle()"
       @load-more="hub.loadMore()"
+      @remove="onRemove"
     />
   </el-drawer>
 
@@ -117,6 +119,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 async function onOpen(id) {
   await hub.open(id)
   listDrawer.value = false
+}
+
+async function onRemove(id) {
+  await hub.removeArticle(id)
+  if (!hub.currentId) listDrawer.value = false
 }
 
 // 「发布」：宽屏滚动高亮右轨（常驻无需动作）；窄屏打开发布抽屉

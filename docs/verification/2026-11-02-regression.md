@@ -11,12 +11,12 @@ UI driven by Patchright through the system Edge binary.
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend tests | `uv run --no-sync pytest -q` | **529 passed**, 1 Starlette deprecation warning |
+| Backend tests | `uv run --no-sync pytest -q` | **533 passed**, 1 Starlette deprecation warning |
 | Ruff | `uv run ruff check .` | All checks passed |
 | Frontend tests | `pnpm test --run` | **63 passed** across 9 files |
-| Frontend lint | `pnpm lint` | 0 errors, 192 warnings (stylistic) |
-| Frontend build | `pnpm build` | success, 4374 modules, 15.0 s |
-| Version consistency | `scripts/bump_version.py --check` | 5/5 at `0.12.0` |
+| Frontend lint | `pnpm lint` | 0 errors, 194 warnings (stylistic) |
+| Frontend build | `pnpm build` | success, 4374 modules, 16.6 s |
+| Version consistency | `scripts/bump_version.py --check` | 5/5 at `0.13.0` |
 | Secret scan | `scripts/scan_secrets.py` | 848 files, 0 findings |
 
 ## 2. Runtime — service assembly
@@ -67,7 +67,52 @@ guard aborts any sub-resource or redirect that resolves to a non-public address.
 | Pinned rule content | `_pinned_resolver_rules` unit test | all validated IPs embedded, single flag |
 | Request guard | `_guard_requests` unit test | private-host sub-resource aborted, public + data: allowed |
 
-## 5. Not verified in this record
+## 5. Article lifecycle — including delete
+
+Before this run, articles could be created, edited and versioned but **never deleted**
+through the API or the UI. That gap is closed.
+
+| Check | Method | Result |
+|---|---|---|
+| Create | `POST /articles` | 200, id returned |
+| Read | `GET /articles/{id}` | 200 |
+| Update | `PUT /articles/{id}` | 200 |
+| Quality report | `POST /articles/{id}/qa` | 200 |
+| Schedule create | `POST /schedules` | 200 |
+| Delete | `DELETE /articles/{id}` | 200, `{"articles":1,"publications":0,"versions":0}` |
+| Get after delete | `GET /articles/{id}` | 404 |
+| Delete again | `DELETE /articles/{id}` | 404 (not a silent success) |
+| UI delete button | hover list item → click trash → confirm | Row removed, toast `已删除`, 0 console errors |
+| Cascade | insert version + publication, then delete | all three tables report 1 row removed |
+| Isolation | delete one of two articles | the other still readable |
+
+## 6. Endpoint smoke
+
+All reachable with the server running:
+
+```
+200  GET /articles/page?limit=5
+200  GET /articles/search/{keyword}
+200  GET /tags
+200  GET /schedules
+200  GET /webhooks
+200  GET /tasks
+200  GET /status
+200  GET /metrics
+200  GET /platforms
+200  GET /adapters/probe
+200  GET /ai/status
+200  GET /ai/providers
+200  GET /ai/templates
+200  GET /ai/gate
+200  GET /ai/config
+200  GET /publications
+200  GET /pending-human
+200  GET /health
+405  GET /browser/{platform}/fetch   (POST-only route, expected)
+```
+
+## 7. Not verified in this record
 
 These remain open and must not be described as working:
 

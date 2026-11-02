@@ -392,6 +392,22 @@ def get_article(conn, article_id):
     return conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
 
 
+def delete_article(conn, article_id):
+    """删除文章及其版本历史与发布账本，单事务完成。
+
+    平台侧已发布的副本不受影响——那是平台自己的内容，本地只清账本。
+    返回各表删除行数，调用方据此报告影响面。
+    """
+    with conn:
+        versions = conn.execute(
+            "DELETE FROM version_history WHERE article_id=?", (article_id,)).rowcount
+        publications = conn.execute(
+            "DELETE FROM publications WHERE article_id=?", (article_id,)).rowcount
+        articles = conn.execute(
+            "DELETE FROM articles WHERE id=?", (article_id,)).rowcount
+    return {"articles": articles, "publications": publications, "versions": versions}
+
+
 def list_articles(conn, status=None, limit=100, offset=0, slim=False):
     """列出文章。slim=True 时只取列表元信息（不取正文），列表页专用。
 

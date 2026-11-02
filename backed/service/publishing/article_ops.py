@@ -44,6 +44,18 @@ class ArticleOpsMixin:
         return dict(r) if r else None
 
 
+    def delete(self, article_id):
+        """删除文章及其关联记录。
+
+        已发布到平台的副本不会被删除——那些内容在平台侧独立存在，这里只清本地
+        账本。返回被清理的关联条数，便于调用方判断影响面。
+        """
+        art = db.get_article(self.conn, article_id)
+        if not art:
+            return None
+        return db.delete_article(self.conn, article_id)
+
+
     def list(self, status=None, limit=100, offset=0, slim=False):
         """列出文章。slim=True 走列表投影（不带正文），列表页用。"""
         return [dict(r) for r in db.list_articles(self.conn, status, limit, offset,
