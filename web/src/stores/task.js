@@ -2,6 +2,15 @@ import { defineStore } from 'pinia'
 import { ElNotification } from 'element-plus'
 import { api } from '@/api'
 
+// 令牌只从本机浏览器存储读取；单独取值，避免测试 mock 必须导出它。
+function readToken() {
+  try {
+    return window.localStorage.getItem('harbour_api_token') || ''
+  } catch {
+    return ''
+  }
+}
+
 /** SSE 替代 polling 的任务状态管理。 */
 export const useTaskStore = defineStore('task', {
   state: () => ({
@@ -53,31 +62,55 @@ export const useTaskStore = defineStore('task', {
     // SSE 长连接：后端推送新事件时更新 tasks
     connectSSE() {
       if (this._es) return
-      // EventSource 不支持自定义 header，baseURL 必须与后端实际路由对齐：/api/v1/hub
+      // EventSource 不能带自定义请求头，改用 fetch 流以携带 X-API-Token。
       const base = window.__TAURI_PORT__
         ? `http://127.0.0.1:${window.__TAURI_PORT__}/api/v1/hub`
         : '/api/v1/hub'
-      this._es = new EventSource(`${base}/events/stream`)
-      this._es.onmessage = (ev) => {
+      const controller = new AbortController()
+      this._es = { abort: () => controller.abort() }
+      const headers = {}
+      const token = readToken()
+      if (token) headers['X-API-Token'] = token
+      const pump = async () => {
         try {
-          const evt = JSON.parse(ev.data)
-          this._lastEventTs = Date.now()
-          if (evt.type?.startsWith('task.') || evt.type?.startsWith('publish.')) {
-            // 任何任务事件变更就重新拉一次列表
-            this.loadTasks(/*notify*/ true)
+          const resp = await fetch(`${base}/events/stream`, {
+            headers, signal: controller.signal,
+          })
+          if (!resp.ok || !resp.body) throw new Error(`SSE ${resp.status}`)
+          const reader = resp.body.getReader()
+          const decoder = new TextDecoder()
+          let buf = ''
+          for (;;) {
+            const { value, done } = await reader.read()
+            if (done) throw new Error('SSE stream ended')
+            buf += decoder.decode(value, { stream: true })
+            const chunks = buf.split('\n\n')
+            buf = chunks.pop() || ''
+            for (const chunk of chunks) {
+              const dataLine = chunk.split('\n').find(l => l.startsWith('data:'))
+              if (!dataLine) continue
+              try {
+                const evt = JSON.parse(dataLine.slice(5).trim())
+                this._lastEventTs = Date.now()
+                if (evt.type?.startsWith('task.') || evt.type?.startsWith('publish.')) {
+                  this.loadTasks(/*notify*/ true)
+                }
+              } catch { /* ignore parse error */ }
+            }
           }
-        } catch { /* ignore parse error */ }
-      }
-      // 断连自动重连（EventSource 内置），但连不上时降级到 30 秒 polling
-      this._es.onerror = () => {
-        if (!this._pollTimer) {
-          this._pollTimer = setInterval(() => this.loadTasks(true), 30000)
+        } catch (e) {
+          if (controller.signal.aborted) return
+          this._es = null
+          if (!this._pollTimer) {
+            this._pollTimer = setInterval(() => this.loadTasks(true), 30000)
+          }
         }
       }
+      pump()
     },
 
     disconnectSSE() {
-      if (this._es) { this._es.close(); this._es = null }
+      if (this._es) { this._es.abort(); this._es = null }
       if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null }
     },
 

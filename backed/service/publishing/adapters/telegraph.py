@@ -14,10 +14,12 @@ Telegraph 是 Telegram 团队提供的极简发布平台：无需注册账号，
 import json
 from pathlib import Path
 
+from service.publishing.db import config_file
+
 from service.publishing.adapters.base import PlatformAdapter, PlatformError, register
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = config_file()
 
 
 def _creds():

@@ -157,7 +157,10 @@ class TaskManager:
         self._wake.set()
         # 等 worker 线程结束（最多 30 秒），避免浏览器资源未清理
         self._worker.join(timeout=30)
+        if self._worker.is_alive():
+            return False
         evt_mod.stop_dispatcher()
+        return True
 
     # ---------------- 内部实现 ----------------
 

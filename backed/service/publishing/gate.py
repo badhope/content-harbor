@@ -27,12 +27,13 @@ import time
 from pathlib import Path
 
 import ahocorasick
+from service.publishing.db import config_file
 
 
 # config.json 的文档位置是 backed/config.json（与 .gitignore / api/auth.py 一致；
 # 2026-10-14 修复：旧代码 parent.parent 指到 backed/service/，门禁开关读不到文档位置）
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = config_file()
 
 # 高危词（保守起量，宁多勿漏；可按需扩展）
 DANGEROUS_PATTERNS = [

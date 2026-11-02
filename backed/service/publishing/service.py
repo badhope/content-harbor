@@ -13,6 +13,7 @@ from pathlib import Path
 import hashlib
 
 from service.publishing import db
+from service.publishing.db import config_file
 from service.publishing.tasks import TaskManager
 from service.publishing.scheduler import init_scheduler
 from service.publishing.versions import init_versions
@@ -49,6 +50,8 @@ class Hub(ArticleOpsMixin, AIOpsMixin, PublishOpsMixin):
     POOL_MAX = 4
 
     def __init__(self, headless=True):
+        self._close_lock = __import__("threading").Lock()
+        self._closed = False
         self.conn = db.connect()
         self.headless = headless
         # 版本历史：每次 edit/AI 改写前自动存旧版快照（时光机回滚能力）
@@ -105,23 +108,19 @@ class Hub(ArticleOpsMixin, AIOpsMixin, PublishOpsMixin):
         return self._browser_pool._busy_for(platform, account)
 
     def close_all(self):
-        """进程退出前关浏览器 + 停调度器 + 关任务引擎（atexit 兜底）。
-
-        atexit 里任何未捕获异常都会以 "Exception ignored" 噪声打到进程退出输出
-        （测试进程退出时临时目录已清理，这里逐个兜住，保证退出干净）。
-        """
-        try:
-            self.scheduler.stop()
-        except Exception:   # aqg: top-level boundary（进程退出兜底，逐个吞错）
-            pass
-        try:
-            self.tasks.close()
-        except Exception:   # aqg: top-level boundary（同上）
-            pass
-        try:
+        """按 scheduler → tasks → browser → dispatcher → DB 顺序幂等关闭。"""
+        with self._close_lock:
+            if self._closed:
+                return
+            if self.scheduler.stop() is False:
+                raise RuntimeError("调度器未停止，保留数据库连接以避免数据丢失")
+            if self.tasks.close() is False:
+                raise RuntimeError("任务线程未停止，保留数据库连接以避免数据丢失")
             self._browser_pool.close_all_browsers()
-        except Exception:   # aqg: top-level boundary（同上）
-            pass
+            from service.publishing import events
+            events.stop_dispatcher()
+            self.conn.close()
+            self._closed = True
 
     # ---------------- 账号 ----------------
 
@@ -263,13 +262,16 @@ class Hub(ArticleOpsMixin, AIOpsMixin, PublishOpsMixin):
                     return r
                 # 登录成功，抠令牌（username 用登录名，别拿 blogApp 冒充）
                 page = br.new_page()
-                mw = extract_metaweblog(page, save_to=str(BACKED_ROOT / "config.json"),
+                mw = extract_metaweblog(page, save_to=str(config_file()),
                                         login_username=username)
                 page.close()
                 db.upsert_account(self.conn, "cnblogs", account, str(br.profile_dir),
                                   "logined")
-                r["metaweblog"] = mw
-                return r
+                return {
+                    "outcome": "success",
+                    "config_written": bool(mw.get("config_written")),
+                    "has_credentials": bool(mw.get("endpoint") and mw.get("token")),
+                }
             finally:
                 br.close()
         return browser_thread_run(_op)

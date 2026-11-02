@@ -14,6 +14,8 @@ import json
 import os
 from pathlib import Path
 
+from service.publishing.db import config_file
+
 import requests
 from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
@@ -23,7 +25,7 @@ from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
 # 导致 AI 密钥/gate 开关从没被文档位置的配置读到过。
 BACKED_ROOT = Path(__file__).resolve().parents[2]      # backed/
 REPO_ROOT = Path(__file__).resolve().parents[3]        # 仓库根（写作风格档案在 docs/）
-CONFIG_FILE = BACKED_ROOT / "config.json"
+CONFIG_FILE = config_file()
 
 DEFAULT_BASE = "https://api.deepseek.com/v1"
 DEFAULT_MODEL = "deepseek-chat"

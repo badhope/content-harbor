@@ -62,6 +62,11 @@ class AuthSweeper:
 
     def stop(self):
         self._stop.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=5)
+            if self._thread.is_alive():
+                return False
+        return True
 
     def _loop(self):
         # 首轮等一个周期再跑：应用刚启动时浏览器池/网络未必就绪，且登录态

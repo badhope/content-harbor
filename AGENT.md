@@ -1,8 +1,8 @@
 # AGENT.md — 开发者指南
 
-面向 AI 编码助手和人类开发者的项目结构说明。**反映 0.7.0 架构**（2026-10-12）。
+面向 AI 编码助手和人类开发者的项目结构说明。**反映 0.12.0 架构**（2026-10-12）。
 
-## 1. 目录结构（0.7.0 真实）
+## 1. 目录结构（0.12.0 真实）
 
 ```
 harbour/
@@ -104,7 +104,7 @@ harbour/
 │   │   │   ├── bilibili.py        # B站 API Provider
 │   │   │   ├── registry.py        # Provider 注册 + 路由
 │   │   │   └── toutiao.py         # 头条 API Provider
-│   │   └── tools/                 # 平台 API 工具（0.7.0 新增）
+│   │   └── tools/                 # 平台 API 工具（0.12.0 新增）
 │   │       ├── juejin_api.py      # 掘金 OpenAPI
 │   │       └── metaweblog.py      # MetaWeblog XML-RPC 客户端
 │   ├── utils/
@@ -139,7 +139,7 @@ harbour/
     └── writing-style.md
 ```
 
-## 2. 数据流（0.7.0）
+## 2. 数据流（0.12.0）
 
 ```
 HTTP Request
@@ -223,8 +223,8 @@ pnpm run tauri dev
 cd backed
 uv run python -m backed.cli <command>
 uv run python -m backed.cli sync              # 同步平台状态
-uv run python -m backed.cli list-tasks        # 查看任务
-uv run python -m backed.cli approve-task <id> # 批准待人工任务
+uv run --project backed python -m backed.cli status             # 查看中台状态
+# 任务查询/人工恢复请使用 REST 或 MCP 接口
 ```
 
 ### 测试
@@ -236,13 +236,13 @@ bash scripts/check_all.sh              # Linux/macOS
 
 # 单跑
 cd backed
-uv run pytest -q                        # 全部 (486 用例)
+uv run pytest -q                        # 当前约 506 个展开用例，以命令输出为准
 uv run pytest tests/test_tasks.py -q    # 任务引擎
 uv run ruff check .                     # 静态门禁
 
 # 前端（在仓库根执行）
 pnpm --dir web lint                     # eslint
-pnpm --dir web test                     # vitest（57 用例）
+pnpm --dir web test                     # vitest（当前约 62 个展开用例，以命令输出为准）
 ```
 
 `conftest.py` 的 `sandbox` fixture（autouse）把 DB/事件日志/Webhook 派发线程

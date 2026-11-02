@@ -21,12 +21,14 @@ import os
 import re
 from pathlib import Path
 
+from service.publishing.db import config_file
+
 import requests
 
 from service.publishing.adapters.base import PlatformAdapter, PlatformError, register
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = config_file()
 API_BASE = "https://dev.to/api"
 TIMEOUT = 30
 MAX_TAGS = 4

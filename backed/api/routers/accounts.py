@@ -6,9 +6,6 @@ import re
 import threading
 import time
 import uuid
-from urllib.parse import urlparse
-
-import ipaddress
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -36,33 +33,12 @@ def _check_account(account: str) -> str:
 
 
 def _check_url_safety(url: str) -> str:
-    """SSRF 防护：拒绝指向内网/本地/云元数据的 URL。
-
-    允许的域名走白名单（平台域名），其余 IP 必须落在公网段。
-    本机部署场景（桌面版）豁免：ASSIST_ALLOW_LOCAL=1 可放开 localhost。
-    """
-    import os
-    allow_local = os.environ.get("ASSIST_ALLOW_LOCAL") == "1"
-    parsed = urlparse(url)
-    host = parsed.hostname or ""
-    if not host:
-        raise HTTPException(422, "url 必须含有效域名")
-
-    # 尝试解析为 IP（IP 字面量直接检查，域名查 DNS）
+    """统一校验 HTTP(S) URL，并拒绝 DNS/IP 非公网目标。"""
+    from service.publishing.url_safety import URLSafetyError, validate_url
     try:
-        ip = ipaddress.ip_address(host)
-        if ip.is_private and not allow_local:
-            raise HTTPException(422, f"url 指向内网地址 {host}，被 SSRF 防护拦截")
-        if ip.is_loopback and not allow_local:
-            raise HTTPException(422, f"url 指向本机回环 {host}，被 SSRF 防护拦截")
-        if ip.is_link_local and not allow_local:
-            raise HTTPException(422, f"url 指向链路本地 {host}（含云元数据 169.254.x.x），被拦截")
-    except ValueError:
-        # 非 IP 字面量（域名），做主机名黑名单兜底
-        bad_hosts = ("localhost", "metadata.google.internal", "169.254.169.254")
-        if any(host.lower() == b or host.lower().endswith(b) for b in bad_hosts):
-            raise HTTPException(422, f"url 主机 {host} 在 SSRF 黑名单中")
-    return url
+        return validate_url(url)
+    except URLSafetyError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 class LoginIn(BaseModel):

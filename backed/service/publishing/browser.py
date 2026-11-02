@@ -70,10 +70,9 @@ def _bw_worker(q):
 
 
 def browser_thread_run(fn, *args, **kwargs):
-    """在专属浏览器线程执行 fn；已在该线程则直接执行（防自锁死）。
-
-    未捕获异常原样重抛给调用方线程；线程 daemon 化随进程退出。"""
+    """在专属浏览器线程执行 fn；可用 ``_run_timeout`` 限制等待。"""
     global _BW_QUEUE, _BW_THREAD
+    run_timeout = kwargs.pop("_run_timeout", None)
     if threading.get_ident() == _BW_IDENT[0]:
         return fn(*args, **kwargs)
     with _BW_LOCK:
@@ -84,7 +83,9 @@ def browser_thread_run(fn, *args, **kwargs):
             _BW_THREAD.start()
     box, ev = {}, threading.Event()
     _BW_QUEUE.put((fn, args, kwargs, box, ev))
-    ev.wait()   # 登录需等扫码（最长 10 分钟），不设超时
+    completed = ev.wait(timeout=run_timeout)
+    if not completed:
+        raise TimeoutError(f"浏览器操作超过 {run_timeout}s")
     if "e" in box:
         raise box["e"]
     return box.get("r")
@@ -550,12 +551,15 @@ class BuiltinBrowser:
     """一个平台一个实例，用完 close()。"""
 
     def __init__(self, platform, account="default", headless=False, slow_mo=0,
-                 proxy=None):
+                 proxy=None, extra_args=None):
         self.platform = platform
         self.account = account
         self.headless = headless
         self.slow_mo = slow_mo
         self.proxy = proxy
+        # 附加 Chromium 启动参数（如 host-resolver-rules 的 DNS 钉扎）。
+        # 只作用于本实例，不污染全局 LAUNCH_ARGS。
+        self.extra_args = [str(a) for a in (extra_args or [])]
         self.profile_dir = PROFILE_ROOT / f"{platform}_{account}"
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         # 登录快照：存 profile 同级的独立 json（Python 同步写盘，不赌 chromium
@@ -595,7 +599,7 @@ class BuiltinBrowser:
             user_data_dir=str(self.profile_dir),
             headless=self.headless,
             slow_mo=self.slow_mo,
-            args=LAUNCH_ARGS,
+            args=[*LAUNCH_ARGS, *self.extra_args],
             ignore_default_args=["--enable-automation", "--use-mock-keychain"],
             viewport={"width": 1440, "height": 900},
             locale="zh-CN",

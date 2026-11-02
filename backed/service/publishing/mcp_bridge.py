@@ -46,8 +46,18 @@ import threading
 import time
 from pathlib import Path
 
+from service.publishing.url_safety import validate_timeout
+
 _DEFAULT_TIMEOUT = 60
 _MAX_OUTPUT = 200_000
+_SAFE_PARENT_ENV = frozenset((
+    "APPDATA", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
+    "PROCESSOR_ARCHITECTURE", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "TMP",
+    "USERPROFILE", "WINDIR",
+))
+_BLOCKED_ENV = frozenset({
+    "PYTHONPATH", "PYTHONHOME", "NODE_OPTIONS", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES",
+})
 
 
 class MCPBridgeError(Exception):
@@ -94,6 +104,21 @@ def _allow_tools(cfg: dict) -> set:
     return set(str(t) for t in tools)
 
 
+def _child_env(cfg: dict) -> dict[str, str]:
+    """Build a minimal child environment without inheriting parent secrets."""
+    env = {key: value for key, value in os.environ.items()
+           if key in _SAFE_PARENT_ENV}
+    explicit = cfg.get("env") or {}
+    if not isinstance(explicit, dict):
+        raise MCPBridgeError("env 必须是对象")
+    for key, value in explicit.items():
+        name = str(key)
+        if name.upper() in _BLOCKED_ENV or "TOKEN" in name.upper() or "SECRET" in name.upper():
+            raise MCPBridgeError(f"禁止向外部 MCP 注入敏感环境变量: {name}")
+        env[name] = str(value)
+    return env
+
+
 # ---------------------------------------------------------------- 单次调用
 
 async def _call_async(cfg: dict, tool: str, arguments: dict, timeout: float) -> dict:
@@ -103,7 +128,7 @@ async def _call_async(cfg: dict, tool: str, arguments: dict, timeout: float) -> 
     params = StdioServerParameters(
         command=_resolve_command(cfg),
         args=[str(a) for a in (cfg.get("args") or [])],
-        env={**os.environ, **(cfg.get("env") or {})},
+        env=_child_env(cfg),
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -146,7 +171,8 @@ def call_tool(server: str, tool: str, arguments: dict = None,
     if tool not in allowed:
         return {"ok": False, "error": f"工具 {tool} 未被授权",
                 "allowed": sorted(allowed)}
-    t = float(timeout or cfg.get("timeout") or _DEFAULT_TIMEOUT)
+    t = validate_timeout(timeout or cfg.get("timeout") or _DEFAULT_TIMEOUT,
+                         default=_DEFAULT_TIMEOUT, name="MCP timeout")
 
     box = {}
 
@@ -179,7 +205,7 @@ async def _list_tools_async(cfg: dict, timeout: float) -> list:
     params = StdioServerParameters(
         command=_resolve_command(cfg),
         args=[str(a) for a in (cfg.get("args") or [])],
-        env={**os.environ, **(cfg.get("env") or {})},
+        env=_child_env(cfg),
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -195,7 +221,8 @@ def list_tools(server: str, timeout: float = None) -> dict:
     cfg = load_config().get(server)
     if not cfg:
         return {"ok": False, "error": f"未配置 MCP Server: {server}"}
-    t = float(timeout or cfg.get("timeout") or _DEFAULT_TIMEOUT)
+    t = validate_timeout(timeout or cfg.get("timeout") or _DEFAULT_TIMEOUT,
+                         default=_DEFAULT_TIMEOUT, name="MCP timeout")
     box = {}
 
     def _runner():

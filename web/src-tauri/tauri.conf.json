@@ -1,6 +1,6 @@
 {
   "productName": "内容港 Harbour",
-  "version": "0.10.0",
+  "version": "0.12.0",
   "identifier": "com.harbour.hub",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -28,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi", "app"],
     "externalBin": [
       "binaries/harbour-backend"
     ],
@@ -41,7 +41,7 @@
     ],
     "resources": [],
     "shortDescription": "AI 多平台内容发布中枢",
-    "longDescription": "港 Harbour：AI 写稿 + AIGC 合规门禁 + 10 平台一键分发与原地更新",
+    "longDescription": "港 Harbour：AI 写稿 + AIGC 合规门禁 + 15 个内容平台分发与更新" ,
     "copyright": "harbour",
     "category": "Productivity"
   }

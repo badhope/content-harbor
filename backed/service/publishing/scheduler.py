@@ -230,7 +230,10 @@ class Scheduler:
         self._stop_evt.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=10)
-            self._thread = None
+            if self._thread.is_alive():
+                return False
+        self._thread = None
+        return True
 
     def _loop(self):
         """主轮循环：检查到期任务、execute、sleep。"""
@@ -378,17 +381,25 @@ class Scheduler:
         return True
 
     def delete(self, sid):
-        self.conn.execute("DELETE FROM scheduled_tasks WHERE id=?", (sid,))
+        cur = self.conn.execute("DELETE FROM scheduled_tasks WHERE id=?", (sid,))
         self.conn.commit()
-        return True
+        return cur.rowcount > 0
 
     def trigger_now(self, sid):
-        """手动触发一次立即执行（不改调度计划）。"""
+        """手动投递一次，不修改调度计划字段。"""
         row = self.conn.execute("SELECT * FROM scheduled_tasks WHERE id=?", (sid,)).fetchone()
         if not row:
             return None
-        self._execute(dict(row))
-        return True
+        row = dict(row)
+        article = self.conn.execute(
+            "SELECT id FROM articles WHERE id=?", (row["article_id"],)).fetchone()
+        if not article:
+            raise ValueError("定时任务关联文章不存在")
+        task_id = self.hub.tasks.submit(
+            "publish", article_id=row["article_id"],
+            platforms=json.loads(row["platforms"]), account=row["account"],
+            draft_only=bool(row["draft_only"]))
+        return {"ok": True, "schedule_id": sid, "task_id": task_id, "mode": "manual"}
 
 
 def init_scheduler(hub):

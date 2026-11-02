@@ -36,11 +36,13 @@
 import json
 from pathlib import Path
 
+from service.publishing.db import config_file
+
 from service.publishing.adapters.base import PlatformAdapter, PlatformError, register
 from service.publishing.tools.metaweblog import MetaWeblogClient
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = config_file()
 MARKDOWN_FLAG = "[Markdown]"
 
 

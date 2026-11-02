@@ -27,6 +27,14 @@ backed/service/data/
 # 前端构建产物 / 依赖
 node_modules/
 server/static/
+web/dist/
+
+# 测试与工具缓存
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
 
 # 编辑器 / 系统
 .idea/
@@ -45,9 +53,6 @@ backed/config.json
 # Tauri dev sidecar 端口文件（运行时写入，lib.rs dev 分支）
 .tauri-port
 
-# AQG 本地台账（不入库）
-.aqg/
-
 # PyInstaller 构建产物
 backed/dist/
 backed/build/
@@ -55,3 +60,4 @@ backed/build/
 
 # 本地临时工作区（截图/探针/一次性脚本，收尾清空）
 .tmp/
+.tmp-*

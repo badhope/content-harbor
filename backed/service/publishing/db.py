@@ -16,13 +16,56 @@ import time
 from pathlib import Path
 
 def data_root() -> Path:
-    """数据根目录：优先 HUB_DATA_DIR（Tauri sidecar 传入 %APPDATA%），否则仓库内 data/。"""
+    """数据根目录：优先 HUB_DATA_DIR（Tauri/Docker 传入持久目录）。"""
     env = os.environ.get("HUB_DATA_DIR", "").strip()
     if env:
         p = Path(env)
         p.mkdir(parents=True, exist_ok=True)
         return p
     return Path(__file__).resolve().parent.parent / "data"
+
+
+def config_file() -> Path:
+    """运行配置路径：与数据库/媒体/登录态共用同一持久数据根。
+
+    显式 HARBOUR_CONFIG_FILE 优先；否则固定使用数据根内的 config.json。
+    旧版 backed/config.json 只由 ``legacy_config_file`` 提供只读回退，
+    避免"新路径不存在就永远写回旧路径"的粘滞行为。
+    """
+    configured = os.environ.get("HARBOUR_CONFIG_FILE", "").strip()
+    if configured:
+        path = Path(configured)
+    elif "HUB_DATA_DIR" in os.environ:
+        path = data_root() / "config.json"
+    else:
+        return legacy_config_file()
+    legacy = legacy_config_file()
+    if path != legacy and not path.exists() and legacy.is_file():
+        import shutil
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with legacy.open("rb") as source, path.open("xb") as target:
+                shutil.copyfileobj(source, target)
+        except FileExistsError:
+            pass
+    return path
+
+
+def legacy_config_file() -> Path:
+    """旧版配置位置（只读迁移来源）。"""
+    return Path(__file__).resolve().parents[2] / "config.json"
+
+
+def load_config_dict() -> dict:
+    """Read runtime config, falling back to the legacy file without writing it."""
+    for path in (config_file(), legacy_config_file()):
+        if path.is_file():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return {}
+            return data if isinstance(data, dict) else {}
+    return {}
 
 
 DB_PATH = data_root() / "hub.db"

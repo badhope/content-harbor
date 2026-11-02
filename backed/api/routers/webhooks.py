@@ -90,7 +90,7 @@ async def events_stream(request: Request):
                 try:
                     evt = await asyncio.to_thread(q.get, timeout=1.0)
                     data = json.dumps(evt, ensure_ascii=False, default=str)
-                    yield f"message: {data}\n\n"
+                    yield f"data: {data}\n\n"
                 except queue.Empty:
                     # 心跳：防止 nginx/CDN 断连
                     yield f": heartbeat {time.time()}\n\n"

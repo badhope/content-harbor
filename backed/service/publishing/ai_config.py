@@ -14,13 +14,15 @@ import os
 import re
 import time
 from pathlib import Path
+
+from service.publishing.db import config_file
 from urllib.parse import urlparse
 
 from service.publishing import ai_providers
 
 # config.json 的文档位置是 backed/config.json（2026-10-14 路径修复，同 gate.py）
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = config_file()
 
 # 可写白名单
 TOP_LEVEL_KEYS = {"REVIEW_MODEL", "AI_DIRECT_PUBLISH"}

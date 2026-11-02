@@ -14,6 +14,8 @@ from starlette.requests import Request
 
 from service.publishing import observability as obs
 
+from service.publishing.db import config_file
+
 ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 
 
@@ -28,7 +30,7 @@ def _resolve_token() -> str:
     if tok:
         return tok
     try:
-        cfg_path = ROOT / "config.json"
+        cfg_path = (ROOT / "config.json") if ROOT != __import__("pathlib").Path(__file__).resolve().parent.parent else config_file()
         cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
         tok = (cfg or {}).get("api_token") or ""
         if not tok:
@@ -82,9 +84,10 @@ def get_client_ip(request: FastAPIRequest):
             if any(host_ip in ip_network(net, strict=False) for net in trusted):
                 fwd = request.headers.get("x-forwarded-for")
                 if fwd:
-                    first = fwd.split(",")[0].strip()
+                    # 只采信由受信代理追加的最后一跳，客户端自带的 XFF 前缀不可信。
+                    last = fwd.split(",")[-1].strip()
                     try:
-                        return ip_address(first)
+                        return ip_address(last)
                     except ValueError:
                         pass
         except (ValueError, TypeError):

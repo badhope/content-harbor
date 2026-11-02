@@ -8,10 +8,17 @@
 from pathlib import Path
 
 from service.publishing import db
+from service.publishing.db import data_root
 from service.publishing.versions import capture as ver_capture
 
-# 与 service.py 同义：backed/ 目录。导入根用它的父目录（仓库根）。
-BACKED_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_BACKED_ROOT = Path(__file__).resolve().parents[2]
+BACKED_ROOT = _DEFAULT_BACKED_ROOT
+
+
+def _markdown_import_root() -> Path:
+    if BACKED_ROOT != _DEFAULT_BACKED_ROOT:
+        return BACKED_ROOT.parent
+    return data_root() / "imports"
 
 
 class ArticleOpsMixin:
@@ -61,10 +68,8 @@ class ArticleOpsMixin:
         from service.publishing import importing
 
         try:
-            # allow_root 用仓库根：旧实现把 ROOT 算成 backed/service，
-            # 连 docs/*.md 都判越权——"仅允许项目目录内"写成了"仅允许 service/ 内"。
             meta, body = importing.read_markdown_file(
-                Path(path), allow_root=BACKED_ROOT.parent)
+                Path(path), allow_root=_markdown_import_root())
         except importing.ImportError_ as e:
             raise ValueError(str(e))
         title = title or meta.get("title") or Path(path).stem

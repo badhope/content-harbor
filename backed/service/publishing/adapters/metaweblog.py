@@ -19,10 +19,12 @@ import xmlrpc.client
 from datetime import datetime
 from pathlib import Path
 
+from service.publishing.db import config_file
+
 from service.publishing.adapters.base import PlatformAdapter, PlatformError, register
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = config_file()
 
 # WordPress / Typecho 都认这套字段名，个别实现（Halo）可能忽略，不影响发布
 BLOG_ID = "0"

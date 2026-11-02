@@ -11,14 +11,35 @@ function getBaseURL() {
   return '/api/v1/hub'
 }
 
+// 部署在外网/容器时后端要求 X-API-Token；令牌只从本机浏览器存储读取，
+// 不写进构建产物，也不放进 URL。
+const TOKEN_KEY = 'harbour_api_token'
+
+export function getApiToken() {
+  try {
+    return window.localStorage.getItem(TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setApiToken(token) {
+  try {
+    if (token) window.localStorage.setItem(TOKEN_KEY, token)
+    else window.localStorage.removeItem(TOKEN_KEY)
+  } catch { /* 隐私模式下忽略 */ }
+}
+
 const http = axios.create({
   baseURL: '/api/v1/hub',
   timeout: 120000   // 发布/更新要开浏览器，慢是正常的
 })
 
-// 每次请求前动态设置 baseURL（处理 Tauri 端口延迟注入）
+// 每次请求前动态设置 baseURL（处理 Tauri 端口延迟注入）并附带令牌
 http.interceptors.request.use(config => {
   config.baseURL = getBaseURL()
+  const token = getApiToken()
+  if (token) config.headers['X-API-Token'] = token
   return config
 })
 

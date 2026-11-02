@@ -59,7 +59,7 @@ def register_hub(app: FastAPI) -> None:
 
 
 # ---------------- 独立运行入口 ----------------
-app = FastAPI(title="AI 内容中台", version="0.7.0")
+app = FastAPI(title="AI 内容中台", version="0.12.0")
 if _cors_origins:
     app.add_middleware(
         CORSMiddleware,

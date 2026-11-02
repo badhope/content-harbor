@@ -2,14 +2,14 @@
 
 ## 总览
 
-15 个平台适配器分三类，连接方式完全不同：
+15 个平台适配器分两类，连接方式完全不同：
 
 | 类型 | 平台 | 连接方式 | 登录态有效期 |
 |------|------|----------|-------------|
-| 浏览器（扫码） | csdn / juejin / zhihu / segmentfault / bilibili / toutiao / oschina / xiaohongshu | `uv run python -m backed.cli login --platform <名>` 扫码一次，登录态存本地 profile | 长期（数周~数月，视平台） |
+| 浏览器登录（扫码/账密/验证码，按平台页面为准） | csdn / juejin / zhihu / segmentfault / bilibili / toutiao / oschina / xiaohongshu | `uv run --project backed python -m backed.cli --headed login --platform <名>`，登录态存本地 profile | 长期（数周~数月，视平台） |
 | 纯协议（config.json 填凭据） | cnblogs / metaweblog / 51cto / devto / github / wechat / telegraph | 填 `config.json` 的 `platforms.<名>` 字段，免扫码 | 永不过期（token 类凭据失效才需换） |
 
-统一发布入口：`cd backed && uv run python -m backed.cli publish --id <文章ID> --platforms <逗号分隔>`。
+统一发布入口：`uv run --project backed python -m backed.cli publish --id <文章ID> --platforms <逗号分隔>`。
 
 每个平台的凭据字段一句话说明见应用内「设置 → 平台账号」卡片提示；能力矩阵（支持发布/草稿/更新/列表/标签/封面）由代码级 `CAPABILITIES` 声明，`GET /api/v1/hub/platforms` 原样下发。
 
@@ -50,21 +50,21 @@ MetaWeblog 三件套自动写进 config.json，账号标在线——全程不用
 ### 2. 验证连接
 
 ```bash
-cd backed && uv run python -m backed.cli check --platform cnblogs
+uv run --project backed python -m backed.cli check --platform cnblogs
 # 输出 ✓ 已登录 即凭据有效
 ```
 
 ### 3. 发布
 
 ```bash
-cd backed && uv run python -m backed.cli publish --id 4 --platforms cnblogs --draft
+uv run --project backed python -m backed.cli publish --id 4 --platforms cnblogs --draft
 # 先草稿；确认无误后去掉 --draft 正式发布
 ```
 
 ### 自动抠令牌（替代手贴）
 
 ```bash
-python cli.py bootstrap-cnblogs --username <登录名> --password <登录密码>
+uv run --project backed python -m backed.cli bootstrap-cnblogs --username <登录名> --password-stdin < password.txt
 # 有头浏览器登录一次，自动把 endpoint/username/token 写进 config.json
 ```
 
@@ -75,7 +75,7 @@ python cli.py bootstrap-cnblogs --username <登录名> --password <登录密码>
 ### 1. 首次登录（每个平台各做一次）
 
 ```bash
-cd backed && uv run python -m backed.cli login --platform juejin --headed
+uv run --project backed python -m backed.cli --headed login --platform juejin
 # 弹出有头 Chromium，扫码/输密码登录
 # 登录态存到 data/profiles/<platform>/<account>/，之后 publish 自动复用
 ```
@@ -94,28 +94,28 @@ cd backed && uv run python -m backed.cli login --platform juejin --headed
 ### 2. 检查登录态
 
 ```bash
-cd backed && uv run python -m backed.cli check --platform juejin
+uv run --project backed python -m backed.cli check --platform juejin
 # ✓ 已登录 / ✗ 未登录
 ```
 
 ### 3. 发布
 
 ```bash
-cd backed && uv run python -m backed.cli publish --id 4 --platforms juejin,csdn --draft
+uv run --project backed python -m backed.cli publish --id 4 --platforms juejin,csdn --draft
 # 多平台逗号分隔；--draft 只发草稿
 ```
 
 ### 4. 排查
 
 ```bash
-python cli.py diagnose --platform <名>
+uv run --project backed python -m backed.cli diagnose --platform <名>
 # 输出该平台的登录页、是否需要浏览器、验证码策略、推荐接入方式
 ```
 
 ### 5. 验证码专项
 
 ```bash
-python cli.py solve-captcha --platform <名> --wait 180
+uv run --project backed python -m backed.cli solve-captcha --platform <名> --wait 180
 # 打开页面就地处理验证码：先半自动点，不行暂停等人工
 ```
 
@@ -148,14 +148,14 @@ python cli.py solve-captcha --platform <名> --wait 180
 
 ```bash
 # 1. AI 写 3000 字并入库（不发布）
-python cli.py ai-write --topic "用 Python 实现一个轻量级任务调度器" --words 3000
+uv run --project backed python -m backed.cli ai-write --topic "用 Python 实现一个轻量级任务调度器" --words 3000
 # 输出：{"id": 5, ...}
 
 # 2. 人工确认内容无误后，发布到多个平台（草稿）
-cd backed && uv run python -m backed.cli publish --id 5 --platforms cnblogs,juejin,csdn --draft
+uv run --project backed python -m backed.cli publish --id 5 --platforms cnblogs,juejin,csdn --draft
 
 # 3. 确认后正式发布
-cd backed && uv run python -m backed.cli publish --id 5 --platforms cnblogs,juejin,csdn
+uv run --project backed python -m backed.cli publish --id 5 --platforms cnblogs,juejin,csdn
 ```
 
 > **合规门禁**：AI 源文章发布时自动强制 `draft_only=True`（人审闸门）。想正式上线须单独调 `publish(draft_only=False)`。
@@ -164,7 +164,7 @@ cd backed && uv run python -m backed.cli publish --id 5 --platforms cnblogs,juej
 
 ## 五、REST API（不跑 CLI 时）
 
-服务起在 `127.0.0.1:8800`，关键端点：
+Web/工厂入口默认监听 `127.0.0.1:8000`；仅 `backed.cli serve` 默认使用 `127.0.0.1:8800`。关键端点：
 
 | 端点 | 方法 | 用途 |
 |------|------|------|
@@ -183,5 +183,5 @@ cd backed && uv run python -m backed.cli publish --id 5 --platforms cnblogs,juej
 
 1. `GET /api/v1/hub/health` 全绿；
 2. 纯协议平台先填 `config.json`（见第三节），`check --platform <名>` 返回 ✓；
-3. 浏览器平台逐个 `login --headed` 扫码（见第二节），扫码完点「检测」确认登录态；
+3. 浏览器平台逐个 `--headed login` 扫码（见第二节），扫码完点「检测」确认登录态；
 4. 发一篇草稿到目标平台，回读确认无误后再正式发布。

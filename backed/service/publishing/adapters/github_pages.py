@@ -25,12 +25,14 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from service.publishing.db import config_file
+
 import requests
 
 from service.publishing.adapters.base import PlatformAdapter, PlatformError, register
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = config_file()
 API = "https://api.github.com"
 TIMEOUT = 30
 MAX_BYTES = 900_000          # 官方上限 1MB，留余量给 base64 膨胀

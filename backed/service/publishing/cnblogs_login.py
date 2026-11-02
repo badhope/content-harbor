@@ -19,7 +19,6 @@
 """
 
 import json
-import sys
 import time
 from pathlib import Path
 
@@ -323,15 +322,4 @@ def extract_metaweblog(page, save_to=None, login_username=None):
 
 
 if __name__ == "__main__":
-    # 独立运行：python -m service.publishing.cnblogs_login <用户名> <密码>
-    if len(sys.argv) >= 3:
-        from service.publishing.browser import BuiltinBrowser, ensure_display
-        ensure_display()
-        b = BuiltinBrowser("cnblogs", "default", headless=False)
-        r = login_browser(b, sys.argv[1], sys.argv[2])
-        print(json.dumps(r, ensure_ascii=False, indent=2))
-        if r["outcome"] == "success":
-            pg = b.new_page()
-            print(json.dumps(extract_metaweblog(pg, str(ROOT / "config.json")),
-                             ensure_ascii=False, indent=2))
-        b.close()
+    raise SystemExit("请使用 backed.cli bootstrap-cnblogs，密码不会通过命令行参数传递")

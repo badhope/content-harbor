@@ -21,6 +21,9 @@
     }
 """
 
+import hmac
+import hmac
+import os
 import sys
 from pathlib import Path
 
@@ -28,9 +31,21 @@ from pathlib import Path
 _THIS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_THIS_DIR / "backed"))
 
+from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 from service.publishing.service import Hub
+
+
+class _StaticTokenVerifier:
+    """Minimal Bearer verifier for explicitly configured remote SSE."""
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        expected = os.environ.get("HARBOUR_MCP_TOKEN", "").strip()
+        if not expected or not hmac.compare_digest(token, expected):
+            return None
+        return AccessToken(token=token, client_id="harbour", scopes=["mcp"])
 
 # ── 单例 Hub（MCP server 进程内只启一次）──────────────────────────
 _hub = None
@@ -43,7 +58,17 @@ def _get_hub() -> Hub:
     return _hub
 
 
-mcp = FastMCP("harbour")
+_MCP_TOKEN = os.environ.get("HARBOUR_MCP_TOKEN", "").strip()
+_mcp_auth = AuthSettings(
+    issuer_url="http://127.0.0.1:8900",
+    resource_server_url="http://127.0.0.1:8900",
+    validate_token_resource=False,
+) if _MCP_TOKEN else None
+mcp = FastMCP(
+    "harbour",
+    token_verifier=_StaticTokenVerifier() if _MCP_TOKEN else None,
+    auth=_mcp_auth,
+)
 
 
 # ── 文章 ────────────────────────────────────────────────────────────
@@ -449,12 +474,15 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Harbour MCP Server")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8900)
     args = parser.parse_args()
 
     if args.transport == "sse":
-        # FastMCP.run() 只接 transport，host/port 由构造参数决定
-        mcp.settings.host = "0.0.0.0"
+        if args.host not in {"127.0.0.1", "::1", "localhost"} \
+                and not os.environ.get("HARBOUR_MCP_TOKEN", "").strip():
+            raise SystemExit("远程 SSE 必须设置 HARBOUR_MCP_TOKEN")
+        mcp.settings.host = args.host
         mcp.settings.port = args.port
     mcp.run(transport=args.transport)
 

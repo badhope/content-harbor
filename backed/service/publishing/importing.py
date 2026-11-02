@@ -18,8 +18,15 @@ from urllib.parse import urlparse
 
 import frontmatter
 
+from service.publishing.db import data_root
+from service.publishing.url_safety import validate_timeout, validate_url
+
 # 正文少于这个长度视为"没抓到内容"（登录墙/JS 渲染页/404 页）
 MIN_CONTENT_CHARS = 120
+MAX_MARKDOWN_BYTES = 5 * 1024 * 1024
+_ALLOWED_SUFFIXES = frozenset((".md", ".markdown"))
+_SENSITIVE_NAMES = frozenset(("config", "config.json", ".env", ".gitignore"))
+_SENSITIVE_SUFFIXES = (".db", ".sqlite", ".sqlite3", ".log")
 
 # 常见站点里 trafilatura 抓不到时用来兜底的正文容器选择器
 # （只用于提示，不在这里做 HTML 解析——抓不到就如实报错）
@@ -27,7 +34,7 @@ _JS_HEAVY_HOSTS = ("mp.weixin.qq.com", "zhuanlan.zhihu.com", "juejin.cn",
                    "www.toutiao.com", "blog.csdn.net")
 
 
-class ImportError_(Exception):
+class ImportError_(ValueError):
     """导入失败（与内置 ImportError 区分）。"""
 
 
@@ -54,17 +61,47 @@ def _normalize_tags(value) -> str:
     return str(value).strip().strip("[]").replace("'", "").replace('"', "")
 
 
+def _default_import_root() -> Path:
+    """生产导入根：与应用数据隔离，避免把仓库配置当内容读入。"""
+    root = data_root() / "imports"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _is_safe_markdown_name(target: Path, root: Path) -> bool:
+    relative_parts = target.relative_to(root).parts
+    if any(part.startswith(".") for part in relative_parts):
+        return False
+    name = target.name.lower()
+    stem = target.stem.lower()
+    if target.suffix.lower() not in _ALLOWED_SUFFIXES:
+        return False
+    if (name in _SENSITIVE_NAMES or stem == "config" or name.startswith(".env")
+            or stem.endswith(_SENSITIVE_SUFFIXES)):
+        return False
+    return True
+
+
 def read_markdown_file(path: Path, allow_root: Path = None) -> tuple[dict, str]:
-    """读本地 Markdown（含 front-matter），带路径越权防护。"""
+    """读取指定安全根内的 Markdown，保留 resolve 后的 symlink 越权防护。"""
     try:
-        target = path.expanduser().resolve()
-    except Exception:
-        raise ImportError_(f"非法导入路径: {path}")
-    root = (allow_root or Path(__file__).resolve().parents[2]).resolve()
-    if target != root and root not in target.parents:
-        raise ImportError_(f"导入路径越权（仅允许项目目录内）: {target}")
+        root = (allow_root if allow_root is not None else _default_import_root())
+        root = Path(root).expanduser().resolve()
+        target = Path(path).expanduser().resolve()
+    except Exception as exc:  # aqg: top-level boundary（路径解析必须 fail-closed）
+        raise ImportError_(f"非法导入路径: {path}") from exc
+    if target == root or root not in target.parents:
+        raise ImportError_(f"导入路径越权（仅允许安全导入根内）: {target}")
+    if not _is_safe_markdown_name(target, root):
+        raise ImportError_(f"不允许导入该文件类型或敏感路径: {target.name}")
     if not target.is_file():
         raise ImportError_(f"导入文件不存在: {target}")
+    try:
+        size = target.stat().st_size
+    except OSError as exc:
+        raise ImportError_(f"无法读取导入文件: {target}") from exc
+    if size > MAX_MARKDOWN_BYTES:
+        raise ImportError_(f"Markdown 文件超过 {MAX_MARKDOWN_BYTES // 1024 // 1024}MB 上限")
     text = target.read_text(encoding="utf-8", errors="replace")
     meta, body = parse_markdown(text)
     meta["title"] = meta.get("title") or target.stem
@@ -109,28 +146,40 @@ def _extract_from_html(html: str, url: str) -> tuple[dict, str]:
     }, _clean_markdown(body)
 
 
-def fetch_url(url: str, timeout: int = 30) -> tuple[dict, str]:
-    """抓取网页并转成 Markdown。返回 (meta, 正文)。
+MAX_REDIRECTS = 5
+MAX_HTML_BYTES = 10 * 1024 * 1024
 
-    安全边界与 media 模块一致：只允许 http/https，解析后必须是公网 IP，
-    防止把导入接口当 SSRF 跳板读内网/云元数据。
-    """
-    import trafilatura
-    from service.publishing import media
 
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ImportError_(f"仅支持 http/https 链接: {url[:100]}")
-    media._validate_url(url)          # 复用公网 IP 校验（含 DNS 解析）
+def _fetch_public_html(url: str, timeout: float) -> tuple[str, str]:
+    """抓取公网网页：连接固定在已校验 IP 上，规避 DNS 重绑定。"""
+    from service.publishing.url_safety import URLSafetyError, fetch_pinned
 
     try:
-        downloaded = trafilatura.fetch_url(url)
-    except Exception as e:
-        raise ImportError_(f"抓取失败: {type(e).__name__}: {e}")
-    if not downloaded:
-        raise ImportError_(f"页面抓取为空（可能需要登录或禁止抓取）: {url}")
+        data, final_url = fetch_pinned(
+            url, timeout=timeout, max_bytes=MAX_HTML_BYTES,
+            max_redirects=MAX_REDIRECTS,
+            headers={"User-Agent": "HarbourImporter/1.0"})
+    except URLSafetyError as exc:
+        raise ImportError_(str(exc)) from exc
+    return data.decode("utf-8", errors="replace"), final_url
 
-    return _extract_from_html(downloaded, url)
+
+def fetch_url(url: str, timeout: int = 30) -> tuple[dict, str]:
+    """抓取公网网页并转成 Markdown。返回 (meta, 正文)。"""
+    try:
+        bounded_timeout = validate_timeout(timeout, default=30, name="timeout")
+        validate_url(url)
+    except ValueError as exc:
+        raise ImportError_(str(exc)) from exc
+    try:
+        downloaded, final_url = _fetch_public_html(url, bounded_timeout)
+    except ImportError_:
+        raise
+    except Exception as e:
+        raise ImportError_(f"抓取失败: {type(e).__name__}: {e}") from e
+    if not downloaded:
+        raise ImportError_(f"页面抓取为空（可能需要登录或禁止抓取）: {final_url}")
+    return _extract_from_html(downloaded, final_url)
 
 
 def fetch_url_browser(url: str, platform: str, hub, account="default",

@@ -15,6 +15,8 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from service.publishing.db import config_file
+
 
 
 TAGS_TABLE_DDL = """
@@ -38,7 +40,7 @@ def _config_path():
     而那个路径既不是其它模块读的配置，也**不在 .gitignore 里**——点一次
     「标签治理 → 合并」就在仓库里凭空多出一个未跟踪的 config.json。
     """
-    return Path(__file__).resolve().parents[2] / "config.json"
+    return config_file()
 
 
 def _ensure_table(conn):
