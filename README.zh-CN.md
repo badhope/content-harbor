@@ -34,6 +34,10 @@
 |---|---|
 | ![设置](docs/screenshots/04-settings.png) | ![移动端](docs/screenshots/05-mobile.png) |
 
+![平台账号](docs/screenshots/06-platforms.png)
+
+*十五个适配器，每个都声明自己真实支持的能力。置灰的动作是平台不支持，不是功能缺失。*
+
 ## 快速开始
 
 需要 Python 3.10+、[uv](https://docs.astral.sh/uv/)、Node 20+ 与 pnpm。

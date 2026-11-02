@@ -55,6 +55,8 @@ export const useHubStore = defineStore('hub', {
     waitingTasks() { return useTaskStore().waitingTasks },
 
     tags() { return useTagStore().tags },
+    clusters() { return useTagStore().clusters },
+    loadingClusters() { return useTagStore().loadingClusters },
     schedules() { return useScheduleStore().schedules },
     webhooks() { return useWebhookStore().webhooks },
     notifications() { return useWebhookStore().notifications },
@@ -233,6 +235,8 @@ export const useHubStore = defineStore('hub', {
     syncTags(...a) { return useTagStore().syncTags(...a) },
     renameTag(...a) { return useTagStore().renameTag(...a) },
     mergeTag(...a) { return useTagStore().mergeTag(...a) },
+    loadClusters(...a) { return useTagStore().loadClusters(...a) },
+    mergeAllClusters(...a) { return useTagStore().mergeAllClusters(...a) },
     suggestTags(...a) { return useTagStore().suggestTags(...a) },
     // 定时任务
     loadSchedules(...a) { return useScheduleStore().loadSchedules(...a) },

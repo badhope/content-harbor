@@ -4,7 +4,29 @@
       <span class="dim small">词云按使用频次；支持重命名 / 合并 / 别名映射，改完已发布文章不重发，只影响后续使用。</span>
       <span class="spacer" />
       <el-button size="small" @click="hub.syncTags()">重新统计</el-button>
+      <el-button size="small" :loading="hub.loadingClusters" @click="findClusters">查找近似标签</el-button>
       <el-button size="small" :icon="Refresh" @click="hub.loadTags()">刷新</el-button>
+    </div>
+
+    <!-- 近似标签簇：先看清单再合并，避免一键误伤 -->
+    <div v-if="hub.clusters.length" class="cluster-box">
+      <div class="cluster-head">
+        <span class="dim small">
+          发现 {{ hub.clusters.length }} 组近似标签，合并后只影响后续使用，已发布文章不重发
+        </span>
+        <span class="spacer" />
+        <el-button size="small" type="primary" plain @click="mergeAll">全部合并</el-button>
+        <el-button size="small" text @click="hub.clusters = []">收起</el-button>
+      </div>
+      <div v-for="(c, i) in hub.clusters" :key="i" class="cluster-row">
+        <el-tag size="small" type="success" effect="plain">{{ c.canonical }}</el-tag>
+        <span class="dim small">←</span>
+        <span class="cluster-members">
+          <el-tag v-for="m in c.members.filter(x => x !== c.canonical)" :key="m"
+                  size="small" type="info" effect="plain">{{ m }}</el-tag>
+        </span>
+        <span class="cluster-reason dim small">{{ [].concat(c.reason || []).join(" / ") }}</span>
+      </div>
     </div>
 
     <div v-if="hub.tags.length" class="tag-cloud">
@@ -45,6 +67,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
 import EmptyState from '@/components/EmptyState.vue'
 
@@ -75,6 +98,20 @@ async function doMerge() {
   await hub.loadTags()
   opsOpen.value = false
 }
+
+async function findClusters() {
+  await hub.loadClusters()
+  if (!hub.clusters.length) ElMessage.info('没有发现近似标签')
+}
+
+async function mergeAll() {
+  try {
+    await ElMessageBox.confirm(
+      `将合并 ${hub.clusters.length} 组近似标签。合并不可自动撤销，但只影响标签本身，不改文章正文。`,
+      '合并近似标签', { type: 'warning', confirmButtonText: '合并', cancelButtonText: '取消' })
+  } catch { return }
+  await hub.mergeAllClusters()
+}
 </script>
 
 <style scoped lang="scss">
@@ -91,6 +128,15 @@ async function doMerge() {
   .tag-cnt { font-style: normal; color: var(--tx-4); font-size: 11px; }
 }
 .op-row { display: flex; gap: 8px; width: 100%; }
+.cluster-box {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 10px 12px; background: var(--surface-2);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.cluster-head { display: flex; align-items: center; gap: 8px; }
+.cluster-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cluster-members { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.cluster-reason { margin-left: auto; }
 .dim { color: var(--tx-4); }
 .small { font-size: var(--fs-xs); }
 </style>
