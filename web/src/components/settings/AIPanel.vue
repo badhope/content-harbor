@@ -239,12 +239,37 @@ async function saveReview() {
 .status-bar { display: flex; align-items: center; gap: 12px; }
 
 .pv-title {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-right: 8px;
   b { font-size: var(--fs-md); color: var(--tx-1); }
   .price-tag {
     margin-left: auto; font-size: 11px; color: var(--accent);
     background: var(--accent-soft); border: 1px solid var(--accent-line);
     padding: 1px 8px; border-radius: 9px;
+    // 窄屏下不允许被挤成竖排（实测 390px 时「经济」两个字竖着堆）
+    white-space: nowrap; flex-shrink: 0; line-height: 1.6;
+  }
+}
+
+@media (max-width: 767px) {
+  // 折叠头在窄屏允许换行，否则长 Provider 名（Anthropic (OpenAI-compat proxy)）会把价格标签挤没
+  :deep(.el-collapse-item__header) { height: auto; min-height: 48px; line-height: 1.5; padding: 8px 6px; }
+  .pv-body { max-width: none; }
+
+  // 150px 固定标签宽在 375px 屏上把内容区压到只剩 200px，
+  // 长说明文字逐字折行（实测「关闭（默认）」被拆成多行溢出）。
+  // 窄屏改成上下堆叠：标签一行、内容占满整宽。
+  :deep(.el-form-item) { flex-direction: column; align-items: flex-start; }
+  :deep(.el-form-item__label) {
+    width: auto !important; padding: 0 0 6px; line-height: 1.5;
+    justify-content: flex-start; text-align: left;
+  }
+  :deep(.el-form-item__content) {
+    width: 100%; margin-left: 0 !important; flex-wrap: wrap;
+  }
+  // 说明文字在窄屏独占一行，不与控件抢同一行宽
+  :deep(.el-form-item__content > .dim.small) {
+    flex-basis: 100%; margin-left: 0 !important; margin-top: 6px;
   }
 }
 :deep(.el-collapse-item__header) { padding-left: 6px; }

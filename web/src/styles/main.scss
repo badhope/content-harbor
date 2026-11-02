@@ -19,19 +19,19 @@
   // 文字（深灰层次，黑得干净、灰得透气）
   --tx-1: #1F2329;        // 主标题 / 正文强调
   --tx-2: #4E5969;        // 常规正文
-  --tx-3: #86909C;        // 次要 / 说明
-  --tx-4: #C9CDD4;        // 占位 / 禁用
+  --tx-3: #5F6A78;        // 次要 / 说明（AA：白底 5.5:1）
+  --tx-4: #66707F;        // 占位 / 禁用（AA：白底 5.0:1）
 
   // 单一强调色：飞书蓝（主操作 + 选中 + 高亮）
-  --accent:      #3370FF;  // 飞书蓝
-  --accent-hi:   #5B8CFF;  // 亮蓝（hover / 高亮）
-  --accent-soft: rgba(51, 112, 255, .08);
-  --accent-line: rgba(51, 112, 255, .28);
+  --accent:      #2A5CE0;  // 飞书蓝（加深到白字 5.67:1）
+  --accent-hi:   #2456D6;  // hover 加深（白字 6.22:1）
+  --accent-soft: rgba(42, 92, 224, .08);
+  --accent-line: rgba(42, 92, 224, .28);
 
   // 辅助强调（克制使用）
-  --ok:   #34A97B;   // 成功 / 在线（柔和绿）
-  --warn: #E8964A;   // 警告（暖橙）
-  --bad:  #E05252;   // 失败（柔红）
+  --ok:   #0F7A52;   // 成功 / 在线（白字 5.35:1）
+  --warn: #8A5510;   // 警告（白字 7.11:1；浅底文字也 ≥ 5:1）
+  --bad:  #B0382E;   // 失败（白字 6.08:1）
 
   // 字体（系统字体栈 + 中文优化，零外部请求）
   // 无衬线栈：英文用 SF Pro / Segoe UI，中文用苹方 / 微软雅黑
@@ -66,11 +66,11 @@
   --ease-out: cubic-bezier(.22, 1, .36, 1);
 
   // 兼容旧变量名（避免大面积改动期间样式断裂）
-  --brand-1: #3370FF;
-  --brand-2: #5B8CFF;
-  --brand-grad: linear-gradient(135deg, #3370FF, #5B8CFF);
-  --brand-soft: rgba(51, 112, 255, .08);
-  --brand-line: rgba(51, 112, 255, .28);
+  --brand-1: #2A5CE0;
+  --brand-2: #2456D6;
+  --brand-grad: linear-gradient(135deg, #2A5CE0, #2456D6);
+  --brand-soft: rgba(42, 92, 224, .08);
+  --brand-line: rgba(42, 92, 224, .28);
   --ach-bg: #F5F7FA;
   --ach-panel: #FFFFFF;
   --ach-panel-2: #F7F9FC;
@@ -82,19 +82,56 @@
 }
 
 // ---------- Element Plus 亮色变量接管（飞书蓝主题） ----------
-html {
-  --el-color-primary: #3370FF;
-  --el-color-primary-light-3: #5B8CFF;
-  --el-color-primary-light-5: #8FB5FF;
-  --el-color-primary-light-7: #C6D8FF;
-  --el-color-primary-light-8: #DCE8FF;
-  --el-color-primary-light-9: #F0F5FF;
-  --el-color-primary-dark-2: #2A5CE0;
+// 必须用 :root，不能用 html：Element Plus 自带的变量定义在 :root 上，
+// 伪类选择器(:root)优先级高于类型选择器(html)，写成 html 会被默认色板
+// 静默覆盖——表现为标签仍是 #f56c6c 默认红、primary 仍是 #409eff，
+// 而按钮因为另有 .el-button--primary 显式样式看起来"像是生效了"。
+:root {
+  --el-color-primary: #2A5CE0;
+  --el-color-primary-light-3: #6A8DE9;
+  --el-color-primary-light-5: #94AEF0;
+  --el-color-primary-light-7: #BFCEF6;
+  --el-color-primary-light-8: #D4DEF9;
+  --el-color-primary-light-9: #EAEFFC;
+  --el-color-primary-dark-2: #224AB3;
 
-  --el-color-success: #34A97B;
-  --el-color-warning: #E8964A;
-  --el-color-danger:  #E05252;
-  --el-color-error:   #E05252;
+  --el-color-success: #0F7A52;
+  --el-color-success-light-3: #57A286;
+  --el-color-success-light-5: #87BCA8;
+  --el-color-success-light-7: #B7D7CB;
+  --el-color-success-light-8: #CFE4DC;
+  --el-color-success-light-9: #E7F2EE;
+  --el-color-success-dark-2: #0C6242;
+
+  --el-color-warning: #8A5510;
+  --el-color-warning-light-3: #AD8858;
+  --el-color-warning-light-5: #C4AA88;
+  --el-color-warning-light-7: #DCCCB7;
+  --el-color-warning-light-8: #E8DDCF;
+  --el-color-warning-light-9: #F3EEE7;
+  --el-color-warning-dark-2: #6E440D;
+
+  --el-color-danger:  #B0382E;
+  --el-color-danger-light-3: #C8746D;
+  --el-color-danger-light-5: #D89C96;
+  --el-color-danger-light-7: #E7C3C0;
+  --el-color-danger-light-8: #EFD7D5;
+  --el-color-danger-light-9: #F7EBEA;
+  --el-color-danger-dark-2: #8D2D25;
+  --el-color-error:   #B0382E;
+  --el-color-error-light-3: #C8746D;
+  --el-color-error-light-5: #D89C96;
+  --el-color-error-light-7: #E7C3C0;
+  --el-color-error-light-8: #EFD7D5;
+  --el-color-error-light-9: #F7EBEA;
+  --el-color-error-dark-2: #8D2D25;
+  --el-color-info: #5F6A78;
+  --el-color-info-light-3: #8F97A1;
+  --el-color-info-light-5: #AFB5BD;
+  --el-color-info-light-7: #CFD2D7;
+  --el-color-info-light-8: #DFE1E4;
+  --el-color-info-light-9: #EFF0F1;
+  --el-color-info-dark-2: #4C5560;
 
   --el-bg-color:            #FFFFFF;
   --el-bg-color-page:       #F5F7FA;
@@ -114,9 +151,9 @@ html {
 
   --el-text-color-primary:     #1F2329;
   --el-text-color-regular:     #4E5969;
-  --el-text-color-secondary:   #86909C;
-  --el-text-color-placeholder: #C9CDD4;
-  --el-text-color-disabled:    #B9BFc9;
+  --el-text-color-secondary:   #5F6A78;
+  --el-text-color-placeholder: #66707F;
+  --el-text-color-disabled:    #8A93A6;
 
   --el-border-radius-base: 10px;
   --el-disabled-bg-color: #F7F9FC;
@@ -250,14 +287,18 @@ a:focus-visible,
   gap: 10px;
   padding: 14px 18px;
   flex-shrink: 0;
+  flex-wrap: wrap;          // 窄屏横向挤不下时换行，不允许把标题压成竖排
+  row-gap: 8px;
 
   .title {
     font-size: var(--fs-lg);
     font-weight: 600;
     letter-spacing: .01em;
     color: var(--tx-1);
+    white-space: nowrap;    // 「任务中心」曾被挤成每行一个字
+    flex-shrink: 0;
   }
-  .spacer { flex: 1; }
+  .spacer { flex: 1; min-width: 0; }
 }
 
 .pane-body {
@@ -320,6 +361,31 @@ a:focus-visible,
     flex-wrap: wrap;
     font-variant-numeric: tabular-nums;
   }
+
+  // 删除按钮：平时隐形，悬停/聚焦时出现——避免列表看起来像一排垃圾桶
+  .del {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--tx-4);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .14s, color .14s, background .14s;
+  }
+  &:hover .del, &:focus-within .del { opacity: 1; }
+  .del:hover, .del:focus-visible {
+    color: var(--bad);
+    background: color-mix(in srgb, var(--bad) 12%, transparent);
+  }
+  // 触屏没有悬停态，直接常显，否则删除入口在手机上永远点不到
+  @media (hover: none) { .del { opacity: 1; } }
 }
 
 // 骨架屏（浅灰微光）
@@ -688,10 +754,10 @@ a:focus-visible,
 }
 
 .el-button--success {
-  --el-button-bg-color: #34A97B;
-  --el-button-border-color: #34A97B;
-  --el-button-hover-bg-color: #3FBD8C;
-  --el-button-hover-border-color: #3FBD8C;
+  --el-button-bg-color: #0F7A52;
+  --el-button-border-color: #0F7A52;
+  --el-button-hover-bg-color: #0C6B48;
+  --el-button-hover-border-color: #0C6B48;
 }
 
 // 输入框 / 文本域：聚焦蓝边

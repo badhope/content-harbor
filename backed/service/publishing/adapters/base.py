@@ -53,6 +53,20 @@ class PlatformError(Exception):
     pass
 
 
+def _http_error(url: str, status, res: dict, method: str = "POST") -> PlatformError:
+    """构造带限流元数据的错误串。
+
+    任务引擎要靠 `retry-after:` / `x-ratelimit-reset:` 这两个前缀解析平台
+    冷却窗口；不把它们带出来，上层只能瞎猜一个默认值。
+    """
+    parts = [f"{method} {url} 失败({status}): {str(res.get('text', ''))[:200]}"]
+    if res.get("retryAfter"):
+        parts.append(f"retry-after: {res['retryAfter']}")
+    if res.get("rateLimitReset"):
+        parts.append(f"x-ratelimit-reset: {res['rateLimitReset']}")
+    return PlatformError(" | ".join(parts))
+
+
 # ---------------- 回读验证原语（verify-after-act）----------------
 #
 # 2026-09 复盘出的系统缺陷：三个平台都出过「动作没生效但函数返回成功」的假成功
@@ -328,6 +342,21 @@ class PlatformAdapter:
     list_url = ""      # 内容管理页
     new_url = ""       # 新建文章页
 
+    # ---- 能力矩阵（代码级声明，不是文档幻觉）----
+    # 前端发布轨按此置灰不支持的选项，任务引擎按此决定是否降级，
+    # `/platforms` 端点原样下发。新增适配器必须显式声明，默认全 False：
+    # 默认 True 会让"看起来支持"变成新的假成功来源。
+    capabilities = {
+        "publish": False,     # 发新文章
+        "draft": False,       # 只存草稿
+        "update": False,      # 原地更新已发布文章
+        "list": False,        # 抓取账号内文章列表
+        "tags": False,        # 支持标签/分类
+        "cover": False,       # 支持封面图
+        "question": False,    # 知乎回答问题这类特有能力
+        "hosted_media": False,  # 接受本应用提供的图片 URL（自建站/支持外链的平台）
+    }
+
     # 选择器版本化（第三刀）：每个子类声明它依赖的页面结构版本与关键选择器，
     # 平台改版时 dump-dom 能立刻对上号，而不是报一堆无关错误。
     selector_version = ""    # 例如 "2026-09"（适配/验证时手动更新）
@@ -388,11 +417,13 @@ class PlatformAdapter:
         """在页面上下文里发 GET，自动带 cookie —— 比直接 requests 省事也更像真人。"""
         js = """async (u) => {
             const r = await fetch(u, {credentials: 'include'});
-            return {status: r.status, text: await r.text()};
+            return {status: r.status, text: await r.text(),
+                    retryAfter: r.headers.get('retry-after') || '',
+                    rateLimitReset: r.headers.get('x-ratelimit-reset') || ''};
         }"""
         res = page.evaluate(js, url)
         if res["status"] != 200:
-            raise PlatformError(f"GET {url} -> HTTP {res['status']}")
+            raise PlatformError(_http_error(url, res["status"], res, method="GET"))
         try:
             return json.loads(res["text"])
         except Exception:
@@ -406,7 +437,9 @@ class PlatformAdapter:
                 headers: Object.assign({'content-type': 'application/json'}, hdrs || {}),
                 body: JSON.stringify(body)
             });
-            return {status: r.status, text: await r.text()};
+            return {status: r.status, text: await r.text(),
+                    retryAfter: r.headers.get('retry-after') || '',
+                    rateLimitReset: r.headers.get('x-ratelimit-reset') || ''};
         }"""
         res = page.evaluate(js, [url, payload, headers])
         try:
@@ -418,7 +451,7 @@ class PlatformAdapter:
         status = res["status"]
         if not (200 <= int(status) < 300) or (
                 isinstance(data, dict) and data.get("err_no") not in (0, None)):
-            raise PlatformError(f"POST {url} 失败({status}): {res['text'][:200]}")
+            raise PlatformError(_http_error(url, status, res))
         return data
 
     def api_put(self, page, url, payload, headers=None):
@@ -592,6 +625,45 @@ class PlatformAdapter:
 
 
 ADAPTERS = {}
+
+
+# 每个适配器声明自己真实实现的能力。数值来自各实现体：有方法且有实际赋值点才算 True，
+# 仅"没抛 NotImplementedError"不算——那是自欺。
+CAPABILITIES = {
+    "devto":        {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "cover": True, "hosted_media": True},
+    "github":       {"publish": True, "draft": False, "update": True, "list": True,
+                     "tags": True, "hosted_media": True},
+    "wechat":       {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": False, "cover": False, "hosted_media": False},
+    "telegraph":    {"publish": True, "draft": False, "update": True,  "list": True,
+                     "tags": False, "cover": False, "hosted_media": True},
+    "xiaohongshu":  {"publish": True, "draft": True, "update": False, "list": False,
+                     "tags": False, "cover": False, "hosted_media": False},
+    "bilibili":     {"publish": True, "draft": True, "update": True,  "tags": True},
+    "cnblogs":      {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "hosted_media": True},
+    "csdn":         {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "cover": True},
+    "juejin":       {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "cover": True},
+    "metaweblog":   {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "hosted_media": True},
+    "oschina":      {"publish": True, "draft": True, "update": False, "list": False},
+    "segmentfault": {"publish": True, "draft": True, "update": True,  "tags": True},
+    "toutiao":      {"publish": True, "draft": True, "update": False, "list": False},
+    "51cto":        {"publish": True, "draft": True, "update": True,  "list": True,
+                     "tags": True, "hosted_media": True},
+    "zhihu":        {"publish": True, "draft": True, "update": True,  "tags": True,
+                     "question": True},
+}
+
+
+def capability_of(platform_id: str) -> dict:
+    """返回某平台的能力矩阵（未注册/未声明时全 False）。"""
+    base = dict(PlatformAdapter.capabilities)
+    base.update(CAPABILITIES.get(platform_id, {}))
+    return base
 
 
 def register(cls):

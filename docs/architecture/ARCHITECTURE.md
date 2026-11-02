@@ -1,16 +1,16 @@
-# ARCHITECTURE.md — 内容港 Harbor 架构
+# ARCHITECTURE.md — 内容港 Harbour 架构
 
 | 项 | 值 |
 |---|---|
-| 版本 | 0.6.5 |
-| 日期 | 2026-10-10 |
+| 版本 | 0.10.0 |
+| 日期 | 2026-10-29 |
 | 状态 | 维护中 |
 | 唯一真理源 | 本文件 + [`AGENT.md`](../../AGENT.md) |
 | 位置 | 2026-10-10 从仓库根目录迁入 `docs/architecture/`（tech-debt 台账 #11） |
 
 ## 1. 系统概览
 
-内容港 Harbor：**写 → 合规审查 → 多平台分发 → 原地更新 → 人机协作收尾**。
+内容港 Harbour：**写 → 合规审查 → 多平台分发 → 原地更新 → 人机协作收尾**。
 
 - 技术栈：Python 3.12+ / FastAPI / SQLite / Patchright (Playwright 反检测 fork) / Vue 3 + Element Plus + Pinia
 - 架构模式：统一任务引擎 (TaskManager) + 10 个平台适配器
@@ -55,7 +55,7 @@
 ## 3. 目录结构
 
 ```
-content-harbor/
+harbour/
 ├── backed/                    # 后端（FastAPI + SQLite + 任务引擎）
 │   ├── app/
 │   │   ├── factory.py         # FastAPI 工厂 + lifespan
@@ -187,28 +187,28 @@ SQLite 单文件，WAL 模式 + 30s busy_timeout。
 
 ## 7. REST API 路径总览
 
-> 所有长任务返回 `task_id`，轮询 `GET /api/hub/tasks/{task_id}` 获取进度。
+> 所有长任务返回 `task_id`，轮询 `GET /api/v1/hub/tasks/{task_id}` 获取进度。
 
 | 域 | 端点 |
 |---|---|
-| **总览** | `GET /api/hub/status` · `GET /api/hub/platforms` · `GET /api/hub/metrics` |
-| **文章** | `GET/POST /api/hub/articles` · `GET/PUT /api/hub/articles/{id}` · `GET /api/hub/articles/search/{kw}` |
-| **发布** | `POST /api/hub/articles/{id}/publish` · `POST /api/hub/articles/{id}/update` · `POST /api/hub/sync/pending` |
-| **任务** | `GET /api/hub/tasks` · `GET /api/hub/tasks/{id}` · `POST /api/hub/tasks/{id}/resume` |
-| **账号** | `GET /api/hub/accounts` · `GET /api/hub/accounts/{p}/check` · `POST /api/hub/accounts/{p}/login` · `DELETE /api/hub/accounts/{p}` |
-| **账号+** | `GET /api/hub/accounts/{p}/diagnose` · `POST /api/hub/accounts/{p}/solve-captcha` · `POST /api/hub/accounts/{p}/assist` · `POST /api/hub/refresh/{p}` |
-| **AI** | `POST /api/hub/ai/write` · `POST /api/hub/articles/{id}/ai-rewrite` · `POST /api/hub/articles/{id}/ai-polish` · `GET /api/hub/ai/status` · `GET /api/hub/ai/gate` |
-| **AI增强** | `POST /api/hub/articles/{id}/ai-translate` · `GET /api/hub/articles/{id}/ai-image-prompts` · `GET /api/hub/articles/{id}/ai-outline` · `GET /api/hub/articles/{id}/ai-seo` · `POST /api/hub/articles/{id}/clone` · `GET /api/hub/ai/templates` |
-| **版本** | `GET /api/hub/articles/{id}/versions` · `GET /api/hub/articles/{id}/versions/{vid}` · `GET /api/hub/articles/{id}/versions/diff` · `POST /api/hub/articles/{id}/versions/{vid}/rollback` |
-| **定时** | `GET/POST /api/hub/schedules` · `GET/PUT /api/hub/schedules/{sid}` · `POST /api/hub/schedules/{sid}/pause` · `POST /api/hub/schedules/{sid}/resume` · `POST /api/hub/schedules/{sid}/trigger` · `DELETE /api/hub/schedules/{sid}` |
-| **标签** | `GET /api/hub/tags` · `GET /api/hub/tags/trending` · `POST /api/hub/tags/sync` · `POST /api/hub/tags/rename` · `POST /api/hub/tags/merge` · `POST /api/hub/tags/alias` · `POST /api/hub/tags/suggest` |
-| **AI模型** | `GET /api/hub/ai/providers`（多 Provider 列表 + 模型 + 价格级别 + 冷却状态） |
-| **质检** | `POST /api/hub/articles/{id}/qa` · `POST /api/hub/qa/analyze`（可读性 + SEO + 重复度 0-100 评分） |
-| **Webhook** | `GET/POST /api/hub/webhooks` · `PUT/DELETE /api/hub/webhooks/{id}` · `POST /api/hub/webhooks/{id}/test` |
-| **通知** | `GET /api/hub/notifications`（环形缓冲最近事件） |
-| **发布实例** | `GET /api/hub/publications` · `GET /api/hub/pending-human` |
+| **总览** | `GET /api/v1/hub/status`（`published`=已上线平台实例数、`published_articles`=已发布文章数，两口径别混用） · `GET /api/v1/hub/platforms` · `GET /api/v1/hub/metrics`（累积桶直方图 + p50/p90/p99） |
+| **文章** | `GET/POST /api/v1/hub/articles` · `GET /api/v1/hub/articles/page?limit=&offset=` · `GET/PUT /api/v1/hub/articles/{id}` · `GET /api/v1/hub/articles/search/{kw}` |
+| **发布** | `POST /api/v1/hub/articles/{id}/publish` · `POST /api/v1/hub/articles/{id}/update` · `POST /api/v1/hub/sync/pending` |
+| **任务** | `GET /api/v1/hub/tasks` · `GET /api/v1/hub/tasks/page?limit=&offset=` · `GET /api/v1/hub/tasks/{id}` · `POST /api/v1/hub/tasks/{id}/resume` |
+| **账号** | `GET /api/v1/hub/accounts` · `GET /api/v1/hub/accounts/{p}/check` · `POST /api/v1/hub/accounts/{p}/login` · `DELETE /api/v1/hub/accounts/{p}` |
+| **账号+** | `GET /api/v1/hub/accounts/{p}/diagnose` · `POST /api/v1/hub/accounts/{p}/solve-captcha` · `POST /api/v1/hub/accounts/{p}/assist` · `POST /api/v1/hub/refresh/{p}` |
+| **AI** | `POST /api/v1/hub/ai/write` · `POST /api/v1/hub/articles/{id}/ai-rewrite` · `POST /api/v1/hub/articles/{id}/ai-polish` · `GET /api/v1/hub/ai/status` · `GET /api/v1/hub/ai/gate` |
+| **AI增强** | `POST /api/v1/hub/articles/{id}/ai-translate` · `GET /api/v1/hub/articles/{id}/ai-image-prompts` · `GET /api/v1/hub/articles/{id}/ai-outline` · `GET /api/v1/hub/articles/{id}/ai-seo` · `POST /api/v1/hub/articles/{id}/clone` · `GET /api/v1/hub/ai/templates` |
+| **版本** | `GET /api/v1/hub/articles/{id}/versions` · `GET /api/v1/hub/articles/{id}/versions/{vid}` · `GET /api/v1/hub/articles/{id}/versions/diff` · `POST /api/v1/hub/articles/{id}/versions/{vid}/rollback` |
+| **定时** | `GET/POST /api/v1/hub/schedules` · `GET/PUT /api/v1/hub/schedules/{sid}` · `POST /api/v1/hub/schedules/{sid}/pause` · `POST /api/v1/hub/schedules/{sid}/resume` · `POST /api/v1/hub/schedules/{sid}/trigger` · `DELETE /api/v1/hub/schedules/{sid}` |
+| **标签** | `GET /api/v1/hub/tags` · `GET /api/v1/hub/tags/trending` · `POST /api/v1/hub/tags/sync` · `POST /api/v1/hub/tags/rename` · `POST /api/v1/hub/tags/merge` · `POST /api/v1/hub/tags/alias` · `POST /api/v1/hub/tags/suggest` |
+| **AI模型** | `GET /api/v1/hub/ai/providers`（多 Provider 列表 + 模型 + 价格级别 + 冷却状态） |
+| **质检** | `POST /api/v1/hub/articles/{id}/qa` · `POST /api/v1/hub/qa/analyze`（可读性 + SEO + 重复度 0-100 评分） |
+| **Webhook** | `GET/POST /api/v1/hub/webhooks` · `PUT/DELETE /api/v1/hub/webhooks/{id}` · `POST /api/v1/hub/webhooks/{id}/test` |
+| **通知** | `GET /api/v1/hub/notifications`（环形缓冲最近事件） |
+| **发布实例** | `GET /api/v1/hub/publications` · `GET /api/v1/hub/pending-human` |
 
-交互式文档：`GET /api/hub/docs`（Swagger UI）/ `GET /api/hub/redoc`。
+交互式文档：`GET /api/v1/hub/docs`（Swagger UI）/ `GET /api/v1/hub/redoc`。
 
 ## 8. 设计决策（ADR）
 
@@ -250,7 +250,39 @@ TaskManager 100 行实现同等功能 + SQLite 持久化 + 进程重启恢复。
 30 秒轮询 `scheduled_tasks` 表 + 串行投递到 TaskManager，一次性线程（daemon=True）。
 一次性任务执行完自动 disable，`cron` 表达式走手撸最小 5 段解析（*/n 步长 + 逗号 + 连字符）。
 
-### D9: 标签治理不引 NLP 库
+### D10: 能力矩阵用代码声明，不用文档表格
+
+文档表格没人执行。`PlatformAdapter.capabilities` + `CAPABILITIES` 表把
+"这个平台支持什么"变成可断言的代码：`/platforms` 下发、发布/更新前分流、
+前端置灰、`test_capability_matrix_matches_reality` 反向校验"声明 update=True
+的平台不能抛不支持"。新增平台必须显式声明，默认全 False——默认 True 会制造
+新的"看起来支持"假象。
+
+### D11: 媒体走内容寻址，不走数据库 BLOB
+
+图片按 sha256 存 `data/media/<前2位>/<sha><ext>`，DB 只存元数据。
+理由：SQLite 存 BLOB 会让单文件库随图片膨胀到 GB 级，备份/迁移/VACUUM 全变慢；
+文件系统 + 内容寻址天然支持 immutable 缓存与 CDN 回源。同图只存一份。
+
+### D12: 检索用 FTS5 而非外部分词器
+
+中文分词（jieba）会引入词典与进程内状态，而 FTS5 的 trigram 分词对中文
+是"3 字滑窗"，无需词典、无额外依赖、支持任意子串匹配。代价是 2 字查询
+无法走索引（trigram 最少 3 字符），这类查询回退 LIKE——两字词本来就少。
+
+### D13b: 外部 MCP Server 用桥接而非内置
+
+社区已有高质量 MCP Server（Playwright 官方浏览器、fetch 抓取）。自研等于
+重复造轮子，但直接依赖会把别人进程嵌进主服务。桥接方案：MCP Client 按
+配置 stdio 拉起、工具白名单授权、超时兜底、默认关闭——用得上就接，
+用不上零开销。
+
+### D13c: 平台限流冷却按平台落库
+
+429 的语义是"平台现在不收任何请求"，不是"我这次失败"。冷却状态按平台
+存 SQLite（只延长不缩短），让同平台后续任务一起等，避免把限流窗口越撞越长。
+
+### D13: 标签治理
 
 本地 `tag_stats` 表记次数 + `config.json` 存 `alias_map` 同义合并规则。
 分类靠关键词白名单（语言/框架/领域/其他），AI 推荐只补全本地 Top 20 高频之外的缺口。

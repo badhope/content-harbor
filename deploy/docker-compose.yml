@@ -1,4 +1,4 @@
-# 内容港 Harbor — Docker Compose
+# 内容港 Harbour — Docker Compose
 #
 # 一键启动（后端 + 前端 + nginx）：
 #   docker compose --profile web up -d --build
@@ -24,14 +24,23 @@ services:
       dockerfile: deploy/Dockerfile
     container_name: ach-backend
     restart: unless-stopped
-    ports:
-      - "${APP_PORT:-8000}:8000"
+    expose:
+      - "8000"
     environment:
       FASTAPI_ENV: ${FASTAPI_ENV:-docker}
       DEBUG: ${DEBUG:-false}
-      SECRET_KEY: ${SECRET_KEY:-please-change-me-in-production-min-32-chars}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in the deployment environment}
+      HARBOUR_API_TOKEN: ${HARBOUR_API_TOKEN:?set HARBOUR_API_TOKEN in the deployment environment}
+      HARBOUR_CONFIG_FILE: /app/data/config.json
+      ALLOWED_HOSTS: '${ALLOWED_HOSTS:-["localhost","127.0.0.1","backend"]}'
+      CORS_ORIGINS: '${CORS_ORIGINS:-[]}'
+      HARBOUR_DATABASE_URL: ${HARBOUR_DATABASE_URL:-sqlite+aiosqlite:////app/data/hub.db}
+      # 数据根：DB / 媒体 / 登录快照 / 事件日志全部挂在 data_root() 下。
+      # 不设它时数据落在镜像内 backed/service/data，容器重建即丢（原 compose
+      # 挂载的是 backed/data，而代码实际用的是 backed/service/data，两边对不上）。
+      HUB_DATA_DIR: /app/data
     volumes:
-      - hub_data:/app/backed/data
+      - hub_data:/app/data
     networks: [app-net]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
@@ -50,7 +59,8 @@ services:
     container_name: ach-web
     restart: unless-stopped
     ports:
-      - "${WEB_PORT:-3000}:80"
+      - "127.0.0.1:${WEB_PORT:-3000}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks: [app-net]

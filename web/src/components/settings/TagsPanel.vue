@@ -8,15 +8,16 @@
     </div>
 
     <div v-if="hub.tags.length" class="tag-cloud">
-      <span v-for="t in hub.tags" :key="t.tag" class="tag-chip"
+      <button v-for="t in hub.tags" :key="t.tag" type="button" class="tag-chip"
             :style="{ fontSize: Math.max(11, Math.min(17, 10 + (t.count || 1) * 0.5)) + 'px' }"
+            :aria-label="`标签 ${t.tag}：${t.count} 篇，打开操作`"
             @click="openOps(t)">
         {{ t.tag }} <em class="tag-cnt">{{ t.count }}</em>
-      </span>
+      </button>
     </div>
     <EmptyState v-else title="还没有标签数据" desc="先保存几篇文章，再点「重新统计」" :px="60" />
 
-    <el-dialog v-model="opsOpen" :title="`标签操作 · ${current?.tag || ''}`" width="440px">
+    <el-dialog v-model="opsOpen" :title="`标签操作 · ${current?.tag || ''}`" width="min(440px, 94vw)">
       <el-form label-width="80px" v-if="current">
         <el-form-item label="重命名">
           <div class="op-row">
@@ -82,6 +83,7 @@ async function doMerge() {
 .tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; }
 .tag-chip {
   display: inline-flex; align-items: center; gap: 5px;
+  font-family: inherit; line-height: 1.5;
   padding: 3px 10px; border-radius: 999px; background: var(--surface-2);
   color: var(--tx-2); border: 1px solid var(--line); cursor: pointer;
   transition: border-color .14s, background .14s;

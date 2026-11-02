@@ -12,8 +12,17 @@ from pathlib import Path
 
 from service.publishing import crypto
 
-ROOT = Path(__file__).resolve().parent.parent
-_DB_PATH = ROOT / "data" / "hub.db"
+def _default_db_path() -> Path:
+    """与 db.DB_PATH 同源，避免桌面版/容器两套路径打架。
+
+    保留模块级 `_DB_PATH` 变量（conftest 会 monkeypatch 它），但初始化时
+    仍以 db.DB_PATH 为准——两者不一致时取 db 的值。
+    """
+    from service.publishing import db
+    return db.DB_PATH
+
+
+_DB_PATH = _default_db_path()
 
 
 def _conn():

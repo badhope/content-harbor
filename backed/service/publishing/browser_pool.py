@@ -22,6 +22,9 @@ class BrowserPoolManager:
         self._pool_order = []
         self._pool_lock = threading.Lock()
         self._busy = {}
+        # key -> Event：正在锁外关闭的实例。同 key 的 _acquire 必须等它关完，
+        # 否则会在旧实例还占着 profile 时就 launch_persistent_context（必失败）。
+        self._closing = {}
 
     def _busy_for(self, platform, account):
         """取（或建）per-key 互斥锁。"""
@@ -31,27 +34,59 @@ class BrowserPoolManager:
                 self._busy[key] = threading.Lock()
             return self._busy[key]
 
+    def _mark_closing(self, key):
+        """在持有 _pool_lock 时登记"该 key 正在关闭"，返回 (event, 是否本次新建)。"""
+        ev = self._closing.get(key)
+        if ev is not None:
+            return ev, False
+        ev = threading.Event()
+        self._closing[key] = ev
+        return ev, True
+
+    def _close_victims(self, victims):
+        """锁外关闭，并在关完后释放同 key 的等待者。"""
+        for key, victim, ev, owner in victims:
+            try:
+                browser_thread_run(victim.close)
+            except Exception:  # aqg: top-level boundary 关闭失败不影响已取到的实例
+                pass
+            finally:
+                if owner:
+                    with self._pool_lock:
+                        if self._closing.get(key) is ev:
+                            self._closing.pop(key, None)
+                    ev.set()
+
     def _acquire(self, platform, account):
         """拿（或起）一个 headless 实例。拿到的不关，池里常驻复用。"""
         key = (platform, account)
-        with self._pool_lock:
-            br = self._pool.get(key)
-            if br is not None:
-                if key in self._pool_order:
-                    self._pool_order.remove(key)
-                self._pool_order.append(key)
-                return br
-            br = BuiltinBrowser(platform, account, headless=self.headless)
-            self._pool[key] = br
-            self._pool_order.append(key)
-            while len(self._pool_order) > self.POOL_MAX:
-                old = self._pool_order.pop(0)
-                victim = self._pool.pop(old, None)
-                if victim:
-                    try:
-                        victim.close()
-                    except Exception:
-                        pass
+        while True:
+            victims, br, wait_ev = [], None, None
+            with self._pool_lock:
+                wait_ev = self._closing.get(key)
+                if wait_ev is None:
+                    br = self._pool.get(key)
+                    if br is not None:
+                        if key in self._pool_order:
+                            self._pool_order.remove(key)
+                        self._pool_order.append(key)
+                    else:
+                        br = BuiltinBrowser(platform, account, headless=self.headless)
+                        self._pool[key] = br
+                        self._pool_order.append(key)
+                        while len(self._pool_order) > self.POOL_MAX:
+                            old = self._pool_order.pop(0)
+                            victim = self._pool.pop(old, None)
+                            if victim:
+                                ev, owner = self._mark_closing(old)
+                                victims.append((old, victim, ev, owner))
+            if wait_ev is not None:
+                # 同 key 的旧实例还在关：等它关完再重试，避免 profile 被占用
+                wait_ev.wait()
+                continue
+            # 淘汰实例必须在池锁外关闭：close() 会走浏览器线程并可能阻塞数秒，
+            # 持锁关闭会把整池取用（含其它 key 的 _acquire）一起堵死。
+            self._close_victims(victims)
             return br
 
     def _drop(self, platform, account):
@@ -61,11 +96,9 @@ class BrowserPoolManager:
             victim = self._pool.pop(key, None)
             if key in self._pool_order:
                 self._pool_order.remove(key)
+            ev, owner = (self._mark_closing(key) if victim else (None, False))
         if victim:
-            try:
-                browser_thread_run(victim.close)
-            except Exception:
-                pass
+            self._close_victims([(key, victim, ev, owner)])
 
     def close_all_browsers(self):
         """关池中所有浏览器（不清 scheduler/TaskManager）。"""

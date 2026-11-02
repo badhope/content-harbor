@@ -57,7 +57,7 @@ def webhooks_test(wid: int):
     """发送测试事件到指定 webhook。"""
     from service.publishing import events as evt_mod
     evt_mod.init_events()
-    evt_mod.emit("test", {"message": "Content Harbor 测试事件", "webhook_id": wid})
+    evt_mod.emit("test", {"message": "Harbour 测试事件", "webhook_id": wid})
     return {"ok": True, "message": "测试事件已派发"}
 
 
@@ -90,7 +90,7 @@ async def events_stream(request: Request):
                 try:
                     evt = await asyncio.to_thread(q.get, timeout=1.0)
                     data = json.dumps(evt, ensure_ascii=False, default=str)
-                    yield f"message: {data}\n\n"
+                    yield f"data: {data}\n\n"
                 except queue.Empty:
                     # 心跳：防止 nginx/CDN 断连
                     yield f": heartbeat {time.time()}\n\n"

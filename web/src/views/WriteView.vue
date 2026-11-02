@@ -6,8 +6,13 @@
       :articles="hub.articles"
       :current-id="hub.currentId"
       :loading="hub.loadingList"
+      :total="hub.total"
+      :has-more="hub.hasMore"
+      :loading-more="hub.loadingMore"
       @open="onOpen"
       @new-article="hub.newArticle()"
+      @load-more="hub.loadMore()"
+      @remove="onRemove"
     />
 
     <!-- 中：编辑器 -->
@@ -17,8 +22,10 @@
       :is-new="!hub.currentId"
       :dirty="hub.dirty"
       :saving="hub.saving"
+      :show-library="!listDocked"
+      @open-library="listDrawer = true"
       @save="hub.save()"
-      @touch="hub.dirty = true"
+      @touch="hub.markDirty()"
       @publish="onPublish"
       @sync-update="hub.updateRemote(hub.updatable)"
       @ai-rewrite="onRewrite"
@@ -28,11 +35,18 @@
       <EmptyState
         :px="58"
         title="墨迹未干"
-        desc="挑一篇接着写，或新起一篇。写完在右侧发布轨里选平台，一发出网。"
+        desc="挑一篇接着写，或新起一篇。写完在发布轨里选平台，一发出网。"
       >
         <el-button type="primary" :icon="Plus" @click="hub.newArticle()">起一篇新文</el-button>
         <el-button :icon="MagicStick" @click="$emit('ai-write')">让 AI 落笔</el-button>
+        <el-button v-if="!listDocked && hub.articles.length" :icon="Files"
+                   @click="listDrawer = true">打开文章库</el-button>
       </EmptyState>
+      <div v-if="!hub.articles.length" class="onboard-hints">
+        <div class="hint-step"><span class="step-n">1</span> 写文章（或让 AI 帮写）</div>
+        <div class="hint-step"><span class="step-n">2</span> 设置 → 平台账号 → 登录/填凭据</div>
+        <div class="hint-step"><span class="step-n">3</span> 发布轨选平台 → 一键多平台发布</div>
+      </div>
     </div>
 
     <!-- 右：发布轨（≥1280 常驻） -->
@@ -45,8 +59,13 @@
       :articles="hub.articles"
       :current-id="hub.currentId"
       :loading="hub.loadingList"
+      :total="hub.total"
+      :has-more="hub.hasMore"
+      :loading-more="hub.loadingMore"
       @open="id => { onOpen(id); listDrawer = false }"
       @new-article="hub.newArticle()"
+      @load-more="hub.loadMore()"
+      @remove="onRemove"
     />
   </el-drawer>
 
@@ -58,9 +77,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { Plus, MagicStick } from '@element-plus/icons-vue'
+import { Plus, MagicStick, Files } from '@element-plus/icons-vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useHubStore } from '@/stores/hub'
 import { api } from '@/api'
@@ -80,9 +99,31 @@ const railDrawer = ref(false)
 const layoutClass = computed(() =>
   sideDocked.value ? 'three' : listDocked.value ? 'two' : 'one')
 
+// Ctrl+S 保存：创作者最高频快捷键，不依赖鼠标点按钮
+function onKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    if (hub.currentId || hub.dirty) hub.save()
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+
+// 关闭/刷新浏览器时如果有未保存改动，弹原生确认框（最后防线）
+function onBeforeUnload(e) {
+  if (hub.dirty) { e.preventDefault(); e.returnValue = '' }
+}
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
+
 async function onOpen(id) {
   await hub.open(id)
   listDrawer.value = false
+}
+
+async function onRemove(id) {
+  await hub.removeArticle(id)
+  if (!hub.currentId) listDrawer.value = false
 }
 
 // 「发布」：宽屏滚动高亮右轨（常驻无需动作）；窄屏打开发布抽屉
@@ -135,5 +176,20 @@ async function onPolish() {
 
 @media (max-width: 1023px) {
   .write-wrap { padding: 10px; gap: 10px; }
+}
+
+.onboard-hints {
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  margin-top: 4px; padding: 0 16px;
+  .hint-step {
+    display: flex; align-items: center; gap: 8px;
+    font-size: var(--fs-sm); color: var(--tx-3);
+  }
+  .step-n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: var(--fs-xs); font-weight: 600; flex-shrink: 0;
+  }
 }
 </style>

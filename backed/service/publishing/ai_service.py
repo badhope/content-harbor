@@ -211,5 +211,6 @@ class AIService:
         return qa_mod.full_qa(
             {"title": title or "", "content_md": content_md or "",
              "summary": summary or "", "tags": tags or ""},
-            other_articles=other
+            other_articles=other,
+            conn=self.conn,        # 启用相似度签名缓存
         )
