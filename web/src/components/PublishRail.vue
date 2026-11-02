@@ -128,6 +128,9 @@
             </div>
             <div v-if="selectedReady.cooling.length" class="pre-warn bad">
               ⏳ {{ selectedReady.cooling.join('、') }} 限流冷却中，发布任务会自动延后
+              <el-button size="small" text type="primary" @click="clearCooldowns">
+                已确认恢复，解除冷却
+              </el-button>
             </div>
           </div>
           <div class="pre-ok" v-else-if="selectedReady.ready.length">
@@ -196,6 +199,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
 import { useSettingsStore } from '@/stores/settings'
+import { api } from '@/api'
 import EmptyState from './EmptyState.vue'
 
 const hub = useHubStore()
@@ -219,6 +223,13 @@ const cooldownMap = computed(() => {
   for (const c of cooldowns.value) m[c.platform] = c
   return m
 })
+
+// 平台侧确认恢复后手动解除冷却，不必等冷却窗口自然到期
+async function clearCooldowns() {
+  await api.clearCooldowns()
+  await hub.loadStatus()
+  ElMessage.success('冷却已解除')
+}
 
 // 发布前就绪摘要：检查选中平台是否在线/配置/冷却
 const selectedReady = computed(() => {
