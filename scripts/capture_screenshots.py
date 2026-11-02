@@ -104,6 +104,16 @@ def main() -> int:
             page.screenshot(path=str(OUT / f"{name}.png"))
             print(f"  ok {name}.png")
 
+        # 平台账号矩阵：15 张卡是项目最核心的对外展示，单独截一张
+        if _click_view(page, "settings", "设置"):
+            time.sleep(args.wait)
+            tabs = page.locator(".el-tabs__item")
+            if tabs.count() > 1:
+                tabs.nth(1).click()
+                time.sleep(args.wait + 1)
+                page.screenshot(path=str(OUT / "06-platforms.png"))
+                print("  ok 06-platforms.png")
+
         page.set_viewport_size({"width": 375, "height": 812})
         page.goto(args.base, wait_until="domcontentloaded", timeout=45000)
         time.sleep(args.wait)

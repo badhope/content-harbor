@@ -4,6 +4,10 @@
 
 ## 1. 目录结构（0.13.0 真实）
 
+> 根目录 Markdown 契约：README.md、README.zh-CN.md、CHANGELOG.md、CONTRIBUTING.md、
+> SECURITY.md、CODE_OF_CONDUCT.md、AGENT.md、PLATFORM_CONNECTION.md、LICENSE。
+> 其余长文与审计一律进 `docs/`。
+
 ```
 harbour/
 ├── backed/
@@ -96,7 +100,8 @@ harbour/
 │   │   │   ├── wuyi_cto.py       # 51CTO
 │   │   │   ├── xiaohongshu.py    # 小红书（浏览器自动化，选择器待实机验证）
 │   │   │   └── zhihu.py          # 知乎
-│   │   ├── ai_providers.py        # AI 多 Provider 路由（8 家：DeepSeek/Kimi/GLM/…）
+│   │   ├── url_safety.py            # 出网统一校验：公网 IP 判定 / 超时钳制 / 连接钉扎抓取 / 逐跳重定向
+│   ├── ai_providers.py        # AI 多 Provider 路由（7 家内置：DeepSeek/Kimi/GLM/…）
 │   │   ├── ai_config.py           # AI 配置读写（掩码/白名单原子写/连通性测试）
 │   │   ├── providers/             # 平台外部工具 Provider（biliup/wenyan 等薄壳）
 │   │   │   ├── __init__.py
@@ -126,16 +131,29 @@ harbour/
 │   ├── src-tauri/               # Tauri 2.0 壳（Cargo + Rust）
 │   └── package.json             # pnpm 管理
 ├── scripts/
-│   ├── check_all.ps1            # 一键门禁（Windows）
-│   ├── check_all.sh             # 一键门禁（Linux/macOS）
+│   ├── check_all.ps1            # 一键门禁（Windows，八道）
+│   ├── check_all.sh             # 一键门禁（Linux/macOS，八道）
+│   ├── bump_version.py          # 五处版本清单原子更新与一致性校验
+│   ├── scan_secrets.py          # 密钥扫描（token 前缀 / 私钥头 / 高熵赋值）
+│   ├── capture_screenshots.py   # 生成 docs/screenshots 的界面截图
 │   ├── backup_data.py           # 数据备份（在线一致性快照）
+│   ├── build_sidecar.ps1        # 桌面端后端 sidecar 构建（未跨平台验证）
 │   └── login_probe.py           # 登录页诊断（导出二维码 / 复检登录态，不代替扫码）
-├── mcp_server.py                # MCP Server（30 Tool，stdio + SSE；可桥接外部 MCP Server）
+├── mcp_server.py                # MCP Server（32 Tool，stdio + SSE；可桥接外部 MCP Server）
 ├── deploy/                      # Docker 部署
 └── docs/
+    ├── PROJECT_MANAGEMENT.md    # 分支模型 / 完成定义 / 三道门禁 / 五仓同步 / 技术债政策
+    ├── VERSIONING.md            # SemVer 规则 / 五处版本清单 / 发布清单
+    ├── ROADMAP.md               # 已交付 / 下一步 / 待排期 / 明确不做
+    ├── REPO_METADATA.md         # 五仓描述与 topics 的规范副本
+    ├── PLATFORM_PUBLISH_GUIDE.md
     ├── architecture/ARCHITECTURE.md
     ├── audit/AUDIT.md
+    ├── audit/archive/           # 历史审查快照
+    ├── articles/                # 对外长文（技术随笔）
     ├── design/tech-debt.md
+    ├── screenshots/             # README 截图（scripts/capture_screenshots.py 生成）
+    ├── verification/            # 人工检查的带日期证据
     └── writing-style.md
 ```
 

@@ -11,9 +11,9 @@ UI driven by Patchright through the system Edge binary.
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend tests | `uv run --no-sync pytest -q` | **533 passed**, 1 Starlette deprecation warning |
+| Backend tests | `uv run --no-sync pytest -q` | **537 passed**, 1 Starlette deprecation warning; three consecutive clean runs |
 | Ruff | `uv run ruff check .` | All checks passed |
-| Frontend tests | `pnpm test --run` | **63 passed** across 9 files |
+| Frontend tests | `pnpm test --run` | **66 passed** across 10 files |
 | Frontend lint | `pnpm lint` | 0 errors, 194 warnings (stylistic) |
 | Frontend build | `pnpm build` | success, 4374 modules, 16.6 s |
 | Version consistency | `scripts/bump_version.py --check` | 5/5 at `0.13.0` |
@@ -112,7 +112,16 @@ All reachable with the server running:
 405  GET /browser/{platform}/fetch   (POST-only route, expected)
 ```
 
-## 7. Not verified in this record
+## 7. Defects found and fixed during this pass
+
+| Defect | Impact | Fix | Regression test |
+|---|---|---|---|
+| `/health` returned 401 for non-loopback sources | Docker healthcheck / k8s probe always failed; dependants never started | health paths exempt from the token check, business routes unchanged | `test_health_auth_boundary.py` (3 cases; removing the exemption makes 2 fail) |
+| Tag governance panel rendered blank | Whole settings tab unusable, no console error | expose `clusters` / `loadingClusters` getters on the hub store | `tag.test.js` (3 cases; removing the getters makes 2 fail) |
+| `fetch_pinned` timeout was cosmetic | Caller believed the request never happened; the worker thread still connected afterwards | cancellation event checked before every network step | `test_cancelled_flag_alone_blocks_connection` (fails when the check is removed) |
+| Flaky `test_dns_timeout_prevents_late_connection` | Intermittent red in CI; masked the real timeout bug | fixed the underlying cancellation bug; widened the post-timeout wait | 12 consecutive runs, 0 failures |
+
+## 8. Not verified in this record
 
 These remain open and must not be described as working:
 
