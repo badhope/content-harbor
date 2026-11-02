@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """发布 / 更新 / 同步端点 + 统一任务查询。"""
 
+import json
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -93,29 +94,60 @@ def sync_pending(body: Optional[UpdateIn] = None):
 
 # ---- 统一任务查询 / 恢复 ----
 
+def _task_row(row: dict, parse_result: bool = False) -> dict:
+    """把 DB 原始行转成前端契约：platforms 必须是数组。
+
+    `tasks.platforms` 在库里是 JSON 字符串。列表端点原先直接返回原始行，
+    前端 `(row.platforms || []).join()` 拿到字符串就抛 TypeError——
+    实测任务表「对象」列空白、后续列整体错位。详情端点早就解析了，
+    列表端点漏了，这里统一收口。
+    """
+    out = dict(row)
+    try:
+        out["platforms"] = json.loads(out.get("platforms") or "[]")
+    except Exception:   # aqg: top-level boundary（脏数据不应让整表 500）
+        out["platforms"] = []
+    if parse_result:
+        try:
+            out["result"] = json.loads(out.get("result") or "{}")
+        except Exception:   # aqg: top-level boundary（同上）
+            out["result"] = {}
+    return out
+
+
 @router.get("/tasks")
 def tasks_list(limit: int = 50, kind: str = None, status: str = None):
     """任务列表：按 kind/status 过滤，默认返回最近 50 条。"""
-    return get_hub().tasks.list(limit=limit, kind=kind, status=status)
+    limit = max(1, min(limit, 200))
+    rows = get_hub().tasks.list(limit=limit, kind=kind, status=status)
+    return [_task_row(r) for r in rows]
+
+
+@router.get("/tasks/page")
+def tasks_page(limit: int = 50, offset: int = 0, kind: str = None, status: str = None):
+    """分页视图：返回 {items,total,has_more}。保持 /tasks 的原样返回不变。"""
+    limit = max(1, min(limit, 200))
+    offset = max(0, min(offset, 1_000_000))
+    tm = get_hub().tasks
+    items = [_task_row(r) for r in tm.list(limit=limit, kind=kind, status=status,
+                                           offset=offset)]
+    total = tm.count(kind=kind, status=status)
+    return {"items": items, "total": total, "offset": offset, "limit": limit,
+            "has_more": offset + len(items) < total}
 
 
 @router.get("/tasks/{task_id}")
 def tasks_detail(task_id: str):
     """查询任意任务状态：pending / running / ok / failed / waiting_human。"""
-    import json
     t = get_hub().tasks.get(task_id)
     if not t:
         raise HTTPException(404, "任务不存在或已过期")
-    t = dict(t)
-    try:
-        t["result"] = json.loads(t.get("result") or "{}")
-    except Exception:
-        t["result"] = {}
-    try:
-        t["platforms"] = json.loads(t.get("platforms") or "[]")
-    except Exception:
-        t["platforms"] = []
-    return t
+    out = _task_row(t, parse_result=True)
+    # 任务详情要能直连到文章：前端从任务跳到编辑器只靠 article_id
+    if out.get("article_id"):
+        art = get_hub().get(out["article_id"])
+        out["article_title"] = (art or {}).get("title", "")
+    return out
 
 
 @router.post("/tasks/{task_id}/resume")

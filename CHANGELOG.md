@@ -2,6 +2,567 @@
 
 ---
 
+## [未发布]
+
+（下一版本尚未定项，见 `docs/ROADMAP.md`。）
+
+---
+
+## [0.13.0] - 2026-11-02（安全边界收口、浏览器能力恢复、工程治理）
+
+> 主题：**把"暂时禁用"换成"真正修好"，并让仓库具备可重复的项目管理。**
+> 测试：后端 506 → 533；前端 62 → 63；新增 5 个回归测试文件。
+
+### Added
+
+- **文章删除。** `DELETE /articles/{id}` 连带清理版本历史与发布账本，单事务完成；
+  平台侧已发布的副本不受影响。列表项悬停出现删除入口，二次确认后移除。
+- 新增 `url_safety` 模块：公网 IP 校验（拒绝回环/私网/链路本地/CGNAT/保留地址）、
+  超时钳制、连接钉扎抓取 `fetch_pinned`、逐跳重定向再校验、并发槽与响应体积上限。
+- 网页导入与浏览器操控共用同一套网络校验，不再是两处各写一份的黑名单。
+- 项目管理体系：`docs/PROJECT_MANAGEMENT.md`（分支模型、完成定义、三道门禁、五仓同步、
+  技术债政策）、`docs/VERSIONING.md`（SemVer 与发布清单）、`docs/ROADMAP.md`、
+  `docs/REPO_METADATA.md`、`docs/verification/`。
+- 工具链：`scripts/bump_version.py`（五处版本号原子更新与校验）、
+  `scripts/scan_secrets.py`（高熵与已知 token 前缀扫描）、
+  `scripts/capture_screenshots.py`（README 截图可重复生成）。
+- 开源治理：三种 Issue 模板、PR 模板、CI 拆成版本一致性 / 密钥扫描 / 后端 / 前端四个 job。
+- 双语 README：英文为主 `README.md`，中文 `README.zh-CN.md`，互链切换。
+
+### Changed
+
+- **浏览器抓取与截图真正恢复。** 此前因 DNS 重绑定风险整块抛错禁用；现在用 Chromium
+  `--host-resolver-rules` 把目标主机钉在已校验公网 IP 上，并加请求级守卫拦截解析到
+  内网的子资源与跨域跳转。已实测 example.com 抓取成功，5 类内网目标全部拦截。
+- 运行配置与数据库/媒体/登录态统一到同一数据根；旧 `backed/config.json` 只作只读迁移来源。
+- 关闭流程按 scheduler → tasks → browser → dispatcher → DB 顺序幂等执行；任一步停不下来
+  就保留连接并报错，不伪装成功。
+- MCP SSE 默认只绑定回环，远程必须配置 `HARBOUR_MCP_TOKEN`；外部 MCP 子进程改用白名单
+  环境，不再继承父进程密钥。
+- 前端访问令牌存本机浏览器；SSE 改用 fetch 流以携带 `X-API-Token`。
+- `check_all` 从六道扩到八道：新增版本一致性与密钥扫描。
+
+### Fixed
+
+- 移动端设置页在 375px 宽度下，150px 固定标签列把说明文字压成逐字折行并溢出；
+  窄屏改为标签与内容上下堆叠。
+- 手动定时触发不再修改 `next_run`/`last_run`/`run_count` 等计划字段；缺失任务统一 404。
+- cnblogs bootstrap 与 CLI 不再回传访问令牌，密码改为隐藏输入或 stdin。
+- Markdown 导入限制在安全根内，只允许 `.md/.markdown`，拒绝配置/数据库/日志文件。
+
+### Removed
+
+- 删除 README 中"单文件 exe 双击即用""8 个 Provider""30 个 Tool""掘金纯 API 发布"
+  等无法被代码或验证支撑的表述。
+- `review-findings.md` 迁入 `docs/audit/archive/`；三篇技术文章从 `backed/service/`
+  迁入 `docs/articles/`。
+
+### Security
+
+- 修复浏览器通道的 DNS 重绑定暴露面（校验与连接之间不再存在可替换窗口）。
+- 修复 MCP SSE 在远程监听时的未鉴权暴露。
+- 修复外部 MCP 子进程继承父进程 API Key / Token 的问题。
+- 生产与 Docker 启动改为快速失败：缺 `HARBOUR_API_TOKEN` / `SECRET_KEY` 直接拒绝启动。
+
+### Verification
+
+见 `docs/verification/2026-11-02-regression.md`。真实平台发布、Docker 与 Tauri 构建仍未验证。
+
+---
+
+## [0.12.0] - 2026-10-31（自动化工作流补全：操控面 / 巡检 / bootstrap / 带登录态导入）
+
+> 主题：**内置浏览器从"发布专用"升级为"随便操控"——登录态既是发布资产也是爬虫资产。**
+> 测试：后端 486 → 506；前端 58 → 62；MCP 工具 30 → 32。
+
+### 内置浏览器操控面（`browser_ops.py` + `/browser/*`）
+
+- `POST /browser/{platform}/fetch`：带平台登录态抓页面 → 标题 + 正文（trafilatura）。
+  登录墙后的内容 trafilatura 纯 HTTP 拿不到，现在可以了；`want_html=true` 返回原始 HTML。
+- `POST /browser/{platform}/screenshot`：带登录态截图，落盘 `data/exports/screenshots/`。
+- 安全口径与 assist 一致：scheme 白名单 + SSRF 黑名单；per-key 互斥贯穿整个操作，
+  不与发布/登录任务抢浏览器；needs_browser=False 的纯协议平台同样可操控。
+- MCP 新增 `browser_fetch` / `browser_screenshot` 工具（30 → 32），AI 可直接调用。
+
+### cnblogs 应用内自动抠令牌（免手贴 config.json）
+
+- `POST /accounts/cnblogs/bootstrap` + 轮询 `GET .../bootstrap/{job_id}`：
+  填账号密码 → 弹浏览器登录 → MetaWeblog 三件套自动写 config.json → 账号标在线。
+- **凭据零痕迹**：内存 job 注册表，密码不进任务库/日志/config.json（测试断言反证）。
+- 前端：博客园卡片「自动抠令牌」按钮 + 表单 + 3s 轮询 + 成功/失败提示（62 前端测试含 4 条新回归）。
+
+### 登录态自动巡检（持续记忆登录的"活"部分）
+
+- `auth_sweep.py`：daemon 线程默认 30 分钟一轮（`HUB_AUTH_SWEEP_MINUTES` 可调，0=禁用），
+  核查全部 logined 账号；过期 → 标 offline + webhook `auth.expired` 事件，前端就绪摘要自动变灰。
+- check 抛异常 ≠ 过期（浏览器弹不出来/网络抖动），只记日志不动状态——误标比晚发现伤害大。
+- 平台忙（登录/发布进行中）时跳过该账号本轮，不抢浏览器；`/status` 暴露 `auth_sweep` 状态。
+
+### 带登录态导入（登录墙文章一键入库）
+
+- `POST /articles/import` 新增 `browser: true + platform` 参数：走该平台登录态浏览器抓取，
+  与 HTTP 通道共用同一套 trafilatura 抽取与后处理；缺 platform 422。
+
+### 验证
+
+- 后端 506 passed / ruff 全绿；前端 62 passed / eslint 0 error；MCP 32 工具。
+- e2e（真实后端重启后实测）：`/status.auth_sweep` 在线、`/browser/juejin/fetch` 真实驱动
+  Edge 抓回 example.com 标题+正文、file:// 422、未知 job 404、import 缺 platform 422。
+
+---
+
+## [0.11.0] - 2026-10-31（平台扩容二：Telegraph / 小红书——15 平台）
+
+> 主题：**平台 13 → 15；telegraph 走成熟库零手搓，xiaohongshu 补上中文最热图文平台。**
+> 测试：后端 486 保持全绿；适配器探针 15 平台 0 error。
+
+### 新增平台适配器
+
+| 平台 | 通道 | 凭据 | 能力 | 备注 |
+|---|---|---|---|---|
+| **Telegraph** | 官方 API + `telegraph` PyPI 库（MIT） | 免注册：首次发布自动建号，token 回写 config.json | 发布/更新/列表 | 免登录即时发布，Markdown → Node 数组；适合快速分享预览链接 |
+| **小红书** | 浏览器自动化（Patchright，与掘金/CSDN 同款基建） | App 扫码登录 | 发布/草稿 | 标题限 20 字；不支持原地更新（平台限制，update 如实抛错）；选择器标 `2026-10-30 (未验证)`，真机发布前先 dump-dom 校准 |
+
+- 能力矩阵 / 适配器探针 / AGENT.md 目录树与适配器表 / PLATFORM_CONNECTION.md（重写过时的 10 平台总览与断裂表格，清理会话快照章节）/ README 平台清单 / 前端 PLAT_MARKS 徽标（T / 红）与 AccountsPanel 接入提示全部同步。
+- 探针测试 `test_probe_stays_clean` 改为数量无关断言（≥13 且 0 error），平台数增长不再误报。
+
+### 验证
+
+- 后端 486 passed / ruff 全绿；适配器探针 15 平台 0 error 0 warning。
+
+---
+
+## [0.10.0] - 2026-10-30（平台扩容：微信公众号 / GitHub Pages / Dev.to + 界面走查修复）
+
+> 主题：**平台 10 → 13（全部走官方 API，免浏览器逆向）；界面走查修复 4 处逻辑/文案断点。**
+> 测试：后端 480 → 486；前端 57 → 58；六道门禁全绿。
+
+### 新增平台适配器（调研后选定：API 通道、能真发布、成本低）
+
+| 平台 | 通道 | 凭据 | 能力 | 备注 |
+|---|---|---|---|---|
+| **微信公众号** | 官方草稿箱 API | appid + secret（IP 白名单） | 发布/草稿/更新/列表 | 图片自动传素材库换 mmbiz 地址；个人订阅号默认只进草稿箱（48001 时如实降级并提示） |
+| **GitHub Pages / Jekyll** | Contents API | PAT（repo 权限） | 发布/更新（commit 即发布）/列表 | Markdown + front-matter 直接 commit；同 path 再 PUT = 原地更新 |
+| **Dev.to** | Forem 官方 API | api-key | 发布/草稿/更新/列表/标签/封面 | 标签规则 [a-z0-9]≤4 个，中文标签过滤而非硬塞（防 422 空转） |
+
+调研淘汰（附原因）：Medium API 已归档；Hashnode 2026-05 起仅 Pro；简书/少数派无 API 且逆向无参考；语雀需会员未验证；WordPress.com 与已有 MetaWeblog 重叠。
+
+- 能力矩阵/适配器探针/AGENT.md 目录树/test_docs_links 全部同步（13 平台零 error）。
+- 新增 6 条适配器回归（凭据缺失报错、标签清洗、front-matter、HTML 消毒等）。
+- 微信 content 消毒器：script/style 整块删除，非白名单标签剥壳留文本。
+
+### 界面走查修复（以真实用户视角逐视图走查）
+
+- **AccountsPanel**：平台卡片提示原是"免登 API，凭据在 config.json"一句话糊弄
+  6 个纯 API 平台——现在每个平台显示专属接入提示（如 wechat 提示 IP 白名单、
+  cnblogs 提示 bootstrap 命令），顶部说明同步改写。
+- **PublishRail**：纯协议平台未配置凭据时只显示"协议凭据"，用户不知道下一步——
+  现在明确显示"未配置——到 设置 → 平台账号 填凭据"。
+- **TasksView**：失败任务此前只能看，没有恢复路径——有文章关联的失败任务
+  增加「打开文章重试」一键跳转。
+- **AIWriteDialog**：AI 未配置空态只有"AI 未配置"四个字——补上"到 设置 → AI 模型
+  填密钥"的下一步指引。
+
+### 验证
+
+- 后端 486 passed / ruff 全绿；前端 58 passed / eslint 0 error；六道门禁全绿。
+
+---
+
+## [0.9.0] - 2026-10-29（遗留问题清零：MCP 桥接 / 平台限流 / 安全加固 / 架构拆分）
+
+> 主题：**上一轮"剩余风险"全部关闭；接入外部 MCP Server 生态；service.py 988→483 行。**
+> 测试：后端 453 → 480；前端 57 保持；六道门禁全绿。
+
+### 外部 MCP Server 桥接（用户诉求："网上有 mcp 工具直接拿来用"）
+
+- 新增 `service/publishing/mcp_bridge.py`：Harbour 作为 MCP **Client**，通过
+  官方 `mcp` SDK（2.3.0）stdio 拉起并调用任意第三方 MCP Server。
+- 已核实的可直用生态（npm/PyPI 实测）：
+  `@playwright/mcp@0.0.83`（Apache-2.0，浏览器自动化）、
+  `mcp-server-fetch@2026.10.28`（MIT，网页抓取，robots.txt 合规）、
+  `@wechatsync/cli@1.1.0`（MIT）。
+- 安全默认：**工具白名单**（未授权即拒绝）、调用超时兜底、独立线程不阻塞、
+  默认关闭（未配置零子进程）。
+- 端点：`GET /mcp/bridge/status`、`GET /mcp/bridge/{s}/tools`、
+  `POST /mcp/bridge/{s}/call`；MCP 侧新增 3 tool（27 → 30）。
+- 端到端测试：真实拉起子进程 → 握手 → 调工具 → 拿回结果（6 条回归）。
+- 配置样例进 `config.example.json`。
+
+### 平台级限流冷却（retry-after）
+
+- 新增 `ratelimit.py`：解析 `Retry-After`（秒/HTTP-date）与
+  `X-RateLimit-Reset`（秒/毫秒），冷却状态按平台落 SQLite（重启不丢、
+  多任务共享），只延长不缩短，到期自清理，上限 30 分钟防锁死。
+- 适配器 `api_get/api_post` 把限流响应头带进错误串，任务引擎识别 429/503
+  自动置平台冷却，同平台后续任务整体延后（不再撞窗口）。
+- `/status` 暴露 `platform_cooldowns`；`POST /platform-cooldowns/clear` 手动解除。
+
+### 媒体安全与对外地址
+
+- **上传按内容校验**（Pillow 魔数嗅探）：扩展名/Content-Type 均可伪造，
+  现在解码验证 + 格式白名单（SVG 刻意排除——XML 可携带脚本）+
+  4000 万像素上限（防解码炸弹）。
+- **对外地址自动探测**（`middleware/public_base.py`）：媒体改写不再要求
+  手工配 `PUBLIC_BASE_URL`——从请求 Host / 受信代理的 X-Forwarded-* 自动
+  推断；本机回环访问不误报；`/media/stats` 显示来源与排查提示。
+
+### AST 级内容变换
+
+- 新增 `content_transform.py`（markdown-it-py token 流）：去开头重复 H1、
+  删正文标签行、图片 URL 改写——代码块内容天然不受影响（字符串正则的
+  经典误伤源）。规则表按平台接线进 `publish_single`，失败退回原文。
+
+### 架构：service.py 上帝类拆分（行为逐字不变）
+
+- AST 机械切片，不手抄：`article_ops.py`（文章/导入 95 行）、
+  `ai_ops.py`（AI 委托 81 行）、`publish_ops.py`（发布编排 454 行）。
+- `service.py` 988 → 483 行，只剩账号/浏览器池/生命周期；
+  Hub 通过多继承组合，MRO 验证 + 全量 480 测试锁行为。
+
+### 适配器离线契约探针
+
+- 新增 `adapter_probe.py`：接口实现/能力一致性/选择器合法性/选择器版本
+  静态检查；`tests/fixtures/dom/*.html` 采样真实页面后可做选择器漂移比对
+  （平台改版的离线信号）。端点 `GET /adapters/probe`、
+  `POST /adapters/probe/{p}/dump`。真机回归依旧需要账号，但能提前发现的
+  问题（声明矛盾、选择器写错、改版失配）不再等上线才爆。
+
+### 已核实的生态依赖
+
+| 包 | 版本 | 许可证 | 用途 |
+|---|---|---|---|
+| mcp (PyPI) | 2.3.0 | MIT | MCP Client/Server SDK |
+| @playwright/mcp (npm) | 0.0.83 | Apache-2.0 | 可选浏览器后端 |
+| mcp-server-fetch (PyPI) | 2026.10.28 | MIT | 可选抓取后端 |
+| markdown-it-py | 4.2.0 | MIT | AST 内容变换 |
+| Pillow | 13.0.0 | MIT-CMU | 图片魔数嗅探 |
+
+---
+
+## [0.8.0] - 2026-10-29（能力补全：媒体管线 / 检索 / 能力矩阵 / 部署修复）
+
+> 主题：**把"文档写了但代码没实现"的 9 处缺口补齐；用成熟库替换 6 处自研半成品；
+> 首屏 JS 从 2.5MB 降到 1.04MB；内容质检从 15.7s→1.1s、带缓存 0.22s。**
+> 测试：后端 415 → 453（新增 38 条，全部实测可回退）；前端 57 保持。
+
+### 修复：阻断级（用户可感知）
+
+- **启动脚本全部是坏的**：`start.sh/.bat/.ps1` 用 `uvicorn start:app`，而
+  `start.py` 的 `app` 建在 `main()` 内、模块级没有该属性 → 三个平台的一键启动都
+  直接 AttributeError。改用 `app.factory:create_app --factory`，并支持 `PORT` 环境变量。
+- **Tauri 健康探活打错路径**：`lib.rs` 请求 `/api/hub/health`，实际挂载在
+  `/api/v1/hub/health`，桌面版永远认为后端未就绪。
+- **Tauri 打包找不到前端产物**：`frontendDist` 指向 `../dist`，而 vite 实际输出到
+  `server/static`；`tauri build` 会在打包阶段失败。
+- **内容质检接口契约错位**：`POST /qa/analyze` 只声明 query 参数，前端一直发 JSON
+  body → 每次点「质检」都 422。改为 body/query 双支持，空正文显式 422。
+  同类修复：`POST /tags/suggest`。
+- **未分类错误重试是"假重试"**：置 pending 后立刻 `_wake.set()`，3 次重试在 1 秒内
+  打完，对 429/503 毫无意义。改为指数退避 2/4/8s（封顶 60s），退避窗口内不取任务。
+- **能力矩阵与实现不符会静默失败**：头条/开源中国 `update()` 直接抛"不支持"，
+  但 `sync_pending` 会把它们全塞进更新循环 → 每次同步都返回一串假失败。
+  现在按能力矩阵跳过并如实标注 `skipped`。
+
+### 新增：媒体资产管线（对标 Wechatsync / Artipub 的基线能力）
+
+- `service/publishing/media.py`：内容寻址存储（sha256 去重）、Markdown/HTML 图片
+  改写、SSRF 防护下载（公网 IP 校验 + 手动重定向 + 15MB 上限）、
+  `/media/*` 本地托管（immutable 缓存头）。
+- 发布与更新链路自动改写正文图片为稳定 URL（需配 `PUBLIC_BASE_URL`）；
+  未配置时整段跳过，单图失败保留原地址——一张图不阻断整篇发布。
+- 编辑器支持粘贴/拖拽上传（`md-editor-v3` `onUploadImg`），同图不重复入库。
+- 新端点：`POST /media/upload`、`POST /media/ingest`、`GET /media`、`GET /media/stats`、
+  `GET /media/{sha}{ext}`。
+
+### 新增：检索与导入
+
+- **全文检索换 FTS5**（trigram 分词，中文无需外部分词器）：`search_articles` 从
+  `LIKE '%kw%'` 全表扫改为倒排索引 + 相关度排序；2 字查询走 LIKE 兜底（trigram 最少 3 字）。
+  外部内容表 + 触发器保持同步，启动时自动 `rebuild` 回填历史数据。
+- **列表接口默认不再返回正文**：新增 `slim` 投影（含 `chars` 字数），
+  `GET /articles` 与 `/articles/page` 默认 slim，需要正文传 `slim=false`。
+- **网页导入**：`trafilatura` 正文提取 → Markdown，`POST /articles/import` 支持
+  `{url}`；本地导入改用 `python-frontmatter`（旧的手写 `split("---")` 遇到正文
+  分隔线会切错，YAML 列表 tags 也解析不了）。
+- MCP 新增 4 个 tool：`search_articles` / `import_from_url` / `list_media` / `ingest_image`（23 → 27）。
+
+### 新增：能力矩阵（代码级，不是文档）
+
+- `PlatformAdapter.capabilities` + `CAPABILITIES` 表：publish/draft/update/list/tags/
+  cover/question/hosted_media 八项，逐平台按真实实现声明。
+- `/platforms` 下发 `capabilities`；发布轨按此置灰并显示"该平台不支持发布"；
+  `publish()` 与 `update()` 在进适配器前就按能力分流。
+
+### 新增：可观测与调度
+
+- `GET /metrics?format=prometheus`：标准文本 exposition（prometheus_client），
+  Grafana 可直接抓；JSON 快照格式与字段完全不变。
+- cron 表达式交给 `croniter`（完整 5 段语义，含 L/W/#），内置解析器保留为无依赖兜底。
+- 相似度签名落表缓存（`article_simhash`，内容哈希失效），200 篇库质检
+  冷启动 1.5s、热缓存 0.22s（优化前 15.7s）。
+
+### 替换：自研 → 成熟库（功能只增不减）
+
+| 位置 | 原实现 | 现实现 | 收益 |
+|---|---|---|---|
+| 高危词扫描 | 逐词 `in` 全文扫 | `pyahocorasick` | 300 词表 41.7× 提速；顺带修掉中文语境下 `` 漏检 |
+| 标签同义合并 | 精确大小写匹配 | `rapidfuzz` 编辑距离 + 前缀/包含规则 | 新增 `GET /tags/clusters` 候选清单 |
+| LLM 调用 | 裸 `requests.post` | `tenacity` 指数退避 | 429/5xx 自动重试，4xx 立即失败 |
+| 内容相似度 | 每次全量 32×md5 | blake2b + 16 置换 + 签名缓存 | 15.7s → 1.1s（14×） |
+| 定时 cron | 手撸 5 段解析 | `croniter` | 支持完整 cron 语义 |
+| Markdown 元数据 | `split("---", 2)` | `python-frontmatter` | YAML 列表/冒号/嵌套正确解析 |
+
+### 性能
+
+- 首屏 JS（modulepreload）2.56MB → 1.04MB（gzip 860KB → 349KB）：
+  视图改 `defineAsyncComponent`，`md-editor-v3`/`echarts` 按需加载；
+  去掉把它们绑成固定 chunk 的 `manualChunks` 条目（那正是懒加载失效的根因）。
+- 后端加 `GZipMiddleware`（桌面版没有 nginx 代劳压缩）。
+- 门禁 `compileall` 排除 `.venv`：10.85s → 0.3s。
+- `articles` 列表查询不再带正文（100 篇 × 20KB 正文的无效序列化消失）。
+
+### 修复：工程卫生
+
+- 数据目录统一：事件日志 / 验证码截图 / 调试 DOM / webhook 库 / 媒体全部跟随
+  `db.data_root()`；此前桌面版会出现"DB 在 APPDATA、日志留在安装目录"的分裂。
+- `media_root()` 跟随 `db.DB_PATH`（测试隔离依赖它，否则测试会写进仓库）。
+- webhook 存储不再自己拼数据库路径。
+- 测试：`test_capability_upgrade.py` 新增 36 条，覆盖上述每一条修复（含 3 条
+  部署脚本/配置一致性断言）。
+
+---
+
+## [Unreleased] - 2026-10-27（品牌更名 Harbour + 工程质量债偿还）
+
+> 主题：**项目更名 Harbour（含仓库/logo/代码标识）；前端从零建测试体系；修复 7 个阻断缺陷；门禁四道 → 六道；恢复 CI。**
+> 测试：后端 379 → 390；前端 0 → 14（vitest）；新增 eslint 门禁。
+
+### 品牌更名（breaking）
+
+- 仓库原地改名 `badhope/content-harbor` → `badhope/harbour`（GitCode API，不删库重建）。
+- 包名/产物：Cargo `harbour`、PyInstaller `harbour-backend`、Tauri identifier `com.harbour.hub`。
+- 环境变量：`HARBOR_*` → `HARBOUR_*`（`DATABASE_URL` / `SECRET_KEY` / `API_TOKEN`）。
+- Webhook 契约头：`X-Harbor-Event` / `X-Harbor-Signature` → `X-Harbour-*`（**外部集成需同步**）。
+- 新 logo：蓝底白锚 + 双波浪，50 个 Tauri 图标全套重绘（ico/icns/ios/android/windows）。
+- 文档统一中文单语，删除重复的 `README.en.md`。
+
+### 修复：7 个阻断缺陷
+
+- **鉴权失败返回 500**：中间件层 `raise HTTPException` 不走 FastAPI 异常处理器，改返回
+  `JSONResponse(401)`。端到端实测（真实打包 sidecar）错 token → 401、对 token → 200。
+- **任务队列饿死**：`list_tasks(limit=10)` 先按 id 倒序再重排，积压超 10 条时最早任务
+  永不执行；新增 `db.next_pending_tasks()` 在 SQL 层 `ORDER BY created_at ASC, id ASC`。
+- **定时任务假成功**：`update()` 不校验存在性且无条件 `return True`，路由对 None 解包抛 500；
+  改 rowcount 判定。
+- **`db.update_article` / `update_task` 静默成功**：不检查 rowcount，改返回布尔。
+- **前端保存后 ReferenceError**：`article.js` 调用 `useHubStore()` 却未 import，保存必抛。
+- **发布发旧稿**：`hub.publish` 只在新建时保存，已有文章改完点发布会发旧版；改为
+  `!currentId || dirty` 都先保存。
+- **POST 重复发布**：axios 拦截器对所有方法重试 5xx，限定仅 GET（幂等）。
+- **未保存标记失效**：`WriteView` 直接给 Pinia getter 赋值（静默失败，有丢稿风险），
+  新增 `markDirty()` action。
+
+### 修复：其他工程质量
+
+- `service` 层不再抛 `HTTPException`，改抛领域异常 `GateError`，由 `app/exceptions.py`
+  映射 422；MCP/CLI 同路径可识别业务错误。
+- `HUB_DATA_DIR` 此前只在 sidecar 设置、无人读取（桌面版数据写进安装目录）；
+  `db.data_root()` 统一接管 db / Fernet 密钥 / browser profile 三处。
+- 依赖声明纠正：删除零使用的 `aiosqlite`、`passlib`；显式声明 `bcrypt` / `cryptography`
+  （原靠传递依赖，PyInstaller 精简环境会缺包）。
+- 时间格式化 6 处重复收敛到 `web/src/utils/format.js`；`humanize.human_type` 与
+  `human_click.human_type` 重复且前者零调用，删除。
+- `pyinstaller.spec` 由 onedir 改 onefile：Tauri `externalBin` 只接受单文件，
+  onedir 产物缺 `_internal` 无法启动；README 也承诺单 exe 双击即用。
+
+### 新增
+
+- **前端测试体系**：vitest + @vue/test-utils + jsdom + @pinia/testing，14 个用例
+  （视图互斥、保存/发布契约、重试策略、dirty 状态）。均做过回退验证确认能抓回归。
+- **ESLint 9 flat config** + eslint-plugin-vue。
+- **CI 恢复**（`remove-ci-workflow` 后长期无自动化）：双 job，backend 跑
+  compileall/ruff/pytest/装配冒烟，frontend 跑 eslint/vitest/build。
+- **门禁四道 → 六道**：compileall → ruff → pytest → eslint → vitest → vite build
+  （`scripts/check_all.ps1` / `.sh` 与 CI 对齐）。
+
+### 验证
+
+- 六道门禁全绿；pytest 390 passed / vitest 14 passed / ruff + eslint 零错误。
+- `cargo check` 通过（Tauri Rust 侧首次实际编译验证）。
+- onefile sidecar（25MB）实测启动 + `/health` 200。
+
+---
+
+## [Unreleased] - 2026-10-27（第二轮工程债：可观测性 / 资源边界 / 分页 / 无障碍）
+
+> 主题：**修掉上一轮如实记录的长期运行隐患；列表不再静默截断；前端对比度与键盘可达达 WCAG 2.2 AA。**
+> 测试：后端 390 → 402；前端 14 → 39（新增分页、列表可达性、a11y 静态门禁）。
+
+### 修复：长期运行隐患
+
+- **指标直方图不是累积桶**：`MetricRegistry.observe` 只统计首个命中的桶，`/metrics` 的桶计数
+  无法用于 `histogram_quantile`。改为 Prometheus 累积语义，并新增 `quantiles`（p50/p90/p99，
+  桶内线性插值）。
+- **限流桶表无上限**：任意来源换 IP 即可让 `_buckets` 无限增长。新增 10000 桶上限，按最近
+  使用淘汰最旧键（`pop` 后重插实现 LRU）。
+- **浏览器池持锁关实例**：`_acquire` 淘汰 victim 时在池锁内调用 `close()`，一次关停会阻塞
+  整池取用。改为锁内只摘除、锁外关闭。
+
+### 新增：列表分页
+
+- `GET /articles/page`、`GET /tasks/page`：返回 `{items,total,offset,limit,has_more}`，
+  `limit` 上限 200；`/articles`、`/tasks` 原样保留。
+- 前端文章库改用分页 store（首屏 50，`loadMore` 追加并去重，计数显示「已加载/总数」）；
+  任务中心拉取上限提到 200 并在被截断时显示「仅显示最近 N / 总数」。
+- 定时任务的文章下拉单独翻页取全量，避免只能选到第一页。
+- 文章分页排序加 `id DESC` 次键，`updated_at` 相同的批量导入不再出现跨页重复/漏项。
+
+### 无障碍与设计系统（WCAG 2.2 AA）
+
+- 设计 token 对比度达标：`--tx-3` 5.5:1、`--tx-4` 5.0:1、`--accent` 5.67:1，
+  `--ok/--warn/--bad` 作为文字与底色均 ≥ 4.5:1；Element Plus 主题变量同步。
+- 文章列表项、平台卡片、标签云改为按钮/勾选语义（`role` + `tabindex` + Enter/Space）；
+  图标按钮补 `aria-label`。
+- 8 个 `el-dialog` / `el-drawer` 的固定 px 尺寸改为 `min(px, 94vw)`，窄屏不再横向溢出。
+- 新增 `web/src/a11y.test.js` 静态门禁：token 对比度、弹窗宽度、交互语义，改坏即红。
+
+### 验证
+
+- 六道门禁全绿；pytest 402 passed / vitest 39 passed / ruff + eslint 零错误。
+- 回退验证：直方图改回「首个命中」→ 累积桶用例转红；移除列表项 `role/tabindex` →
+  可达性用例转红。
+
+### 复审加固（同日第二轮）
+
+独立复审后修掉 6 个真缺陷，每条都有回归测试与回退验证：
+
+- **`get_hub()` 无锁（阻断）**：首屏并发 5-6 个端点时多线程各自 `new Hub`，每个都跑
+  `PRAGMA journal_mode=WAL` + 建表，SQLite 上必现 `database is locked` → 首屏 500。
+  改双检锁；8 线程实测修复前 6 轮有 4 轮报错，修复后 4 轮 0 错误。
+- **登录失败被标成「完成」（阻断）**：`_dispatch` 返回 `(ok, msg)` 时 `_run_task` 不看 `ok`
+  就写 `status=ok`，「等待登录超时」在任务中心显示成功。改为直接抛错；login 的超时 /
+  无显示 / 遇验证码加入 `LOGIN_PERMANENT_HINTS` 快速失败，不再重开浏览器空转。
+- **限流桶淘汰会洗白配额**：原「最旧未用」淘汰让轮换来源能把自己未花完的桶挤掉拿回满额。
+  改为「剩余令牌最多者优先」；`time.monotonic()` 移进锁内（锁外取到会倒扣令牌）；
+  `max_buckets<=0` 改为显式关闭上限。
+- **分位尾部失真**：落进 `+Inf` 桶时原返回最大有限边界（60s），120s 观测被报成 `p99=60s`。
+  改为返回实测 `max`。
+- **浏览器池锁外 close 引入同 profile 二次启动窗口**：新增 `_closing` 事件表，同 key 的
+  `_acquire` 等旧实例关完再启动。
+- **参数越界**：`limit<=0` 在 SQLite 等于不限量（能拉整表），超大 `offset` 溢出 INTEGER
+  直接 500；db 层与路由层统一夹到 `1..1000` / `0..1e6`。
+
+前端同批：`loadMore` 的 offset 改为按「服务端已消费行数」前进（原先用去重后的本地条数，
+批量导入后永久卡在同一页）；`loadList` 加代际防旧响应覆盖；`waiting_human` 任务单独查询
+后合并（原可能落在 200 条之外导致角标漏项）；「已发布 N 篇」改用文章数口径。
+
+门禁：pytest 411 / vitest 42。
+
+---
+
+## [Unreleased] - 2026-10-28（真实登录链路验证）
+
+> 主题：把「内置浏览器扫码登录」从静态核对变成实机验证，并把验证结论写回代码注释。
+
+### 验证结论（实测，非推断）
+
+- **patchright Chromium 可在本机启动**：`BuiltinBrowser.start()` 有头 / 无头两种模式均成功
+  （引擎 153.0.8010.12），`channel=msedge` 亦可（156.0.4314.42）。此前记录「浏览器路径未验证」
+  一条已可销账。
+- **CSDN 登录页可用**：真实打开 `passport.csdn.net/login`，页面正常渲染，微信扫码二维码
+  （data URI，180×180）可读出并落盘，`CaptchaPolicy.detect` 未误报。
+- **掘金登录页二维码可读**：`img.qrcode-img` 在 1 秒内生成 512×512 PNG data URI；两次会话
+  QR 内容不同（哈希 8b9576d6… vs 602d70b6…），确认是服务端新签的二维码而非静态占位图。
+  注：直接调 `passport/web/create-qr64` 返回 `error_code:16 该应用无权限`（缺前端签名参数），
+  属于正常的接口防护，不影响页面内的二维码渲染。
+- **知乎登录页为扫码优先布局**：`signQr-container` / `Qrcode-container` 存在，二维码由画布
+  动态绘制（无 data URI，需 canvas 读取）。
+- **整条登录链路可跑通**（本地 mock 平台端到端）：`POST /accounts/{p}/login` → TaskManager →
+  `Hub.login` → `BuiltinBrowser` 有头启动 → `ensure_login` 轮询 → cookie 落库 + profile 快照
+  写入 → `accounts` 状态 `logined` → 重新开浏览器 `check_auth` 返回 True（登录态可复用）。
+
+### 修复（验证过程中发现）
+
+- **登录失败假成功**：见上节「复审加固」。实机复现：掘金/知乎 `timeout=10` 的登录任务在
+  修复前显示「完成 / 等待登录超时」，修复后正确显示
+  「failed / 登录未完成（超时/未扫码），不再自动重试」。
+- **首屏并发 500**：起真实服务并发打 `/status` 时复现 `database is locked`，即 `get_hub()`
+  竞态；修复后 8 并发 0 错误。
+
+### 未验证（如实记录）
+
+- 真实账号扫码：需要真人用手机扫码，本轮没有可用的平台账号，因此只验证到「二维码正确生成
+  并可读」为止，**未完成真实登录**。验证方法与产物：`.tmp/*_login_qr.png`（已随手清理）。
+- 各平台登录成功后的发布/更新链路未在本轮触发（需要真实账号）。
+
+---
+
+## [Unreleased] - 2026-10-28（登录诊断脚本）
+
+> 主题：把本轮手工排查固化成可复用工具，下次接新平台不用再写一次性脚本。
+
+### 新增
+
+- `scripts/login_probe.py`：一条命令完成「开浏览器 → 打开平台登录页 → 等二维码/验证码 →
+  导出二维码 PNG → 打印页面标题/登录态/验证码类型」。参数 `--platform`、`--headed`、
+  `--wait`、`--out`。用于判断「登录页是否可用」与「二维码是否真的生成」，不代替人扫码。
+- `scripts/login_probe.py --check-cookie`：复用本地 profile 复检登录态（登录后验证是否真的
+  记住），输出 `check_auth` 结果。
+- 门禁第 1 道补 `scripts/` 目录的 compileall：原先只编译 `backed/`，仓库根与 `scripts/` 的
+  脚本语法错误漏检。
+
+
+---
+
+## [Unreleased] - 2026-10-28（真机截图巡检 + 主题失效修复）
+
+> 主题：**按 1440/1024/390 三档视口逐屏截图巡检，修掉 3 个静默缺陷与 4 个窄屏布局缺陷；任务中心改卡片列表，文章库加搜索筛选。**
+> 测试：后端 411 → 414；前端 42 → 49。
+
+### 修复：静默缺陷（不报错、界面上却看不出来）
+
+- **Element Plus 主题色板完全失效**：`main.scss` 把 `--el-color-*` 写在 `html {}` 里，而 EP
+  默认变量定义在 `:root`（伪类优先级高于类型选择器），自定义色被静默覆盖。实测
+  `--el-color-danger` 仍是默认 `#f56c6c`，标签渲染成 `rgb(245,108,108)`。按钮另有
+  `.el-button--primary` 显式样式，看上去"像是生效了"，掩盖了问题。改 `:root` 并补齐
+  primary/success/warning/danger/error/info 全套 light-3/5/7/8/9 + dark-2。
+- **`/tasks` 与 `/tasks/page` 的 `platforms` 是 JSON 字符串**：详情端点早解析，列表端点漏了。
+  前端 `(row.platforms || []).join()` 拿到字符串抛 TypeError → Vue 渲染中断 → 任务表「对象」
+  列空白、状态标签落到对象列、后续列整体错位。新增 `_task_row()` 统一收口；详情补
+  `article_title`，任务可直接跳回文章。
+- **`tags.py` 的 config.json 路径算错两层**：`Path(__file__).parent.parent` 得到
+  `backed/service/config.json`，既不是 ai/gate/metaweblog 共用的 `backed/config.json`，也不在
+  `.gitignore` —— 点一次「标签治理 → 合并」就在仓库里凭空多出一个未跟踪文件。收口
+  `_config_path()`。
+
+### UI：窄屏布局与卡片化（截图驱动）
+
+- **`.pane-head` 允许换行 + 标题 `nowrap`**：390px 下「任务中心」「设置」曾被压成每行一个字。
+- **任务中心改卡片列表**：原 1166px 表格塞进 264px 视口只剩三列可见。新卡片带状态色左条、
+  平台标签、错误摘要、待人工任务就地操作，`role=button` + Enter/Space 键盘可达。
+- **文章库加搜索与状态筛选**：搜索框（标题+摘要）+ 状态 chips（全部/草稿/已发布/待审，
+  `aria-pressed`）+ 无结果一键清空 + 筛选态明确提示「只作用于已加载的 N 篇」。
+- **发布中心统计卡改网格**：宽屏 4 卡 + 操作按钮同排，窄屏 2×2 + 按钮独占一行。
+- **AI Provider 价格标签 `nowrap` + 折叠头窄屏换行**：原先「经济/均衡/旗舰」被挤成竖排。
+- **设置页窄屏隐藏副标题**，腾出宽度给标题。
+
+### 测试基建
+
+- `el-input` 的 vitest 桩原是无 `v-model` 的裸 `<input />`，被测组件收不到输入值——过滤逻辑
+  根本测不到（典型"测试绿但功能未覆盖"）。改为转发 props/emits。
+
+### 验证
+
+- 六道门禁全绿；pytest 414 passed / vitest 49 passed / ruff + eslint 零错误。
+- 三档视口（1440/1024/390）× 四视图逐屏截图：所有页面 `scrollWidth == clientWidth`。
+- EP 变量实测：primary `#2A5CE0` / danger `#B0382E` / success `#0F7A52` / warning `#8A5510`。
+- 回退验证：还原 `deps.py` → Hub 竞态用例红；还原 `article.js` → 分页 3 例红；
+  还原 `browser_pool.py` → 池等待用例红；还原 `App.vue` → 侧栏计数 2 例红
+  （`published` 平台实例数被当成「已发布 N 篇」，一篇发两个平台会显示 2 篇）。
+
+---
+
 ## [Unreleased] - 2026-10-14（第四轮：AI 声明改走平台选项 + 发布多模式）
 
 > 主题：**AI 声明不再写进正文（改用平台自带「AI 辅助」选项）；发布支持三档操作模式**。

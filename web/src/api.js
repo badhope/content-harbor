@@ -11,29 +11,51 @@ function getBaseURL() {
   return '/api/v1/hub'
 }
 
+// 部署在外网/容器时后端要求 X-API-Token；令牌只从本机浏览器存储读取，
+// 不写进构建产物，也不放进 URL。
+const TOKEN_KEY = 'harbour_api_token'
+
+export function getApiToken() {
+  try {
+    return window.localStorage.getItem(TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setApiToken(token) {
+  try {
+    if (token) window.localStorage.setItem(TOKEN_KEY, token)
+    else window.localStorage.removeItem(TOKEN_KEY)
+  } catch { /* 隐私模式下忽略 */ }
+}
+
 const http = axios.create({
   baseURL: '/api/v1/hub',
   timeout: 120000   // 发布/更新要开浏览器，慢是正常的
 })
 
-// 每次请求前动态设置 baseURL（处理 Tauri 端口延迟注入）
+// 每次请求前动态设置 baseURL（处理 Tauri 端口延迟注入）并附带令牌
 http.interceptors.request.use(config => {
   config.baseURL = getBaseURL()
+  const token = getApiToken()
+  if (token) config.headers['X-API-Token'] = token
   return config
 })
 
 // 重试配置：网络错误 / 5xx 时自动重试
 const RETRYABLE = [408, 429, 500, 502, 503, 504]
-let _retryCount = 0
 const MAX_RETRIES = 3
 
 http.interceptors.response.use(
-  r => { _retryCount = 0; return r.data },
+  r => r.data,
   async err => {
     const cfg = err.config
     const status = err.response?.status
-    // 可重试错误且未超次数：指数退避重试
-    if (RETRYABLE.includes(status) && (!cfg._retry || cfg._retry < MAX_RETRIES)) {
+    // 审计 B3：只有幂等的 GET 允许自动重试；POST（发布/登录/同步）重试会重复建任务
+    const method = (cfg.method || 'get').toLowerCase()
+    const retryable = method === 'get' && RETRYABLE.includes(status)
+    if (retryable && (!cfg._retry || cfg._retry < MAX_RETRIES)) {
       cfg._retry = (cfg._retry || 0) + 1
       await new Promise(r => setTimeout(r, 500 * cfg._retry))
       return http(cfg)
@@ -46,7 +68,6 @@ http.interceptors.response.use(
     const d = err.response?.data
     const msg = d?.message || d?.detail || err.message || '请求失败'
     ElMessage.error(typeof msg === 'string' ? msg : JSON.stringify(msg))
-    _retryCount = 0
     return Promise.reject(err)
   }
 )
@@ -76,19 +97,26 @@ export const api = {
   logout: (platform, account = 'default') =>
     http.delete(`/accounts/${platform}`, { params: { account } }),
   diagnose: (platform) => http.get(`/accounts/${platform}/diagnose`),
+  bootstrapCnblogs: (username, password) =>
+    http.post('/accounts/cnblogs/bootstrap', { username, password }),
+  bootstrapCnblogsJob: (jobId) =>
+    http.get(`/accounts/cnblogs/bootstrap/${jobId}`),
 
   // ---------------- 统一任务查询 ----------------
   tasks: (limit = 50, kind, status) =>
     http.get('/tasks', { params: { limit, kind, status } }),
+  tasksPage: (params = {}) => http.get('/tasks/page', { params }),
   task: (taskId) => http.get(`/tasks/${taskId}`),
   resumeTask: (taskId, approved = true) =>
     http.post(`/tasks/${taskId}/resume`, { approved }),
 
   // ---------------- 文章 ----------------
   listArticles: (status) => http.get('/articles', { params: { status } }),
+  articlesPage: (params = {}) => http.get('/articles/page', { params }),
   getArticle: (id) => http.get(`/articles/${id}`),
   createArticle: (data) => http.post('/articles', data),
   updateArticle: (id, data) => http.put(`/articles/${id}`, data),
+  deleteArticle: (id) => http.delete(`/articles/${id}`),
   search: (kw) => http.get(`/articles/search/${kw}`),
 
   // ---------------- 发布 / 更新 / 同步（统一任务语义） ----------------
@@ -166,6 +194,19 @@ export const api = {
   suggestTags: (title, contentMd) => http.post('/tags/suggest', null, { params: { title, content_md: contentMd } }),
 
   jobs: () => http.get('/jobs'),
+
+  // ---------------- 媒体资产（图片入库 / 本地托管） ----------------
+  mediaUpload: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post('/media/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  mediaIngest: (url) => http.post('/media/ingest', { url }),
+  mediaList: (limit = 100) => http.get('/media', { params: { limit } }),
+  mediaStats: () => http.get('/media/stats'),
+
+  // ---------------- 导入（本地 Markdown / 网页 URL） ----------------
+  importArticle: (body) => http.post('/articles/import', body),
 
   // ---------------- 内容质检 ----------------
   qaArticle: (aid) => http.post(`/articles/${aid}/qa`),

@@ -20,11 +20,13 @@ import threading
 import time
 from pathlib import Path
 
+from service.publishing.db import config_file
+
 import requests as _req
 
 # config.json 的文档位置是 backed/config.json（2026-10-14 路径修复，同 gate.py）
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = config_file()
 
 # Provider 价格级别：决定默认路由
 PRICE_LEVELS = {"economy": 0, "standard": 1, "premium": 2}

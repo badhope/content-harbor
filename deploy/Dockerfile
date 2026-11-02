@@ -19,9 +19,9 @@ COPY backed /app/backed
 WORKDIR /app/backed
 
 RUN uv sync --no-dev \
-    && uv run patchright install chromium || uv run playwright install chromium \
-    && mkdir -p /app/backed/data /app/backed/logs \
-    && chown -R app:app /app/backed
+    && (uv run patchright install chromium || uv run playwright install chromium) \
+    && mkdir -p /app/backed/data /app/backed/logs /app/data \
+    && chown -R app:app /app/backed /app/data
 
 USER app
 

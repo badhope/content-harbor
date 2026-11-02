@@ -1,6 +1,8 @@
 <template>
   <div class="pane" style="height:100%">
     <div class="pane-head editor-head">
+      <el-button v-if="showLibrary" size="small" :icon="Files" class="lib-btn"
+                 title="打开文章库" aria-label="打开文章库" @click="$emit('open-library')" />
       <span class="title">{{ article.id ? '#' + article.id : '新文章' }}</span>
       <el-tag v-if="dirty" size="small" type="warning" effect="dark" class="dirty-tag">未保存</el-tag>
       <span class="spacer" />
@@ -84,6 +86,7 @@
           :theme="'dark'"
           language="zh-CN"
           :toolbars="toolbars"
+          :on-upload-img="onUploadImg"
           class="md-editor"
           @on-change="touch"
         />
@@ -92,7 +95,7 @@
   </div>
 
   <!-- 版本历史抽屉 -->
-  <el-drawer v-model="versionDrawer" :title="`版本历史 · #${currentId}`" size="520px" direction="rtl">
+  <el-drawer v-model="versionDrawer" :title="`版本历史 · #${currentId}`" size="min(520px, 94vw)" direction="rtl">
     <div v-if="versionsLoading" class="dim padding">加载中…</div>
     <div v-else-if="versionsList.length" class="ver-list">
       <div v-for="(v, i) in versionsList" :key="v.id" class="ver-card">
@@ -113,7 +116,7 @@
   </el-drawer>
 
   <!-- 内容质检 -->
-  <el-dialog v-model="qaDialog" title="内容质检报告" width="560px">
+  <el-dialog v-model="qaDialog" title="内容质检报告" width="min(560px, 94vw)">
     <div v-if="qaLoading" class="dim padding">质检中…</div>
     <div v-else-if="qaResult">
       <div class="qa-overview">
@@ -143,7 +146,7 @@
   </el-dialog>
 
   <!-- AI 工具面板 -->
-  <el-dialog v-model="aiToolDialog" :title="aiToolTitle" width="600px">
+  <el-dialog v-model="aiToolDialog" :title="aiToolTitle" width="min(600px, 94vw)">
     <div v-if="aiToolLoading" class="dim padding">AI 生成中…</div>
     <div v-else-if="aiToolData">
       <!-- 翻译结果 -->
@@ -186,8 +189,10 @@
 import { computed, ref, watch } from 'vue'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
-import { Check, PriceTag, Aim, Brush, Menu, Edit, Operation, View, Promotion, Refresh,
+import { api } from '@/api'
+import { Check, PriceTag, Aim, Brush, Menu, Edit, Operation, View, Promotion, Refresh, Files,
          Paperclip, Picture, List, DocumentCopy, Clock, DataAnalysis } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useHubStore } from '@/stores/hub'
 
@@ -195,10 +200,11 @@ const props = defineProps({
   article: { type: Object, default: null },
   isNew: Boolean,
   dirty: Boolean,
-  saving: Boolean
+  saving: Boolean,
+  showLibrary: Boolean
 })
 const hub = useHubStore()
-const emit = defineEmits(['save', 'touch', 'ai-rewrite', 'ai-polish', 'publish', 'sync-update'])
+const emit = defineEmits(['save', 'touch', 'ai-rewrite', 'ai-polish', 'publish', 'sync-update', 'open-library'])
 
 const { isMobile } = useBreakpoint()
 // 手机默认只看编辑，分屏两栏根本没法用；桌面默认分屏
@@ -221,6 +227,21 @@ const qaTotalClass = computed(() => {
   return 'qa-' + (t >= 70 ? 'good' : t >= 50 ? 'ok' : 'bad')
 })
 const touch = () => emit('touch')
+
+// 编辑器内粘贴/拖拽的图片：先入本地媒体库（内容寻址去重），再回写稳定 URL。
+// 直接塞 base64 会让正文膨胀几十倍，也会让平台侧富文本编辑器拒收。
+async function onUploadImg(files, callback) {
+  const urls = []
+  for (const file of files) {
+    try {
+      const r = await api.mediaUpload(file)
+      urls.push(r.url || `/api/v1/hub/media/${r.sha256}.png`)
+    } catch {
+      ElMessage.error(`图片上传失败：${file.name}`)
+    }
+  }
+  callback(urls)
+}
 
 // 版本历史抽屉状态
 const versionDrawer = ref(false)

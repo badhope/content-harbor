@@ -53,7 +53,7 @@ def tm(sandbox):
     conn = db.connect(sandbox["db_file"])
     hub = FakeHub()
     hub.conn = conn
-    mgr = TaskManager(hub, conn)
+    mgr = TaskManager(hub, conn, backoff_base=0, backoff_max=0)
     yield mgr
     # 必须先让工作线程真正退出再关连接：worker 正跑在任务里时 conn.close()
     # 会在另一条线程上踩已释放的 sqlite3 句柄（Windows 上直接 access violation）。

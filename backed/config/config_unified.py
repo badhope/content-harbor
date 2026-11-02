@@ -42,7 +42,7 @@ class BaseConfig(BaseSettings):
     # =================================================================
     environment: Environment = Environment.DEVELOPMENT
     project_name: str = "ai-content-hub-backend"
-    project_version: str = "0.6.5"
+    project_version: str = "0.13.0"
     api_version: str = "v1"
     api_prefix: str = "/api/v1/hub"
     
@@ -557,7 +557,7 @@ class StagingConfig(BaseConfig):
     # =================================================================
     # 数据库配置 - 预发布环境
     # =================================================================
-    database_url: str = os.environ.get("HARBOR_DATABASE_URL", "sqlite+aiosqlite:///./data/staging_hub.db")
+    database_url: str = os.environ.get("HARBOUR_DATABASE_URL", "sqlite+aiosqlite:///./data/staging_hub.db")
     
     # 预发布环境数据库连接池配置
     db_pool_size: int = 10
@@ -575,7 +575,7 @@ class StagingConfig(BaseConfig):
     # =================================================================
     # 安全配置 - 预发布环境
     # =================================================================
-    secret_key: str = os.environ.get("HARBOR_SECRET_KEY", "")
+    secret_key: str = os.environ.get("HARBOUR_SECRET_KEY", "")
     
     # CORS配置 - 预发布环境
     cors_origins: List[str] = [
@@ -617,7 +617,7 @@ class ProductionConfig(BaseConfig):
     # =================================================================
     # 数据库配置 - 生产环境
     # =================================================================
-    database_url: str = os.environ.get("HARBOR_DATABASE_URL", "")
+    database_url: str = os.environ.get("HARBOUR_DATABASE_URL", "sqlite+aiosqlite:////app/data/hub.db")
     
     # 生产环境数据库连接池配置
     db_pool_size: int = 20
@@ -636,7 +636,7 @@ class ProductionConfig(BaseConfig):
     # =================================================================
     # 安全配置 - 生产环境
     # =================================================================
-    secret_key: str = os.environ.get("HARBOR_SECRET_KEY", "")
+    secret_key: str = os.environ.get("HARBOUR_SECRET_KEY", "")
     
     # CORS配置 - 生产环境
     cors_origins: List[str] = [
@@ -660,9 +660,9 @@ class ProductionConfig(BaseConfig):
     # =================================================================
     # API文档配置 - 生产环境
     # =================================================================
-    docs_url: None  # 生产环境禁用文档
-    redoc_url: None
-    openapi_url: None
+    docs_url: Optional[str] = None  # 生产环境禁用文档
+    redoc_url: Optional[str] = None
+    openapi_url: Optional[str] = None
     
     # =================================================================
     # 性能配置 - 生产环境
@@ -681,10 +681,13 @@ class ProductionConfig(BaseConfig):
     )
 
 
-class DockerConfig(DevelopmentConfig):
-    """Docker Compose 起步栈配置（读取 .env.docker）"""
+class DockerConfig(ProductionConfig):
+    """Docker Compose 生产配置（读取 .env.docker）"""
 
-    environment: Environment = Environment.DEVELOPMENT
+    environment: Environment = Environment.PRODUCTION
+    database_url: str = os.environ.get("HARBOUR_DATABASE_URL", "sqlite+aiosqlite:////app/data/hub.db")
+    allowed_hosts: List[str] = ["*"]
+    cors_origins: List[str] = ["*"]
 
     model_config = SettingsConfigDict(
         env_file=_env_files(".env.docker", ".env"),
