@@ -117,10 +117,16 @@ def is_trusted(request: FastAPIRequest) -> bool:
 def attach_auth_middleware(app: FastAPI) -> None:
     """注册 API 鉴权 + 访问日志中间件。"""
 
+    # 无需 Token 的探活路径：容器编排与负载均衡器必须能在未认证时判断存活，
+    # 否则 Docker healthcheck / k8s probe 一律 401，服务永远起不来。
+    # 这些路径只返回进程状态，不暴露任何业务数据。
+    _PUBLIC_PATHS = frozenset({"/health", "/api/health"})
+
     @app.middleware("http")
     async def _auth(request: Request, call_next):
         token = _api_token()
         if token and not is_trusted(request) \
+                and request.url.path.rstrip("/") not in _PUBLIC_PATHS \
                 and request.headers.get("X-API-Token") != token:
             # 中间件层抛 HTTPException 不走 FastAPI 异常处理器，会退化成 500；
             # 必须直接返回 JSONResponse（审计 B4）。

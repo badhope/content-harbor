@@ -125,11 +125,13 @@ def fetch_pinned(url: str, timeout: float = 30.0, max_bytes: int = 10 * 1024 * 1
     if not _fetch_slots.acquire(blocking=False):
         raise URLSafetyError("抓取并发已达安全上限")
     done = threading.Event()
+    cancelled = threading.Event()
     result = []
 
     def run():
         try:
-            result.append((True, _fetch_pinned(url, deadline, max_bytes, max_redirects, headers)))
+            result.append((True, _fetch_pinned(url, deadline, max_bytes, max_redirects,
+                                               headers, cancelled)))
         except BaseException as exc:
             result.append((False, exc))
         finally:
@@ -142,6 +144,9 @@ def fetch_pinned(url: str, timeout: float = 30.0, max_bytes: int = 10 * 1024 * 1
         _fetch_slots.release()
         raise
     if not done.wait(max(0, deadline - time.monotonic())):
+        # 调用方已经超时返回，工作线程必须停止一切网络动作：
+        # 否则"超时"只是假象——请求仍会在后台发出去，调用方却以为没发生。
+        cancelled.set()
         raise URLSafetyError("抓取超时")
     if not result[0][0]:
         raise result[0][1]
@@ -150,10 +155,18 @@ def fetch_pinned(url: str, timeout: float = 30.0, max_bytes: int = 10 * 1024 * 1
     return result[0][1]
 
 
-def _fetch_pinned(url, deadline, max_bytes, max_redirects, headers):
+def _fetch_pinned(url, deadline, max_bytes, max_redirects, headers, cancelled=None):
     current = url
+    def _abort_if_cancelled():
+        """调用方已放弃等待：立即停止，绝不把请求发出去。"""
+        if cancelled is not None and cancelled.is_set():
+            raise URLSafetyError("抓取已取消")
+        if time.monotonic() >= deadline:
+            raise URLSafetyError("抓取超时")
+
     for _ in range(max_redirects + 1):
         validate_url(current)
+        _abort_if_cancelled()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise URLSafetyError("抓取超时")
@@ -164,6 +177,7 @@ def _fetch_pinned(url, deadline, max_bytes, max_redirects, headers):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise URLSafetyError("抓取超时")
+        _abort_if_cancelled()
         chosen = str(addresses[0])
         path = parsed.path or "/"
         if parsed.query:

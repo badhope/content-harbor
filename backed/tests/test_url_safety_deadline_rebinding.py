@@ -28,8 +28,39 @@ def test_dns_timeout_prevents_late_connection(monkeypatch):
         assert time.monotonic() - start < 0.8
     finally:
         release.set()
-    time.sleep(0.1)
-    assert connected == []
+    # 给后台线程充足时间：如果取消没生效，它最终会调 socket.create_connection
+    time.sleep(0.6)
+    assert connected == [], "超时返回后后台线程仍发起了连接——超时是假象"
+
+
+def test_cancelled_flag_alone_blocks_connection(monkeypatch):
+    """只靠 cancelled 标志（deadline 尚未到）就必须阻止建连。
+
+    这里把 deadline 放到很远的未来，屏蔽"时间到了"这条兜底路径，
+    单独验证取消信号本身有效——否则两条路径互相掩盖，测不出真问题。
+    """
+    gate = threading.Event()
+    connected = []
+
+    def blocked_resolve(host):
+        gate.wait(3)
+        return (url_safety.ipaddress.ip_address('8.8.8.8'),)
+
+    monkeypatch.setattr(url_safety, 'resolve_public_ips', blocked_resolve)
+    monkeypatch.setattr(socket, 'create_connection',
+                        lambda *a, **kw: connected.append(a))
+
+    # 直接构造一次"已取消"的抓取：deadline 在未来，唯一拦截点是 cancelled
+    cancelled = threading.Event()
+    cancelled.set()
+    deadline = time.monotonic() + 30
+    with pytest.raises(url_safety.URLSafetyError, match='取消'):
+        url_safety._fetch_pinned('http://example.test/', deadline,
+                                 1024, 5, {}, cancelled)
+
+    gate.set()
+    time.sleep(0.2)
+    assert connected == [], "cancelled 已置位却仍然建立了连接"
 
 
 def test_slow_headers_obey_total_deadline(monkeypatch):
