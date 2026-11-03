@@ -5,7 +5,7 @@ import { api } from '@/api'
 // 令牌只从本机浏览器存储读取；单独取值，避免测试 mock 必须导出它。
 function readToken() {
   try {
-    return window.localStorage.getItem('harbour_api_token') || ''
+    return window.localStorage.getItem('harbor_api_token') || ''
   } catch {
     return ''
   }

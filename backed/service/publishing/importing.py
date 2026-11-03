@@ -158,7 +158,7 @@ def _fetch_public_html(url: str, timeout: float) -> tuple[str, str]:
         data, final_url = fetch_pinned(
             url, timeout=timeout, max_bytes=MAX_HTML_BYTES,
             max_redirects=MAX_REDIRECTS,
-            headers={"User-Agent": "HarbourImporter/1.0"})
+            headers={"User-Agent": "HarborImporter/1.0"})
     except URLSafetyError as exc:
         raise ImportError_(str(exc)) from exc
     return data.decode("utf-8", errors="replace"), final_url

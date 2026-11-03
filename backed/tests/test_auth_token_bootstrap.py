@@ -17,12 +17,12 @@ import api.auth as auth_mod
 def sandbox_root(tmp_path, monkeypatch):
     monkeypatch.setattr(auth_mod, "ROOT", tmp_path)
     monkeypatch.setattr(auth_mod, "_api_token_cache", None)
-    monkeypatch.delenv("HARBOUR_API_TOKEN", raising=False)
+    monkeypatch.delenv("HARBOR_API_TOKEN", raising=False)
     return tmp_path
 
 
 def test_env_var_wins_without_persist(sandbox_root, monkeypatch):
-    monkeypatch.setenv("HARBOUR_API_TOKEN", "env-token-1")
+    monkeypatch.setenv("HARBOR_API_TOKEN", "env-token-1")
     assert auth_mod._resolve_token() == "env-token-1"
     assert not (sandbox_root / "config.json").exists()
 

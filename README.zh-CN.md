@@ -1,4 +1,4 @@
-# Harbour 港
+# Harbor 港
 
 [English](README.md) · **简体中文**
 
@@ -93,8 +93,8 @@ uv run --project backed python -m backed.cli publish --id <文章ID> --platforms
 
 | 变量 | 用途 | 默认 |
 |---|---|---|
-| `HARBOUR_API_TOKEN` | REST 鉴权 Token | 回环下自动生成；生产/Docker **必须**显式设置 |
-| `SECRET_KEY` / `HARBOUR_SECRET_KEY` | 签名 / JWT 密钥 | 生产**必须**设置，不使用公开默认值 |
+| `HARBOR_API_TOKEN` | REST 鉴权 Token | 回环下自动生成；生产/Docker **必须**显式设置 |
+| `SECRET_KEY` / `HARBOR_SECRET_KEY` | 签名 / JWT 密钥 | 生产**必须**设置，不使用公开默认值 |
 | `TRUSTED_NETS` | 免 Token 的客户端网段 | 仅回环 |
 | `TRUSTED_PROXIES` | 允许采信 `X-Forwarded-For` 的反向代理网段 | 空 |
 | `CORS_ORIGINS` | 跨域白名单 | 同源 |
@@ -110,7 +110,7 @@ Docker Compose 把后端藏在 nginx 后面，Token 由服务端注入：
 
 ```bash
 export SECRET_KEY=$(openssl rand -hex 32)
-export HARBOUR_API_TOKEN=$(openssl rand -hex 32)
+export HARBOR_API_TOKEN=$(openssl rand -hex 32)
 docker compose -f deploy/docker-compose.yml --profile web up -d --build
 ```
 

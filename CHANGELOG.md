@@ -22,9 +22,13 @@
 
 ### Changed
 
-- **五个远程仓库统一改名 `harbor`。** GitCode 主仓 `badhope/harbour` → `badhope/harbor`，
-  Gitee 与三个 GitHub 镜像仓 `content-harbor` → `harbor`（各平台 API 原地改名，不删库重建）。
-  README/CONTRIBUTING/SECURITY/项目文档中的仓库名与徽章链接同步更新，本地 remote 已指向新地址。
+- **品牌与仓库全面统一为 `Harbor`。** 源码、文档、界面文案中的英式拼写 `Harbour`
+  全部改为美式 `Harbor`；配置环境变量前缀 `HARBOR_*`（compose/文档/测试同步更新，
+  本地 `.env` 如有旧前缀需手动改名）；Webhook 请求头 `X-Harbor-Event` /
+  `X-Harbor-Signature`；桌面数据目录标识 `com.harbor.hub`。
+- **五个远程仓库统一改名为 `harbor`。** GitCode 主仓与 Gitee、GitHub 三个镜像仓
+  全部通过各平台 API 原地改名（不删库重建），本地 remote 已指向新地址；
+  README/CONTRIBUTING/SECURITY/项目文档/Issue 模板中的仓库名与徽章链接同步更新。
 - `check_all` 密钥扫描纳入门禁，测试用占位 token 改为低熵值避免误报。
 - AGENT.md 目录树补齐 `url_safety`、三个新脚本、`docs/` 新增文档与根目录 Markdown 契约。
 - 后端测试 533 → 537。
@@ -60,7 +64,7 @@
 - 运行配置与数据库/媒体/登录态统一到同一数据根；旧 `backed/config.json` 只作只读迁移来源。
 - 关闭流程按 scheduler → tasks → browser → dispatcher → DB 顺序幂等执行；任一步停不下来
   就保留连接并报错，不伪装成功。
-- MCP SSE 默认只绑定回环，远程必须配置 `HARBOUR_MCP_TOKEN`；外部 MCP 子进程改用白名单
+- MCP SSE 默认只绑定回环，远程必须配置 `HARBOR_MCP_TOKEN`；外部 MCP 子进程改用白名单
   环境，不再继承父进程密钥。
 - 前端访问令牌存本机浏览器；SSE 改用 fetch 流以携带 `X-API-Token`。
 - `check_all` 从六道扩到八道：新增版本一致性与密钥扫描。
@@ -85,7 +89,7 @@
 - 修复浏览器通道的 DNS 重绑定暴露面（校验与连接之间不再存在可替换窗口）。
 - 修复 MCP SSE 在远程监听时的未鉴权暴露。
 - 修复外部 MCP 子进程继承父进程 API Key / Token 的问题。
-- 生产与 Docker 启动改为快速失败：缺 `HARBOUR_API_TOKEN` / `SECRET_KEY` 直接拒绝启动。
+- 生产与 Docker 启动改为快速失败：缺 `HARBOR_API_TOKEN` / `SECRET_KEY` 直接拒绝启动。
 
 ### Verification
 
@@ -199,7 +203,7 @@
 
 ### 外部 MCP Server 桥接（用户诉求："网上有 mcp 工具直接拿来用"）
 
-- 新增 `service/publishing/mcp_bridge.py`：Harbour 作为 MCP **Client**，通过
+- 新增 `service/publishing/mcp_bridge.py`：Harbor 作为 MCP **Client**，通过
   官方 `mcp` SDK（2.3.0）stdio 拉起并调用任意第三方 MCP Server。
 - 已核实的可直用生态（npm/PyPI 实测）：
   `@playwright/mcp@0.0.83`（Apache-2.0，浏览器自动化）、
@@ -356,17 +360,17 @@
 
 ---
 
-## [Unreleased] - 2026-10-27（品牌更名 Harbour + 工程质量债偿还）
+## [Unreleased] - 2026-10-27（品牌更名 Harbor + 工程质量债偿还）
 
-> 主题：**项目更名 Harbour（含仓库/logo/代码标识）；前端从零建测试体系；修复 7 个阻断缺陷；门禁四道 → 六道；恢复 CI。**
+> 主题：**项目更名 Harbor（含仓库/logo/代码标识）；前端从零建测试体系；修复 7 个阻断缺陷；门禁四道 → 六道；恢复 CI。**
 > 测试：后端 379 → 390；前端 0 → 14（vitest）；新增 eslint 门禁。
 
 ### 品牌更名（breaking）
 
-- 仓库原地改名 `badhope/content-harbor` → `badhope/harbour`（GitCode API，不删库重建）。
-- 包名/产物：Cargo `harbour`、PyInstaller `harbour-backend`、Tauri identifier `com.harbour.hub`。
-- 环境变量：`HARBOR_*` → `HARBOUR_*`（`DATABASE_URL` / `SECRET_KEY` / `API_TOKEN`）。
-- Webhook 契约头：`X-Harbor-Event` / `X-Harbor-Signature` → `X-Harbour-*`（**外部集成需同步**）。
+- 仓库原地改名 `badhope/content-harbor` → `badhope/harbor`（GitCode API，不删库重建）。
+- 包名/产物：Cargo `harbor`、PyInstaller `harbor-backend`、Tauri identifier `com.harbor.hub`。
+- 环境变量：`HARBOR_*` → `HARBOR_*`（`DATABASE_URL` / `SECRET_KEY` / `API_TOKEN`）。
+- Webhook 契约头：`X-Harbor-Event` / `X-Harbor-Signature` → `X-Harbor-*`（**外部集成需同步**）。
 - 新 logo：蓝底白锚 + 双波浪，50 个 Tauri 图标全套重绘（ico/icns/ios/android/windows）。
 - 文档统一中文单语，删除重复的 `README.en.md`。
 

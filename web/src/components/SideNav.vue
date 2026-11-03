@@ -3,7 +3,7 @@
     <div class="sn-brand">
       <BrandLogo :px="30" :with-name="false" />
       <div class="sn-names">
-        <div class="sn-name">内容港 <em>Harbour</em></div>
+        <div class="sn-name">内容港 <em>Harbor</em></div>
         <div class="sn-sub">内容进港 · 全网分发</div>
       </div>
     </div>

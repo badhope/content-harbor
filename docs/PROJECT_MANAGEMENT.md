@@ -1,4 +1,4 @@
-# Harbour Project Management
+# Harbor Project Management
 
 > Audience: maintainers. This is the operating manual for the repository — how work is
 > planned, how quality is gated, how the five remotes stay in sync, and what "done"
@@ -6,13 +6,13 @@
 
 ## 1. Product definition
 
-**One sentence.** Harbour is a self-hosted publishing hub that writes with AI and ships
+**One sentence.** Harbor is a self-hosted publishing hub that writes with AI and ships
 one article to fifteen Chinese and international platforms from a single screen, keeping
 every published copy in sync.
 
 **Who it is for**
 
-| Persona | What they need | What Harbour gives them |
+| Persona | What they need | What Harbor gives them |
 |---|---|---|
 | Chinese tech writer publishing on 5+ platforms | Write once, avoid re-pasting | Multi-platform publish with per-platform capability matrix |
 | Indie developer running a blog farm | Content pipeline without SaaS lock-in | Self-hosted SQLite + local browser profiles, no vendor account |

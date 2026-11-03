@@ -22,7 +22,7 @@ UI driven by Patchright through the system Edge binary.
 ## 2. Runtime — service assembly
 
 ```
-GET /health              -> {"status":"ok","version":"v1","service":"内容港 Harbour"}
+GET /health              -> {"status":"ok","version":"v1","service":"内容港 Harbor"}
 GET /api/v1/hub/platforms -> 15 adapters
 GET /api/v1/hub/status    -> articles=1, publications=0, accounts=1
 GET /api/v1/hub/adapters/probe

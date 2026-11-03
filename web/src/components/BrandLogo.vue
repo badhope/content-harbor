@@ -1,7 +1,7 @@
 <template>
   <span class="brand" :class="{ big: size === 'big' }">
     <svg class="brand-mark" :style="{ width: px + 'px', height: px + 'px' }" viewBox="0 0 48 48" aria-hidden="true">
-      <!-- Harbour mark：圆角方底 + 船锚 + 双波浪（锚定多平台，内容入港） -->
+      <!-- Harbor mark：圆角方底 + 船锚 + 双波浪（锚定多平台，内容入港） -->
       <rect x="3" y="3" width="42" height="42" rx="12" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="1" />
       <!-- 锚：环 + 杆 + 横杆 + 锚臂 -->
       <circle cx="24" cy="12.4" r="3.1" fill="none" stroke="var(--accent)" stroke-width="2.6" />
@@ -21,7 +21,7 @@
 
 <script setup>
 defineProps({
-  name: { type: String, default: '内容港 Harbour' },
+  name: { type: String, default: '内容港 Harbor' },
   sub: { type: String, default: '内容进港 · 全网分发' },
   px: { type: Number, default: 28 },
   withName: { type: Boolean, default: true },
