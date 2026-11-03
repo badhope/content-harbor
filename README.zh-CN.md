@@ -5,7 +5,7 @@
 面向中文创作者的自托管发布中枢：一次写作，分发到十五个平台，已发布的内容保持同步。
 内置 AI 写稿、合规门禁，以及在平台风控拦截时把控制权交回给人的机制。
 
-[![CI](https://github.com/badhope/content-harbor/actions/workflows/ci.yml/badge.svg)](https://github.com/badhope/content-harbor/actions/workflows/ci.yml)
+[![CI](https://github.com/badhope/harbor/actions/workflows/ci.yml/badge.svg)](https://github.com/badhope/harbor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![写作台](docs/screenshots/01-write.png)
@@ -43,8 +43,8 @@
 需要 Python 3.10+、[uv](https://docs.astral.sh/uv/)、Node 20+ 与 pnpm。
 
 ```bash
-git clone https://github.com/badhope/content-harbor.git
-cd content-harbor
+git clone https://github.com/badhope/harbor.git
+cd harbor
 
 # 终端 1 —— 后端
 cd backed
