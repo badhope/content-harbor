@@ -4,7 +4,7 @@ import { api } from '@/api'
 import { useHubStore } from './hub'
 
 // 草稿自动保存：每 30 秒把 dirty 文章内容写 localStorage，防崩溃/断电丢稿
-const DRAFT_KEY_PREFIX = 'harbour_draft_'
+const DRAFT_KEY_PREFIX = 'harbor_draft_'
 let _autoSaveTimer = null
 
 function _draftKey(id) { return DRAFT_KEY_PREFIX + (id || 'new') }

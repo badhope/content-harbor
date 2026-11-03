@@ -13,7 +13,7 @@ function getBaseURL() {
 
 // 部署在外网/容器时后端要求 X-API-Token；令牌只从本机浏览器存储读取，
 // 不写进构建产物，也不放进 URL。
-const TOKEN_KEY = 'harbour_api_token'
+const TOKEN_KEY = 'harbor_api_token'
 
 export function getApiToken() {
   try {

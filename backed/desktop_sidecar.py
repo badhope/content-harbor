@@ -16,29 +16,29 @@ from pathlib import Path
 
 
 def main():
-    parser = argparse.ArgumentParser(description="港 Harbour 桌面版后端 sidecar")
+    parser = argparse.ArgumentParser(description="港 Harbor 桌面版后端 sidecar")
     parser.add_argument("--port", type=int, default=0,
                         help="监听端口 (0=OS 随机)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--tauri-port-file", required=True,
                         help="写入实际端口到此文件供 Tauri 父进程发现")
     parser.add_argument("--data-dir", default=None,
-                        help="数据目录 (默认: 用户数据目录下的 harbour/)")
+                        help="数据目录 (默认: 用户数据目录下的 harbor/)")
     args = parser.parse_args()
 
     # 确保数据目录
     if args.data_dir:
         data_path = Path(args.data_dir).resolve()
     else:
-        # Windows: %APPDATA%\harbour\data
-        # macOS:   ~/Library/Application Support/com.harbour.hub/data
-        # Linux:   ~/.local/share/com.harbour.hub/data
+        # Windows: %APPDATA%\harbor\data
+        # macOS:   ~/Library/Application Support/com.harbor.hub/data
+        # Linux:   ~/.local/share/com.harbor.hub/data
         if sys.platform == "win32":
-            base = Path.home() / "AppData" / "Roaming" / "harbour"
+            base = Path.home() / "AppData" / "Roaming" / "harbor"
         elif sys.platform == "darwin":
-            base = Path.home() / "Library" / "Application Support" / "com.harbour.hub"
+            base = Path.home() / "Library" / "Application Support" / "com.harbor.hub"
         else:
-            base = Path.home() / ".local" / "share" / "com.harbour.hub"
+            base = Path.home() / ".local" / "share" / "com.harbor.hub"
         data_path = base / "data"
 
     data_path.mkdir(parents=True, exist_ok=True)

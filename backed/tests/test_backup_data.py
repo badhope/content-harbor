@@ -59,20 +59,20 @@ def fake_data(tmp_path, monkeypatch, mod):
 
 def test_refuses_destination_inside_repo(mod, fake_data):
     """凭据类文件绝不能落进仓库——一旦进去就有被 commit 的风险。"""
-    inside = mod.REPO_ROOT / "harbour-backups"
+    inside = mod.REPO_ROOT / "harbor-backups"
     with pytest.raises(mod.RefuseError):
         mod.build_plan(inside, include_profiles=False)
 
 
 def test_cli_reports_refusal_with_exit_2(mod, fake_data, capsys):
-    inside = mod.REPO_ROOT / "harbour-backups"
+    inside = mod.REPO_ROOT / "harbor-backups"
     rc = mod.main(["--dest", str(inside)])
     assert rc == 2
     assert "拒绝执行" in capsys.readouterr().err
 
 
 def test_refusal_does_not_write_anything(mod, fake_data):
-    inside = mod.REPO_ROOT / "harbour-backups"
+    inside = mod.REPO_ROOT / "harbor-backups"
     mod.run_backup(inside, keep_days=7)
     assert not inside.exists()
 

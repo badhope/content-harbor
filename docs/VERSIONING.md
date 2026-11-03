@@ -1,6 +1,6 @@
 # Versioning & Release Policy
 
-Harbour follows [Semantic Versioning 2.0.0](https://semver.org/). This document is the
+Harbor follows [Semantic Versioning 2.0.0](https://semver.org/). This document is the
 single source of truth for how versions are chosen, cut, documented and published.
 
 ## Version format

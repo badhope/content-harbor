@@ -145,7 +145,7 @@ def ai_config_put(body: AIConfigPatchIn):
     """白名单写回：providers.<key> / REVIEW_MODEL / AI_DIRECT_PUBLISH。
 
     api_key 语义：不传=不改；空串=清除；有值=设置。
-    其余 config.json 键（HARBOUR_API_TOKEN 等）原样保留。
+    其余 config.json 键（HARBOR_API_TOKEN 等）原样保留。
     """
     from service.publishing import ai_config
     try:

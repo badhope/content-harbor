@@ -9,7 +9,7 @@
 > 其余长文与审计一律进 `docs/`。
 
 ```
-harbour/
+harbor/
 ├── backed/
 │   ├── app/
 │   │   ├── factory.py              # FastAPI 应用工厂 (create_app)
@@ -270,7 +270,7 @@ pnpm --dir web test                     # vitest（当前约 62 个展开用例�
 
 ```bash
 cd backed
-uv run python ../scripts/backup_data.py              # 到 ~/harbour-backups
+uv run python ../scripts/backup_data.py              # 到 ~/harbor-backups
 uv run python ../scripts/backup_data.py --dry-run    # 只看计划
 ```
 
@@ -287,8 +287,8 @@ uv run python ../scripts/backup_data.py --dry-run    # 只看计划
 
 | 环境变量 | 说明 | 默认 |
 |---|---|---|
-| `HARBOUR_API_TOKEN` | REST 鉴权 Token（优先于 config.json） | 未配置时首启自动生成 UUID 并落盘 |
-| `HARBOUR_SECRET_KEY` | 签名密钥（生产必须设） | 开发随机 |
+| `HARBOR_API_TOKEN` | REST 鉴权 Token（优先于 config.json） | 未配置时首启自动生成 UUID 并落盘 |
+| `HARBOR_SECRET_KEY` | 签名密钥（生产必须设） | 开发随机 |
 | `TRUSTED_NETS` | 受信代理网段（XFF 校验） | 127.0.0.0/8,::1/128 |
 | `TRUSTED_PROXIES` | 受信反向代理 IP（限流键） | 空 |
 | `CORS_ORIGINS` | 跨域白名单（逗号分隔） | 同源 |
