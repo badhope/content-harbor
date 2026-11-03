@@ -23,6 +23,20 @@
           <el-tab-pane label="标签治理" name="tags" lazy>
             <TagsPanel />
           </el-tab-pane>
+          <el-tab-pane label="外观" name="appearance" lazy>
+            <div class="appearance-panel">
+              <div class="ap-row">
+                <div>
+                  <div class="ap-title">界面主题</div>
+                  <div class="dim small">暗色跟随本地偏好保存；Markdown 编辑器的独立主题后续接入。</div>
+                </div>
+                <el-radio-group :model-value="theme" @update:model-value="onTheme">
+                  <el-radio-button value="light">亮色</el-radio-button>
+                  <el-radio-button value="dark">暗色</el-radio-button>
+                </el-radio-group>
+              </div>
+            </div>
+          </el-tab-pane>
           <el-tab-pane label="访问令牌" name="token" lazy>
             <div class="token-panel">
               <p class="dim small">
@@ -52,10 +66,17 @@ import WebhooksPanel from '@/components/settings/WebhooksPanel.vue'
 import TagsPanel from '@/components/settings/TagsPanel.vue'
 import { getApiToken, setApiToken } from '@/api'
 import { useHubStore } from '@/stores/hub'
+import { getTheme, setTheme } from '@/composables/useTheme'
 
 const hub = useHubStore()
 const tab = ref('ai')
 const tokenInput = ref(getApiToken())
+const theme = ref(getTheme())
+
+function onTheme(v) {
+  setTheme(v)
+  theme.value = v
+}
 
 async function saveToken() {
   setApiToken(tokenInput.value.trim())
@@ -88,6 +109,9 @@ function clearToken() {
 .pane-head .title { white-space: nowrap; flex-shrink: 0; }
 .token-panel { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; }
 .token-ops { display: flex; gap: 8px; }
+.appearance-panel { padding-top: 8px; display: flex; flex-direction: column; gap: 16px; max-width: 640px; }
+.ap-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.ap-title { font-weight: 600; color: var(--tx-1); margin-bottom: 2px; }
 
 @media (max-width: 767px) {
   .settings-wrap { padding: 8px; }
