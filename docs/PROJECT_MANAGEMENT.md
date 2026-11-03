@@ -109,11 +109,11 @@ own history.
 
 | # | Host | Repository | Role | Extra commits to preserve |
 |---|---|---|---|---|
-| 1 | GitCode | `badhope/harbour` | **Primary** — canonical `main`, tags, releases | — |
-| 2 | Gitee | `badhope/content-harbor` | Mirror (China) | `remove-ci-workflow-on-mirror` |
-| 3 | GitHub | `badhope/content-harbor` | Mirror (international, primary GitHub) | dependabot bumps |
-| 4 | GitHub | `x33834/content-harbor` | Mirror (personal) | `remove CI workflow on mirror` |
-| 5 | GitHub | `Morningstar202604/content-harbor` | Mirror (personal) | `remove CI workflow on mirror` |
+| 1 | GitCode | `badhope/harbor` | **Primary** — canonical `main`, tags, releases | — |
+| 2 | Gitee | `badhope/harbor` | Mirror (China) | `remove-ci-workflow-on-mirror` |
+| 3 | GitHub | `badhope/harbor` | Mirror (international, primary GitHub) | dependabot bumps |
+| 4 | GitHub | `x33834/harbor` | Mirror (personal) | `remove CI workflow on mirror` |
+| 5 | GitHub | `Morningstar202604/harbor` | Mirror (personal) | `remove CI workflow on mirror` |
 
 ### Why mirrors diverge
 
@@ -128,7 +128,7 @@ Never `--force` a mirror. Instead, merge `main` into the mirror's branch:
 
 ```bash
 # 1. Add the mirror as a remote once
-git remote add gitee https://gitee.com/badhope/content-harbor.git
+git remote add gitee https://gitee.com/badhope/harbor.git
 
 # 2. Fetch and merge (not rebase) the mirror's own commit
 git fetch gitee main
