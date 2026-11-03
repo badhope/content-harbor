@@ -24,15 +24,22 @@
         <span class="dot" :class="aiReady ? 'ok' : 'off'" />
         <span>{{ aiReady ? 'AI 就绪' : 'AI 未配置' }}</span>
       </div>
-      <div class="sn-pubs" v-if="publishedCount">{{ publishedCount }} 篇已发布</div>
+      <div class="sn-foot-row">
+        <div class="sn-pubs" v-if="publishedCount">{{ publishedCount }} 篇已发布</div>
+        <button class="sn-theme" :title="theme === 'dark' ? '切到亮色' : '切到暗色'"
+                @click="onToggleTheme">
+          <el-icon><component :is="theme === 'dark' ? Sunny : Moon" /></el-icon>
+        </button>
+      </div>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { Plus, EditPen, Promotion, List, Setting } from '@element-plus/icons-vue'
+import { computed, ref } from 'vue'
+import { Plus, EditPen, Promotion, List, Setting, Sunny, Moon } from '@element-plus/icons-vue'
 import BrandLogo from './BrandLogo.vue'
+import { getTheme, toggleTheme } from '@/composables/useTheme'
 
 const props = defineProps({
   view: { type: String, default: 'write' },
@@ -41,6 +48,12 @@ const props = defineProps({
   publishedCount: { type: Number, default: 0 },
 })
 defineEmits(['switch', 'new'])
+
+const theme = ref(getTheme())
+function onToggleTheme() {
+  toggleTheme()
+  theme.value = getTheme()
+}
 
 const items = computed(() => [
   { key: 'write', icon: EditPen, label: '写作台' },
@@ -116,6 +129,25 @@ const items = computed(() => [
   .sn-pubs { font-size: 11px; color: var(--tx-4); padding: 0 4px; }
 }
 
+.sn-foot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.sn-theme {
+  width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--tx-3);
+  cursor: pointer;
+  transition: background .14s, color .14s, border-color .14s;
+  &:hover { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+}
+
 // 窄屏：侧栏收成图标条
 @media (max-width: 1023px) {
   .side-nav { width: 64px; padding: 14px 8px; }
@@ -124,5 +156,6 @@ const items = computed(() => [
   .sn-new { :deep(span) { display: none; } padding: 8px 0; }
   .sn-item { justify-content: center; padding: 10px 0; }
   .sn-foot { align-items: center; .sn-pill span:last-child { display: none; } }
+  .sn-foot-row { width: 100%; justify-content: center; }
 }
 </style>
