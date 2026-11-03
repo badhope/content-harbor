@@ -4,7 +4,7 @@
 
 **Do not open a public issue.** Use GitHub's private advisory flow:
 
-<https://github.com/badhope/content-harbor/security/advisories/new>
+<https://github.com/badhope/harbor/security/advisories/new>
 
 If that is unavailable, email the maintainer listed on the repository profile with the
 subject `[harbour security]` and encrypt nothing sensitive in the first message — say

@@ -25,7 +25,7 @@ multi-platform  playwright  sqlite  tauri  automation  chinese-content
 ## Homepage
 
 ```
-https://badhope.github.io/content-harbor/
+https://badhope.github.io/harbor/
 ```
 
 ## Applying the metadata
@@ -33,16 +33,16 @@ https://badhope.github.io/content-harbor/
 ### GitHub (three repositories)
 
 ```bash
-gh api -X PATCH repos/badhope/content-harbor \
+gh api -X PATCH repos/badhope/harbor \
   -f description="Self-hosted AI publishing hub — write once, ship to 15 platforms, keep every copy in sync." \
-  -f homepage="https://badhope.github.io/content-harbor/" \
+  -f homepage="https://badhope.github.io/harbor/" \
   -f 'topics[]=ai-writing' -f 'topics[]=content-publishing' \
   -f 'topics[]=self-hosted' -f 'topics[]=fastapi' -f 'topics[]=vue3' \
   -f 'topics[]=mcp' -f 'topics[]=multi-platform' -f 'topics[]=playwright' \
   -f 'topics[]=sqlite' -f 'topics[]=tauri' -f 'topics[]=automation'
 ```
 
-Repeat for `x33834/content-harbor` and `Morningstar202604/content-harbor`.
+Repeat for `x33834/harbor` and `Morningstar202604/harbor`.
 
 ### Gitee
 
