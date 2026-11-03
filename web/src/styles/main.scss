@@ -880,3 +880,99 @@ a:focus-visible,
   flex-direction: column;
   overflow: hidden;
 }
+
+// ---------- 暗色主题（html.dark） ----------
+// 只重定义项目变量与 EP 接管变量；EP 自身的暗色变量由 dark/css-vars.css 提供，
+// 其选择器是 html.dark（优先级高于 :root 的亮色接管），此处同名覆盖即生效。
+html.dark {
+  --bg:        #0F1419;
+  --surface:   #161C24;
+  --surface-2: #1C232D;
+  --surface-3: #232C38;
+  --line:      #2A3441;
+  --line-soft: #232C37;
+  --line-strong:#3A4656;
+
+  --tx-1: #E8ECF2;
+  --tx-2: #B8C2CE;
+  --tx-3: #939EAC;
+  --tx-4: #7C8694;
+
+  --accent:      #6A8DE9;
+  --accent-hi:   #86A4EE;
+  --accent-soft: rgba(106, 141, 233, .14);
+  --accent-line: rgba(106, 141, 233, .32);
+
+  --ok:   #35B489;
+  --warn: #D9A04A;
+  --bad:  #E3685C;
+
+  --shadow:    0 2px 10px rgba(0, 0, 0, .35);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, .5);
+
+  // 兼容旧变量名同步覆盖
+  --brand-1: #6A8DE9;
+  --brand-2: #86A4EE;
+  --brand-grad: linear-gradient(135deg, #6A8DE9, #4F6FBE);
+  --brand-soft: rgba(106, 141, 233, .14);
+  --brand-line: rgba(106, 141, 233, .32);
+  --ach-bg: #0F1419;
+  --ach-panel: #161C24;
+  --ach-panel-2: #1C232D;
+  --ach-line: #2A3441;
+  --ach-line-soft: #232C37;
+  --ach-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+  --ach-shadow-sm: 0 2px 10px rgba(0, 0, 0, .35);
+
+  // EP 接管：飞书蓝在暗底上的适配梯度（light-N 向背景靠拢）
+  --el-color-primary: #6A8DE9;
+  --el-color-primary-light-3: #4F6FBE;
+  --el-color-primary-light-5: #3A5496;
+  --el-color-primary-light-7: #2B3F6E;
+  --el-color-primary-light-8: #24335A;
+  --el-color-primary-light-9: #1D2942;
+  --el-color-primary-dark-2: #86A4EE;
+
+  --el-color-success: #35B489;
+  --el-color-success-light-3: #2C9370;
+  --el-color-success-light-5: #227156;
+  --el-color-success-light-7: #1A5642;
+  --el-color-success-light-8: #164736;
+  --el-color-success-light-9: #12382B;
+  --el-color-success-dark-2: #5BC9A4;
+
+  --el-color-warning: #D9A04A;
+  --el-color-warning-light-3: #AE8242;
+  --el-color-warning-light-5: #836535;
+  --el-color-warning-light-7: #614B28;
+  --el-color-warning-light-8: #4E3D21;
+  --el-color-warning-light-9: #3B2F1B;
+  --el-color-warning-dark-2: #E4B66F;
+
+  --el-color-danger: #E3685C;
+  --el-color-danger-light-3: #B6574D;
+  --el-color-danger-light-5: #89413A;
+  --el-color-danger-light-7: #64312C;
+  --el-color-danger-light-8: #512823;
+  --el-color-danger-light-9: #3E1F1B;
+  --el-color-danger-dark-2: #E98B81;
+
+  --el-color-error: #E3685C;
+  --el-color-error-light-3: #B6574D;
+  --el-color-error-light-5: #89413A;
+  --el-color-error-light-7: #64312C;
+  --el-color-error-light-8: #512823;
+  --el-color-error-light-9: #3E1F1B;
+  --el-color-error-dark-2: #E98B81;
+
+  --el-bg-color: #161C24;
+  --el-bg-color-overlay: #1C232D;
+  --el-fill-color-blank: #161C24;
+  --el-border-color: #2A3441;
+  --el-border-color-light: #232C37;
+  --el-border-color-lighter: #232C37;
+  --el-text-color-primary: #E8ECF2;
+  --el-text-color-regular: #B8C2CE;
+  --el-text-color-secondary: #939EAC;
+  --el-text-color-placeholder: #7C8694;
+}
