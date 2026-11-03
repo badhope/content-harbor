@@ -6,7 +6,7 @@ Self-hosted publishing hub for people who write in Chinese and publish everywher
 Write once, ship to fifteen platforms, and keep every published copy in sync — with AI
 drafting, a compliance gate, and a human in the loop when a platform fights back.
 
-[![CI](https://github.com/badhope/content-harbor/actions/workflows/ci.yml/badge.svg)](https://github.com/badhope/content-harbor/actions/workflows/ci.yml)
+[![CI](https://github.com/badhope/harbor/actions/workflows/ci.yml/badge.svg)](https://github.com/badhope/harbor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![Write workspace](docs/screenshots/01-write.png)
@@ -44,8 +44,8 @@ drafting, a compliance gate, and a human in the loop when a platform fights back
 Requires Python 3.10+, [uv](https://docs.astral.sh/uv/), Node 20+ and pnpm.
 
 ```bash
-git clone https://github.com/badhope/content-harbor.git
-cd content-harbor
+git clone https://github.com/badhope/harbor.git
+cd harbor
 
 # Terminal 1 — backend
 cd backed
