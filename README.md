@@ -1,4 +1,4 @@
-# Harbour
+# Harbor
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -97,8 +97,8 @@ Edit `backed/config.json`, or use environment variables:
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `HARBOUR_API_TOKEN` | REST authentication token | Auto-generated on loopback; **required** in production/Docker |
-| `SECRET_KEY` / `HARBOUR_SECRET_KEY` | Signing / JWT key | **Required** in production; no public default |
+| `HARBOR_API_TOKEN` | REST authentication token | Auto-generated on loopback; **required** in production/Docker |
+| `SECRET_KEY` / `HARBOR_SECRET_KEY` | Signing / JWT key | **Required** in production; no public default |
 | `TRUSTED_NETS` | Client networks exempt from the API token | Loopback only |
 | `TRUSTED_PROXIES` | Reverse proxies whose `X-Forwarded-For` is trusted | Empty |
 | `CORS_ORIGINS` | Allowed cross-origin origins | Same-origin |
@@ -114,7 +114,7 @@ Docker Compose runs the backend behind nginx, with the token injected server-sid
 
 ```bash
 export SECRET_KEY=$(openssl rand -hex 32)
-export HARBOUR_API_TOKEN=$(openssl rand -hex 32)
+export HARBOR_API_TOKEN=$(openssl rand -hex 32)
 docker compose -f deploy/docker-compose.yml --profile web up -d --build
 ```
 

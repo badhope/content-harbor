@@ -28,11 +28,11 @@ def data_root() -> Path:
 def config_file() -> Path:
     """运行配置路径：与数据库/媒体/登录态共用同一持久数据根。
 
-    显式 HARBOUR_CONFIG_FILE 优先；否则固定使用数据根内的 config.json。
+    显式 HARBOR_CONFIG_FILE 优先；否则固定使用数据根内的 config.json。
     旧版 backed/config.json 只由 ``legacy_config_file`` 提供只读回退，
     避免"新路径不存在就永远写回旧路径"的粘滞行为。
     """
-    configured = os.environ.get("HARBOUR_CONFIG_FILE", "").strip()
+    configured = os.environ.get("HARBOR_CONFIG_FILE", "").strip()
     if configured:
         path = Path(configured)
     elif "HUB_DATA_DIR" in os.environ:

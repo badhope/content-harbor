@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — 内容港 Harbour 架构
+# ARCHITECTURE.md — 内容港 Harbor 架构
 
 | 项 | 值 |
 |---|---|
@@ -10,7 +10,7 @@
 
 ## 1. 系统概览
 
-内容港 Harbour：**写 → 合规审查 → 多平台分发 → 原地更新 → 人机协作收尾**。
+内容港 Harbor：**写 → 合规审查 → 多平台分发 → 原地更新 → 人机协作收尾**。
 
 - 技术栈：Python 3.12+ / FastAPI / SQLite / Patchright (Playwright 反检测 fork) / Vue 3 + Element Plus + Pinia
 - 架构模式：统一任务引擎 (TaskManager) + 10 个平台适配器
@@ -55,7 +55,7 @@
 ## 3. 目录结构
 
 ```
-harbour/
+harbor/
 ├── backed/                    # 后端（FastAPI + SQLite + 任务引擎）
 │   ├── app/
 │   │   ├── factory.py         # FastAPI 工厂 + lifespan

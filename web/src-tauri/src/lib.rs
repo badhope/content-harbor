@@ -34,7 +34,7 @@ fn check_backend_health(port: tauri::State<BackendPort>) -> bool {
 
 #[tauri::command]
 fn greet(name: &str) -> String {
-    format!("你好, {}! 欢迎使用港 Harbour。", name)
+    format!("你好, {}! 欢迎使用港 Harbor。", name)
 }
 
 /// 寻找 venv Python 解释器。多策略 fallback：
@@ -87,7 +87,7 @@ fn _find_venv_python() -> PathBuf {
     }
 
     // 策略 3: 所有 fallback 失败，回退到系统 python（会报错但至少有错误提示）
-    eprintln!("[harbour] 未找到 venv Python，回退到系统 python");
+    eprintln!("[harbor] 未找到 venv Python，回退到系统 python");
     if cfg!(windows) {
         PathBuf::from("python.exe")
     } else {
@@ -118,7 +118,7 @@ pub fn run() {
                     .app_data_dir()
                     .unwrap_or_else(|_| {
                         PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string()))
-                            .join("harbour")
+                            .join("harbor")
                     })
                     .join("tauri-port")
             };
@@ -146,7 +146,7 @@ pub fn run() {
                     .resource_dir()
                     .unwrap_or_else(|_| PathBuf::from("."))
                     .join("binaries")
-                    .join("harbour-backend-x86_64-pc-windows-msvc.exe")
+                    .join("harbor-backend-x86_64-pc-windows-msvc.exe")
             };
 
             // 数据目录
@@ -163,7 +163,7 @@ pub fn run() {
                     .app_data_dir()
                     .unwrap_or_else(|_| {
                         PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string()))
-                            .join("harbour")
+                            .join("harbor")
                     })
             };
 
@@ -193,10 +193,10 @@ pub fn run() {
 
                 match cmd.spawn() {
                     Ok(child) => {
-                        eprintln!("[harbour] sidecar 已启动, PID: {:?}", child.id());
+                        eprintln!("[harbor] sidecar 已启动, PID: {:?}", child.id());
                     }
                     Err(e) => {
-                        eprintln!("[harbour] 启动 sidecar 失败: {}", e);
+                        eprintln!("[harbor] 启动 sidecar 失败: {}", e);
                         return;
                     }
                 }
@@ -207,7 +207,7 @@ pub fn run() {
                         let trimmed = content.trim();
                         if let Ok(port) = trimmed.parse::<u16>() {
                             if port > 0 {
-                                eprintln!("[harbour] 后端端口: {}", port);
+                                eprintln!("[harbor] 后端端口: {}", port);
                                 // 更新状态
                                 let state: tauri::State<BackendPort> = app_handle.state();
                                 *state.0.lock().unwrap() = Some(port);
@@ -215,7 +215,7 @@ pub fn run() {
                                 // 注入到 webview
                                 if let Some(window) = app_handle.get_webview_window("main") {
                                     let script = format!(
-                                        "window.__TAURI_PORT__ = {};\nwindow.__TAURI_APP_VERSION__ = '{}';\nconsole.log('[harbour] 桌面版就绪, 后端端口: {}');",
+                                        "window.__TAURI_PORT__ = {};\nwindow.__TAURI_APP_VERSION__ = '{}';\nconsole.log('[harbor] 桌面版就绪, 后端端口: {}');",
                                         port,
                                         env!("CARGO_PKG_VERSION"),
                                         port
@@ -229,7 +229,7 @@ pub fn run() {
                     sleep(Duration::from_millis(100)).await;
                 }
 
-                eprintln!("[harbour] 等待后端端口超时");
+                eprintln!("[harbor] 等待后端端口超时");
             });
 
             Ok(())

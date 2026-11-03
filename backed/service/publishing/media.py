@@ -3,7 +3,7 @@
 
 存在理由（对标 Wechatsync / Artipub 后的能力缺口）：
 
-    这两个项目都把"逐平台转存图片"当作发布基线能力，而 Harbour 之前
+    这两个项目都把"逐平台转存图片"当作发布基线能力，而 Harbor 之前
     `md_to_html()` 直接把 Markdown 里的 `<img src>` 原样透传。结果是：
       - 外链图（图床防盗链、临时签名 URL）在平台上 403 / 裂图；
       - 同一张图在 10 个平台各拉一次，重复下载、重复占带宽；
@@ -223,7 +223,7 @@ class _SafeRedirects:
 def fetch_bytes(url: str) -> tuple[bytes, str]:
     """下载图片，返回 (bytes, mime)。带大小上限与流式截断。"""
     s = _SafeRedirects()
-    r = s.get(url, stream=True, headers={"User-Agent": "HarbourMedia/1.0"})
+    r = s.get(url, stream=True, headers={"User-Agent": "HarborMedia/1.0"})
     if r.status_code != 200:
         raise ValueError(f"HTTP {r.status_code}")
     mime = (r.headers.get("content-type") or "").split(";")[0].strip().lower()

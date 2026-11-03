@@ -13,7 +13,7 @@ def test_gateway_does_not_inject_shared_backend_token():
     nginx = (root / "deploy/nginx.conf").read_text(encoding="utf-8")
     assert "nginx.conf.template" not in (root / "deploy/Dockerfile.web").read_text(encoding="utf-8")
     compose = (root / "deploy/docker-compose.yml").read_text(encoding="utf-8")
-    assert '${HARBOUR_API_TOKEN}' not in nginx
+    assert '${HARBOR_API_TOKEN}' not in nginx
     assert 'proxy_set_header X-API-Token $http_x_api_token;' in nginx
     assert '127.0.0.1:${WEB_PORT:-3000}:80' in compose
 

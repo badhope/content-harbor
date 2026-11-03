@@ -221,7 +221,7 @@ def ai_cfg_file(tmp_path, monkeypatch):
     """ai_config 与 gate 的 CONFIG_FILE 都指到临时文件；清掉可能存在的 env key。"""
     from service.publishing import ai_config
     cfg = tmp_path / "ai-config.json"
-    cfg.write_text(json.dumps({"HARBOUR_API_TOKEN": "secret-token-keepme"}),
+    cfg.write_text(json.dumps({"HARBOR_API_TOKEN": "secret-token-keepme"}),
                    encoding="utf-8")
     monkeypatch.setattr(ai_config, "CONFIG_FILE", cfg)
     monkeypatch.setattr(gate, "CONFIG_FILE", cfg)
@@ -249,7 +249,7 @@ def test_ai_config_mask_and_roundtrip(ai_cfg_file):
     assert out["review"]["ai_direct_publish"] is True
     # 文件：无关键保留 + 明文 key 确实落盘（本地文件本来就是明文存储面）
     raw = json.loads(ai_cfg_file.read_text(encoding="utf-8"))
-    assert raw["HARBOUR_API_TOKEN"] == "secret-token-keepme"
+    assert raw["HARBOR_API_TOKEN"] == "secret-token-keepme"
     assert raw["providers"]["deepseek"]["api_key"] == "sk-1234567890abcdef"
     assert raw["AI_DIRECT_PUBLISH"] is True
     assert raw["REVIEW_MODEL"] == "glm-4-air"
