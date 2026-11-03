@@ -25,8 +25,8 @@ _api_token_cache: Optional[tuple[float, str]] = None
 
 
 def _resolve_token() -> str:
-    """Token 解析：HARBOUR_API_TOKEN 环境变量 > config.json；都缺失时自动生成并落盘。"""
-    tok = os.environ.get("HARBOUR_API_TOKEN", "").strip()
+    """Token 解析：HARBOR_API_TOKEN 环境变量 > config.json；都缺失时自动生成并落盘。"""
+    tok = os.environ.get("HARBOR_API_TOKEN", "").strip()
     if tok:
         return tok
     try:
@@ -40,7 +40,7 @@ def _resolve_token() -> str:
                                            ensure_ascii=False, indent=2),
                                 encoding="utf-8")
             obs.get_logger(__name__).warning(
-                "api_token 未配置：已自动生成并写入 config.json（生产环境建议改设 HARBOUR_API_TOKEN）")
+                "api_token 未配置：已自动生成并写入 config.json（生产环境建议改设 HARBOR_API_TOKEN）")
     except Exception:  # aqg: top-level boundary
         import secrets as _secrets
         tok = _secrets.token_hex(16)

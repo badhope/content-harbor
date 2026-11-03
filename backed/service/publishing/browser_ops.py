@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """内置浏览器操控面：带登录态抓取 / 截图——"随便操控"的 API 化。
 
-定位：Harbour 的内置浏览器（Patchright 驱动系统 Edge，profile 持久化登录态）
+定位：Harbor 的内置浏览器（Patchright 驱动系统 Edge，profile 持久化登录态）
 不应该只服务发布链路。把 fetch / screenshot 暴露成能力后：
   - 爬虫场景：带平台登录态抓登录墙后的内容（trafilatura 纯 HTTP 做不到）
   - AI 场景：MCP 工具 browser_fetch / browser_screenshot 直接可用

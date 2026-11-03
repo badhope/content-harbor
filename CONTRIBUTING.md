@@ -1,4 +1,4 @@
-# Contributing to Harbour
+# Contributing to Harbor
 
 Thanks for taking the time. This guide is short on purpose — the rules that matter are
 enforced by CI, not by reviewers.

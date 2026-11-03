@@ -208,15 +208,15 @@ def prometheus_exposition() -> str:
     snap = METRICS.snapshot()
     for name, value in snap["counters"].items():
         safe = _prom_name(name)
-        c = Counter(safe, f"Harbour counter {name}", registry=reg)
+        c = Counter(safe, f"Harbor counter {name}", registry=reg)
         # prometheus_client 不允许直接 set，用 _value 的接口保持精确值
         c.inc(value)
     for name, value in snap["gauge"].items():
-        g = Gauge(_prom_name(name), f"Harbour gauge {name}", registry=reg)
+        g = Gauge(_prom_name(name), f"Harbor gauge {name}", registry=reg)
         g.set(value)
     for name, hist in snap["histograms"].items():
         safe = _prom_name(name)
-        h = Histogram(safe, f"Harbour histogram {name}",
+        h = Histogram(safe, f"Harbor histogram {name}",
                       buckets=MetricRegistry.BUCKETS, registry=reg)
         # 直接写桶计数：snapshot 里已是累积桶语义
         for label, count in hist["buckets"].items():
@@ -239,7 +239,7 @@ def _prom_name(name: str) -> str:
     import re as _re
     out = _re.sub(r"[^a-zA-Z0-9_]", "_", name)
     if not out or out[0].isdigit():
-        out = "harbour_" + out
+        out = "harbor_" + out
     return out
 
 

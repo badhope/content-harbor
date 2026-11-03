@@ -6,7 +6,7 @@ Telegraph 是 Telegram 团队提供的极简发布平台：无需注册账号，
 适合"快速发布一篇 Markdown"或"生成预览链接分享"场景。
 
 凭据放 config.json（token 可留空，首发布会自动创建账号并回写）：
-    "platforms": { "telegraph": { "token": "", "author_name": "Harbour" } }
+    "platforms": { "telegraph": { "token": "", "author_name": "Harbor" } }
 
 依赖：telegraph (PyPI, MIT) —— 对 API 的完整封装，避免手写 HTTP 转换。
 """
@@ -24,10 +24,10 @@ CONFIG_FILE = config_file()
 
 def _creds():
     if not CONFIG_FILE.exists():
-        return {"token": "", "author_name": "Harbour"}
+        return {"token": "", "author_name": "Harbor"}
     cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     c = (cfg.get("platforms") or {}).get("telegraph") or {}
-    return {"token": str(c.get("token") or ""), "author_name": str(c.get("author_name") or "Harbour")}
+    return {"token": str(c.get("token") or ""), "author_name": str(c.get("author_name") or "Harbor")}
 
 
 def _save_token(token: str) -> None:
@@ -68,7 +68,7 @@ class TelegraphAdapter(PlatformAdapter):
         if token:
             tg.set_access_token(token)
         else:
-            tg.create_account(short_name="Harbour")
+            tg.create_account(short_name="Harbor")
             _save_token(tg.get_access_token())
         return tg
 

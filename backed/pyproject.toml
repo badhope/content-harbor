@@ -1,10 +1,10 @@
-# 内容港 Harbour — AI 多平台内容发布中台
+# 内容港 Harbor — AI 多平台内容发布中台
 # 包管理与启动推荐使用 uv（https://github.com/astral-sh/uv）
 
 [project]
-name = "harbour-backend"
+name = "harbor-backend"
 version = "0.13.1"
-description = "Harbour 后端：基于 FastAPI 的文章库 / 多平台发布 / AIGC 合规门禁"
+description = "Harbor 后端：基于 FastAPI 的文章库 / 多平台发布 / AIGC 合规门禁"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

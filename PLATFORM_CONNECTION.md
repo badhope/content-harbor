@@ -131,7 +131,7 @@ uv run --project backed python -m backed.cli solve-captcha --platform <名> --wa
     "devto":     { "api_key": "<dev.to/settings/extensions 生成>" },
     "github":    { "token": "<PAT，勾 repo 权限>", "owner": "<用户/组织>", "repo": "<仓库名>" },
     "wechat":    { "appid": "<公众号 appid>", "secret": "<公众号 secret，IP 需加白名单>" },
-    "telegraph": { "token": "", "author_name": "Harbour" }
+    "telegraph": { "token": "", "author_name": "Harbor" }
   }
 }
 ```

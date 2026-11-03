@@ -14,11 +14,11 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 uv run --project $backed --with pyinstaller pyinstaller `
   (Join-Path $backed "pyinstaller.spec") --clean
 
-$source = Join-Path $backed "dist/harbour-backend.exe"
+$source = Join-Path $backed "dist/harbor-backend.exe"
 if (-not (Test-Path $source)) {
   throw "PyInstaller output missing: $source"
 }
 New-Item -ItemType Directory -Force $staging | Out-Null
-$destination = Join-Path $staging "harbour-backend-$TargetTriple.exe"
+$destination = Join-Path $staging "harbor-backend-$TargetTriple.exe"
 Copy-Item $source $destination -Force
 Write-Output "staged=$destination"

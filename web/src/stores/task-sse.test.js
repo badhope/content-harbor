@@ -15,7 +15,7 @@ describe('authenticated task stream', () => {
   it('sends the token as a header, handles data frames and falls back on EOF', async () => {
     vi.useFakeTimers()
     setActivePinia(createPinia())
-    localStorage.setItem('harbour_api_token', 'test-only-token')
+    localStorage.setItem('harbor_api_token', 'test-only-token')
     const encoder = new TextEncoder()
     const reader = {
       read: vi.fn()

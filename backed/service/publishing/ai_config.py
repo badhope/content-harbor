@@ -4,7 +4,7 @@
 安全约定（AI 密钥是最高敏感面）：
   - 读取一律掩码（sk-a…wxyz），永不回显完整密钥；
   - 写入只允许白名单键（providers.* / REVIEW_MODEL / AI_DIRECT_PUBLISH），
-    其余键（HARBOUR_API_TOKEN / FERNET_KEY 等）原样保留；
+    其余键（HARBOR_API_TOKEN / FERNET_KEY 等）原样保留；
   - 原子写（tmp + os.replace），写前 JSON 解析失败直接拒绝，绝不写坏文件；
   - 连通性测试允许对"还没保存的字段"先测（draft 覆盖），永远返回 {ok, error} 不抛。
 """

@@ -660,7 +660,7 @@ wheels = [
 ]
 
 [[package]]
-name = "harbour-backend"
+name = "harbor-backend"
 version = "0.13.0"
 source = { virtual = "." }
 dependencies = [
