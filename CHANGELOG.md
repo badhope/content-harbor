@@ -22,6 +22,9 @@
 
 ### Changed
 
+- **五个远程仓库统一改名 `harbor`。** GitCode 主仓 `badhope/harbour` → `badhope/harbor`，
+  Gitee 与三个 GitHub 镜像仓 `content-harbor` → `harbor`（各平台 API 原地改名，不删库重建）。
+  README/CONTRIBUTING/SECURITY/项目文档中的仓库名与徽章链接同步更新，本地 remote 已指向新地址。
 - `check_all` 密钥扫描纳入门禁，测试用占位 token 改为低熵值避免误报。
 - AGENT.md 目录树补齐 `url_safety`、三个新脚本、`docs/` 新增文档与根目录 Markdown 契约。
 - 后端测试 533 → 537。

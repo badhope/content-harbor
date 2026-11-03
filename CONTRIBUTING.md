@@ -14,8 +14,8 @@ enforced by CI, not by reviewers.
 
 ```bash
 # 1. Fork, then clone your fork
-git clone https://github.com/<you>/content-harbor.git
-cd content-harbor
+git clone https://github.com/<you>/harbor.git
+cd harbor
 
 # 2. Branch from main
 git checkout -b fix/csrf-on-webhook-create
