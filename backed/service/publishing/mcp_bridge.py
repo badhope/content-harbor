@@ -11,7 +11,7 @@
       - `mcp-server-fetch`：网页正文抓取（含 robots.txt 合规）；
       - `@modelcontextprotocol/server-filesystem`：批量文件读写。
 
-本模块让 Harbour 作为 MCP **Client** 去调它们，而不是自己重写一遍。
+本模块让 Harbor 作为 MCP **Client** 去调它们，而不是自己重写一遍。
 
 设计要点（都是踩过的坑）：
 
@@ -35,7 +35,7 @@
       }
     }
 
-或环境变量 `HARBOUR_MCP_SERVERS` 指向同结构的 JSON 文件。
+或环境变量 `HARBOR_MCP_SERVERS` 指向同结构的 JSON 文件。
 """
 
 import asyncio
@@ -65,7 +65,7 @@ class MCPBridgeError(Exception):
 
 
 def _config_path() -> Path:
-    env = os.environ.get("HARBOUR_MCP_SERVERS", "").strip()
+    env = os.environ.get("HARBOR_MCP_SERVERS", "").strip()
     if env:
         return Path(env)
     from service.publishing.gate import CONFIG_FILE

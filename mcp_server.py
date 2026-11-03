@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Harbour MCP Server — 让任意 AI Agent 通过 MCP 协议操控内容港。
+"""Harbor MCP Server — 让任意 AI Agent 通过 MCP 协议操控内容港。
 
 启动（stdio 模式）：
     python mcp_server.py
@@ -9,13 +9,13 @@
     python mcp_server.py --transport sse --port 8900
 
 注册到 Claude Code / Cursor / Windsurf：
-    claude mcp add --transport stdio harbour python /path/to/mcp_server.py
+    claude mcp add --transport stdio harbor python /path/to/mcp_server.py
     # 或 .mcp.json:
     {
       "mcpServers": {
-        "harbour": {
+        "harbor": {
           "command": "python",
-          "args": ["/path/to/harbour/mcp_server.py"]
+          "args": ["/path/to/harbor/mcp_server.py"]
         }
       }
     }
@@ -42,10 +42,10 @@ class _StaticTokenVerifier:
     """Minimal Bearer verifier for explicitly configured remote SSE."""
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        expected = os.environ.get("HARBOUR_MCP_TOKEN", "").strip()
+        expected = os.environ.get("HARBOR_MCP_TOKEN", "").strip()
         if not expected or not hmac.compare_digest(token, expected):
             return None
-        return AccessToken(token=token, client_id="harbour", scopes=["mcp"])
+        return AccessToken(token=token, client_id="harbor", scopes=["mcp"])
 
 # ── 单例 Hub（MCP server 进程内只启一次）──────────────────────────
 _hub = None
@@ -58,14 +58,14 @@ def _get_hub() -> Hub:
     return _hub
 
 
-_MCP_TOKEN = os.environ.get("HARBOUR_MCP_TOKEN", "").strip()
+_MCP_TOKEN = os.environ.get("HARBOR_MCP_TOKEN", "").strip()
 _mcp_auth = AuthSettings(
     issuer_url="http://127.0.0.1:8900",
     resource_server_url="http://127.0.0.1:8900",
     validate_token_resource=False,
 ) if _MCP_TOKEN else None
 mcp = FastMCP(
-    "harbour",
+    "harbor",
     token_verifier=_StaticTokenVerifier() if _MCP_TOKEN else None,
     auth=_mcp_auth,
 )
@@ -436,7 +436,7 @@ def wechatsync_publish(article_id: int, platforms: str,
     if not platforms.strip():
         raise ValueError("platforms 不能为空")
 
-    tmp = Path(os.environ.get("TEMP", "/tmp")) / f"harbour-ws-{article_id}.md"
+    tmp = Path(os.environ.get("TEMP", "/tmp")) / f"harbor-ws-{article_id}.md"
     try:
         tmp.write_text(art.get("content_md", ""), encoding="utf-8")
         args = ["sync", str(tmp), "-p", platforms]
@@ -472,7 +472,7 @@ def wechatsync_platforms() -> dict:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Harbour MCP Server")
+    parser = argparse.ArgumentParser(description="Harbor MCP Server")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8900)
@@ -480,8 +480,8 @@ def main():
 
     if args.transport == "sse":
         if args.host not in {"127.0.0.1", "::1", "localhost"} \
-                and not os.environ.get("HARBOUR_MCP_TOKEN", "").strip():
-            raise SystemExit("远程 SSE 必须设置 HARBOUR_MCP_TOKEN")
+                and not os.environ.get("HARBOR_MCP_TOKEN", "").strip():
+            raise SystemExit("远程 SSE 必须设置 HARBOR_MCP_TOKEN")
         mcp.settings.host = args.host
         mcp.settings.port = args.port
     mcp.run(transport=args.transport)

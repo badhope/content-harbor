@@ -678,13 +678,13 @@ def _bridge_config(tmp_path, monkeypatch, tools=("echo",)):
     }
     path = tmp_path / "bridge.json"
     path.write_text(_json.dumps(cfg), encoding="utf-8")
-    monkeypatch.setenv("HARBOUR_MCP_SERVERS", str(path))
+    monkeypatch.setenv("HARBOR_MCP_SERVERS", str(path))
     from service.publishing import mcp_bridge
     return mcp_bridge
 
 
 def test_mcp_bridge_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("HARBOUR_MCP_SERVERS", raising=False)
+    monkeypatch.delenv("HARBOR_MCP_SERVERS", raising=False)
     from service.publishing import mcp_bridge
     st = mcp_bridge.status()
     assert st["configured"] == 0
@@ -709,9 +709,9 @@ def test_mcp_bridge_lists_real_tools(tmp_path, monkeypatch):
 def test_mcp_bridge_calls_external_tool(tmp_path, monkeypatch):
     """端到端：真的拉起子进程、握手、调工具、拿回结果。"""
     bridge = _bridge_config(tmp_path, monkeypatch)
-    r = bridge.call_tool("probe", "echo", {"text": "harbour"})
+    r = bridge.call_tool("probe", "echo", {"text": "harbor"})
     assert r["ok"] is True, r
-    assert "echo:harbour" in r["text"]
+    assert "echo:harbor" in r["text"]
 
 
 def test_mcp_bridge_reports_capability_coverage(tmp_path, monkeypatch):
@@ -729,7 +729,7 @@ def test_mcp_bridge_status_marks_missing_command(tmp_path, monkeypatch):
     path.write_text(_json.dumps({"MCP_BRIDGE": {"ghost": {
         "command": "definitely-not-a-real-binary-xyz", "tools": ["echo"]}}}),
         encoding="utf-8")
-    monkeypatch.setenv("HARBOUR_MCP_SERVERS", str(path))
+    monkeypatch.setenv("HARBOR_MCP_SERVERS", str(path))
     from service.publishing import mcp_bridge
     st = mcp_bridge.status()
     assert st["servers"][0]["installed"] is False

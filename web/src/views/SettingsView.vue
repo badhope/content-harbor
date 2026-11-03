@@ -26,7 +26,7 @@
           <el-tab-pane label="访问令牌" name="token" lazy>
             <div class="token-panel">
               <p class="dim small">
-                仅当后端启用了 HARBOUR_API_TOKEN 时需要。令牌保存在本机浏览器，不写入构建产物。
+                仅当后端启用了 HARBOR_API_TOKEN 时需要。令牌保存在本机浏览器，不写入构建产物。
               </p>
               <el-input v-model="tokenInput" type="password" show-password
                         placeholder="粘贴后端 X-API-Token" style="max-width: 420px" />

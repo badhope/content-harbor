@@ -20,7 +20,7 @@ def strict_client(tmp_path, monkeypatch):
     import api.auth as auth_mod
     monkeypatch.setattr(auth_mod, "ROOT", tmp_path)
     monkeypatch.setattr(auth_mod, "_api_token_cache", None)
-    monkeypatch.setenv("HARBOUR_API_TOKEN", "expected-token")
+    monkeypatch.setenv("HARBOR_API_TOKEN", "expected-token")
     from app.factory import create_app
     return TestClient(create_app(), raise_server_exceptions=False)
 
