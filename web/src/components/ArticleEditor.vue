@@ -78,6 +78,36 @@
         </span>
       </div>
 
+      <!-- 发布设置：封面 + AI 辅助标识。发布前在这里点满，会随正文一起存库并被发布轨读取 -->
+      <div class="pub-settings">
+        <div class="ps-title">
+          <span>发布设置</span>
+          <span class="ps-hint">发布前请把该填的都填上</span>
+          <span class="ps-state" :class="{ done: settingsDone }">
+            {{ settingsDone ? '✓ 已点满' : `${doneCount}/4 已设置` }}
+          </span>
+        </div>
+        <div class="ps-grid">
+          <label class="ps-field ps-cover">
+            <span class="ps-label">封面</span>
+            <el-input v-model="article.cover" placeholder="图片 URL 或 data:image/…;base64,…" @input="touch">
+              <template #prefix><Picture class="ps-icon" /></template>
+            </el-input>
+            <input type="file" accept="image/*" class="ps-file" @change="onPickCover" />
+            <img v-if="coverPreview" :src="coverPreview" class="ps-preview" alt="封面预览" />
+          </label>
+          <label class="ps-field">
+            <span class="ps-label">AI 辅助标识</span>
+            <el-select v-model="article.ai_model" class="ps-select" clearable placeholder="是否用了 AI 辅助" @change="touch">
+              <el-option label="纯人工撰写" value="human-written" />
+              <el-option label="AI 仅辅助校对" value="human-written (AI 仅辅助校对)" />
+              <el-option label="AI 起草 + 人工改写" value="ai-drafted (人工改写)" />
+              <el-option label="AI 生成（需核验）" value="ai-generated" />
+            </el-select>
+          </label>
+        </div>
+      </div>
+
       <!-- Markdown 编辑器（md-editor-v3）：编辑/分屏/预览三态对应 preview=false/true/'preview' -->
       <div class="md-wrap">
         <MdEditor
@@ -222,6 +252,32 @@ const toolbars = ref(['bold', 'italic', 'strikethrough', 'heading',
   'revoke', 'next', 'preview', 'expand'])
 
 const chars = computed(() => (props.article?.content_md || '').length)
+
+// ---- 发布设置：发布前「点满」检查 ----
+// 四项：封面 / 标签 / 摘要 / AI 辅助标识。缺一项就不算点满，发布轨会提示。
+const settingFilled = computed(() => ({
+  cover: !!(props.article?.cover || '').trim(),
+  tags: !!(props.article?.tags || '').trim(),
+  summary: !!(props.article?.summary || '').trim(),
+  ai: !!(props.article?.ai_model || '').trim(),
+}))
+const doneCount = computed(() => Object.values(settingFilled.value).filter(Boolean).length)
+const settingsDone = computed(() => doneCount.value === 4)
+const coverPreview = computed(() => {
+  const c = props.article?.cover || ''
+  return /^(https?:\/\/|data:image\/)/.test(c) ? c : ''
+})
+
+function onPickCover(e) {
+  const f = e.target.files?.[0]
+  if (!f) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    props.article.cover = String(reader.result || '')
+    emit('touch')
+  }
+  reader.readAsDataURL(f)
+}
 const qaTotalClass = computed(() => {
   const t = qaResult.value?.total ?? 0
   return 'qa-' + (t >= 70 ? 'good' : t >= 50 ? 'ok' : 'bad')
@@ -378,6 +434,40 @@ function onMore(cmd) {
 .tags-input { max-width: 300px; }
 .status-sel { width: 116px; }
 .meta-row .spacer { flex: 1; }
+
+// 发布设置：封面 / AI 辅助标识（发布前点满）
+.pub-settings {
+  margin: 2px 0 10px;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--bg-soft);
+}
+.ps-title {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--text);
+  margin-bottom: 7px;
+}
+.ps-hint { color: var(--text-dim, var(--muted)); font-weight: 400; font-size: 11px; }
+.ps-state { margin-left: auto; font-weight: 500; font-size: 11px; color: var(--warning, #d8963a); }
+.ps-state.done { color: var(--success, #4caf7d); }
+.ps-grid { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.ps-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 240px; min-width: 200px; }
+.ps-label { font-size: 11px; color: var(--muted); }
+.ps-select { width: 100%; }
+.ps-icon { width: 14px; height: 14px; }
+.ps-cover { position: relative; }
+.ps-file {
+  font-size: 11px; color: var(--muted);
+  &::file-selector-button {
+    margin-right: 6px; padding: 2px 8px; border: 1px solid var(--line-soft);
+    border-radius: 5px; background: var(--panel); color: var(--text); cursor: pointer;
+  }
+}
+.ps-preview {
+  width: 96px; height: 64px; object-fit: cover;
+  border-radius: 5px; border: 1px solid var(--line-soft); margin-top: 2px;
+}
 
 // Markdown 编辑器容器撑满剩余高度
 .md-wrap { flex: 1; min-height: 0; }

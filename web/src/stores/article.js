@@ -15,6 +15,7 @@ function _saveDraftLocal(state) {
     localStorage.setItem(_draftKey(state.currentId), JSON.stringify({
       title: state.current.title, content_md: state.current.content_md,
       summary: state.current.summary, tags: state.current.tags,
+      cover: state.current.cover, ai_model: state.current.ai_model,
       saved_at: Date.now()
     }))
   } catch { /* localStorage 满了不影响主流程 */ }
@@ -167,7 +168,8 @@ export const useArticleStore = defineStore('article', {
     newArticle() {
       this._openGen++
       this.currentId = null
-      this.current = { title: '未命名文章', content_md: '', summary: '', tags: '', status: 'draft', source: 'human' }
+      this.current = { title: '未命名文章', content_md: '', summary: '', tags: '',
+                       cover: '', ai_model: '', status: 'draft', source: 'human' }
       this.publications = []
       this.dirty = true
     },
@@ -197,6 +199,8 @@ export const useArticleStore = defineStore('article', {
           await api.updateArticle(this.currentId, {
             title: this.current.title, content_md: this.current.content_md,
             summary: this.current.summary, tags: this.current.tags, status: this.current.status,
+            // 发布设置：封面 / AI 辅助标识也要随保存提交，否则发布轨读到的是旧值
+            cover: this.current.cover || '', ai_model: this.current.ai_model || '',
           })
         } else {
           const r = await api.createArticle({ ...this.current, source: 'human' })

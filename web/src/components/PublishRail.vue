@@ -138,6 +138,17 @@
           </div>
         </div>
 
+        <!-- ③c 发布设置点满状态（封面/标签/摘要/AI辅助） -->
+        <div class="rail-sec" v-if="hub.current">
+          <div class="rail-lbl">4 · 发布设置</div>
+          <div v-if="!publishSettingsMissing.length" class="pre-ok">
+            ✓ 已点满：封面、标签、摘要、AI 辅助标识
+          </div>
+          <div v-else class="pre-warn">
+            ⚠ 还差 {{ publishSettingsMissing.join('、') }} —— 建议回编辑器补齐
+          </div>
+        </div>
+
         <!-- ④ 发布按钮 -->
         <div class="rail-sec">
           <el-button class="go-btn" size="large"
@@ -196,7 +207,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
 import { useSettingsStore } from '@/stores/settings'
 import { api } from '@/api'
@@ -247,6 +258,17 @@ const selectedReady = computed(() => {
 const currentPubs = computed(() => hub.publications)
 const updatable = computed(() => hub.updatable.filter(id => canUpdate(platforms.value.find(p => p.id === id))))
 const isAiArticle = computed(() => hub.current?.source === 'ai')
+
+// 发布设置是否点满：封面 / 标签 / 摘要 / AI 辅助标识（四项）
+const publishSettingsMissing = computed(() => {
+  const a = hub.current || {}
+  const miss = []
+  if (!(a.cover || '').trim()) miss.push('封面')
+  if (!(a.tags || '').trim()) miss.push('标签')
+  if (!(a.summary || '').trim()) miss.push('摘要')
+  if (!(a.ai_model || '').trim()) miss.push('AI 辅助标识')
+  return miss
+})
 
 // ---- 平台选择 + 分类记忆（沿用旧向导的本地记忆） ----
 const PLAT_MARKS = {
@@ -314,6 +336,19 @@ watch(currentId, () => { results.value = []; humanConfirmed.value = false })
 
 async function runPublish() {
   if (!selected.value.length) { ElMessage.warning('先选要发到哪些平台'); return }
+  // 发布前把该设置的全部点满：封面 / 标签 / 摘要 / AI 辅助标识。
+  // 缺项时先拦下并提示，避免发出去才发现封面空、标签没带、声明没勾。
+  const missing = publishSettingsMissing.value
+  if (missing.length) {
+    try {
+      await ElMessageBox.confirm(
+        `还有 ${missing.length} 项发布设置没填：${missing.join('、')}。\n` +
+        '建议回编辑器把封面、标签、摘要、AI 辅助标识补齐再发布。',
+        '发布设置未点满',
+        { type: 'warning', confirmButtonText: '仍然发布', cancelButtonText: '去补齐' }
+      )
+    } catch { return }
+  }
   // 全自动 + AI 稿 + 未开直发 → 必须勾选核验；中断/手动模式由用户亲自确认
   if (mode.value === 'live' && publishMode.value === 'auto' && isAiArticle.value
       && !settings.directPublish && !humanConfirmed.value) {

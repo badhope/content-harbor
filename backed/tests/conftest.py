@@ -51,6 +51,12 @@ def sandbox(tmp_path, monkeypatch):
     import api.auth as _auth_mod
     monkeypatch.setattr(_auth_mod, "_api_token", lambda: "")
 
+    # 标签别名配置也要隔离：tag_alias_map 常驻真实 config.json，若不隔离，
+    # 测试里插入的 Javscript/异步编程 会被别名提前归一化，
+    # cluster_similar_tags 就再也看不到这些近似对（既存回归，2026-11-04 修）。
+    import service.publishing.tags as _tags
+    monkeypatch.setattr(_tags, "_config_path", lambda: data / "config.json")
+
     yield {"data": data, "db_file": db_file, "root": tmp_path}
 
     # 测试后再兜一次：派发线程不允许跨测试存活（join + 允许下个测试重启）
