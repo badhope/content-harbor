@@ -42,7 +42,7 @@ class BaseConfig(BaseSettings):
     # =================================================================
     environment: Environment = Environment.DEVELOPMENT
     project_name: str = "ai-content-hub-backend"
-    project_version: str = "0.13.1"
+    project_version: str = "0.13.2"
     api_version: str = "v1"
     api_prefix: str = "/api/v1/hub"
     
