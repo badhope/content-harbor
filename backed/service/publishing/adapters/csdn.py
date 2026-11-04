@@ -458,9 +458,20 @@ class CSDNAdapter(PlatformAdapter):
         self._set_cs_editor(page, article.get("content_md", ""))
         time.sleep(1)
 
+        # 点底栏「发布文章」打开发布弹窗。2026-11-04 实测：弹窗打开后底栏按钮仍在
+        # DOM 里，此前二次 _click_text(["发布文章",...]) 会再次命中底栏按钮，把刚
+        # 打开的弹窗点掉，30s 等关闭必然超时误报"更新未成功"。
+        # 现改为：只点一次底栏 → 等弹窗出现 → 在弹窗容器内定位确认按钮。
         _click_text(page, ["发布文章", "发布"])
-        time.sleep(2)
-        _click_text(page, ["发布文章", "确定", "确认发布"])
+        try:
+            page.wait_for_selector(".modal__publish-article", timeout=15000)
+        except Exception:
+            pass  # 弹窗没出现时，下面的确认点击会自然失败并给出明确错误
+        try:
+            page.locator('.modal__publish-article button:has-text("发布文章")') \
+                .first.click(timeout=8000, force=True)
+        except Exception:
+            _click_text(page, ["确定", "确认发布"], timeout=6000)
 
         # 体检 B8 修复（QA 标质力 2026-09-21）：不再盲发——轮询等发布弹窗关闭，
         # 30s 还挂着就报错（让上层记 failed），而不是 sleep 完直接 return True
