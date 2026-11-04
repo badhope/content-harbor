@@ -31,6 +31,10 @@ class ArticlePatch(BaseModel):
     tags: Optional[str] = None
     cover: Optional[str] = None
     status: Optional[str] = None
+    # 发布设置：封面已有 cover；AI 辅助标识与来源此前不能编辑，导致
+    # 「发布前把设置点满」在编辑器里做不到（写库后下次打开又丢）。
+    ai_model: Optional[str] = None
+    source: Optional[str] = None
 
 
 class ImportIn(BaseModel):
