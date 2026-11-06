@@ -1,0 +1,85 @@
+# CI —— 与本地 `scripts/check_all.sh` 的八道门禁对齐。
+#
+# 只保留真正有价值的检查：语法、静态、测试、构建、密钥扫描。
+# 刻意的取舍：
+#   - pip-audit 不做阻塞项（依赖披露有滞后，阻塞会让日常提交无故变红）；
+#   - 不上 Docker / Tauri 构建：本机与 runner 都未验证过，放着只会长期红；
+#   - concurrency 取消同分支旧运行，避免排队浪费额度。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest + ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - name: Install dependencies
+        run: uv sync
+      - name: Byte-compile every module
+        run: uv run python -m compileall -q -x '(^|[\\/])(\.venv|node_modules|__pycache__)($|[\\/])' .
+      - name: Lint (ruff)
+        run: uv run ruff check .
+      - name: Unit tests
+        run: uv run pytest -q --no-header
+      - name: App assembly smoke test
+        run: uv run python -c "from app.factory import create_app; assert create_app(); print('app assembled ok')"
+
+  frontend:
+    name: Frontend (lint + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Unit tests
+        run: pnpm test
+      - name: Build (must land under FastAPI /static)
+        run: pnpm build
+
+  hygiene:
+    name: Version + secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - name: Version consistency (five manifests)
+        run: uv run --project backed python scripts/bump_version.py --check
+      - name: Secret scan
+        run: uv run --project backed python scripts/scan_secrets.py
