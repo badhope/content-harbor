@@ -85,6 +85,13 @@ export const useHubStore = defineStore('hub', {
         settings.loadAI(),
       ])
 
+      // 文章增删改走 SSE 推送：其他端/标签页的改动也能立刻反映到列表
+      task._onArticleEvent = (evt) => {
+        if (evt?.type === 'article.deleted' && article.current?.id === evt.data?.article_id) {
+          article.current = { title: '未命名文章', content_md: '', summary: '', tags: '' }
+        }
+        article.loadList()
+      }
       task.connectSSE()
 
       try { this.aiReady = (await api.aiStatus()).ready } catch { this.aiReady = false }

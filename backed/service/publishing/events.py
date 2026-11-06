@@ -73,6 +73,11 @@ def unsubscribe_sse(q):
     _sse.unsubscribe(q)
 
 
+def replay_after(last_id):
+    """按 Last-Event-ID 取断线期间漏掉的事件（含窗口外标记）。"""
+    return _sse.replay_after(last_id)
+
+
 def emit(event_type, data=None):
     """发射一个事件：写通知缓冲 + SSE 广播 + 异步 webhook 派发。"""
     evt = {"type": event_type, "data": data or {}, "timestamp": time.time()}

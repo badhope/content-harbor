@@ -88,9 +88,20 @@ def articles_page(status: str = None, limit: int = 20, offset: int = 0):
             "has_more": offset + len(items) < total}
 
 
+def _emit_article_event(event_type: str, aid: int, **extra):
+    """发一条文章事件到 SSE/Webhook。失败不影响主流程（事件是增值能力）。"""
+    try:
+        from service.publishing import events as evt_mod
+        evt_mod.emit(event_type, {"article_id": aid, **extra})
+    except Exception:
+        pass
+
+
 @router.post("/articles")
 def create_article(a: ArticleIn):
-    return {"id": get_hub().create(**a.model_dump())}
+    aid = get_hub().create(**a.model_dump())
+    _emit_article_event("article.created", aid, title=a.title)
+    return {"id": aid}
 
 
 @router.get("/articles/{aid}")
@@ -105,6 +116,11 @@ def get_article(aid: int):
 def update_article(aid: int, patch: ArticlePatch):
     data = {k: v for k, v in patch.model_dump().items() if v is not None}
     ok, pending = get_hub().edit(aid, **data)
+    if ok:
+        # 带 pending_sync 一起走事件：多端同时开着时，"哪里还没同步"能立刻更新，
+        # 而不是等下一次轮询。正文变更会让已发布实例变成待同步，这是用户最关心的状态。
+        _emit_article_event("article.updated", aid, pending_sync=pending,
+                            fields=sorted(data.keys()))
     return {"ok": ok, "pending_sync": pending}
 
 
@@ -114,7 +130,9 @@ def delete_article(aid: int):
     result = get_hub().delete(aid)
     if result is None:
         raise HTTPException(404, "文章不存在")
+    _emit_article_event("article.deleted", aid, **result)
     return {"ok": True, **result}
+
 
 
 @router.get("/articles/search/{keyword}")

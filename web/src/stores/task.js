@@ -21,6 +21,8 @@ export const useTaskStore = defineStore('task', {
     loginTasks: {},   // platform -> {task_id, status, message}
     _es: null,         // EventSource
     _lastEventTs: 0,
+    _lastEventId: 0,   // SSE 事件 id，断线重连带 Last-Event-ID 补缺口
+    _sseRetry: 0,      // 连续重连次数，用于指数退避
   }),
 
   getters: {
@@ -71,12 +73,21 @@ export const useTaskStore = defineStore('task', {
       const headers = {}
       const token = readToken()
       if (token) headers['X-API-Token'] = token
+      // 断线重连要带 Last-Event-ID，否则断线期间的事件永久丢失，
+      // 界面表现为"任务卡住"，刷新一下又好了。
+      if (this._lastEventId) headers['Last-Event-ID'] = String(this._lastEventId)
       const pump = async () => {
+        let connected = false
         try {
           const resp = await fetch(`${base}/events/stream`, {
             headers, signal: controller.signal,
           })
           if (!resp.ok || !resp.body) throw new Error(`SSE ${resp.status}`)
+          // 连上了就清掉退避计数与轮询兜底：否则一次抖动会让轮询定时器
+          // 永久挂着，SSE 与轮询同时跑，请求量翻倍且状态互相覆盖。
+          connected = true
+          this._sseRetry = 0
+          if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null }
           const reader = resp.body.getReader()
           const decoder = new TextDecoder()
           let buf = ''
@@ -87,13 +98,31 @@ export const useTaskStore = defineStore('task', {
             const chunks = buf.split('\n\n')
             buf = chunks.pop() || ''
             for (const chunk of chunks) {
-              const dataLine = chunk.split('\n').find(l => l.startsWith('data:'))
+              const lines = chunk.split('\n')
+              const idLine = lines.find(l => l.startsWith('id:'))
+              const dataLine = lines.find(l => l.startsWith('data:'))
+              const eventLine = lines.find(l => l.startsWith('event:'))
+              const eventName = eventLine ? eventLine.slice(6).trim() : ''
+              if (idLine) {
+                const id = Number(idLine.slice(3).trim())
+                if (Number.isFinite(id) && id > 0) this._lastEventId = id
+              }
+              // 服务端告知缺口超出重放窗口：整体刷新而不是静默用旧状态
+              if (eventName === 'resync') {
+                this._lastEventId = 0
+                this.loadTasks(true)
+                continue
+              }
               if (!dataLine) continue
               try {
                 const evt = JSON.parse(dataLine.slice(5).trim())
                 this._lastEventTs = Date.now()
                 if (evt.type?.startsWith('task.') || evt.type?.startsWith('publish.')) {
                   this.loadTasks(/*notify*/ true)
+                } else if (evt.type?.startsWith('article.')) {
+                  // 文章增删改也要推：多端/多标签页同时开着时，
+                  // 列表与"待同步"状态不能等下一次轮询才更新。
+                  this._onArticleEvent?.(evt)
                 }
               } catch { /* ignore parse error */ }
             }
@@ -101,7 +130,12 @@ export const useTaskStore = defineStore('task', {
         } catch (e) {
           if (controller.signal.aborted) return
           this._es = null
-          if (!this._pollTimer) {
+          // 立即重连（带 Last-Event-ID 补缺口），轮询只作为长时间失败后的兜底。
+          // 连上过再断属于正常重连，计数归 1，不让抖动累积成十几秒等待。
+          this._sseRetry = connected ? 1 : (this._sseRetry || 0) + 1
+          const delay = Math.min(1000 * 2 ** Math.min(this._sseRetry, 4), 15000)
+          setTimeout(() => { if (!this._es) this.connectSSE() }, delay)
+          if (this._sseRetry >= 3 && !this._pollTimer) {
             this._pollTimer = setInterval(() => this.loadTasks(true), 30000)
           }
         }

@@ -22,7 +22,6 @@
 """
 
 import hmac
-import hmac
 import os
 import sys
 from pathlib import Path
@@ -473,17 +472,24 @@ def wechatsync_platforms() -> dict:
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Harbor MCP Server")
-    parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
+    parser.add_argument(
+        "--transport", choices=["stdio", "sse", "streamable-http"], default="stdio",
+        help="stdio（本机客户端）/ streamable-http（推荐远程，MCP 2025-03-26 起取代 HTTP+SSE）/ sse（旧客户端兼容）")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8900)
     args = parser.parse_args()
 
-    if args.transport == "sse":
+    if args.transport in {"sse", "streamable-http"}:
         if args.host not in {"127.0.0.1", "::1", "localhost"} \
                 and not os.environ.get("HARBOR_MCP_TOKEN", "").strip():
-            raise SystemExit("远程 SSE 必须设置 HARBOR_MCP_TOKEN")
+            raise SystemExit(
+                f"远程 {args.transport} 必须设置 HARBOR_MCP_TOKEN（当前 host={args.host}）")
         mcp.settings.host = args.host
         mcp.settings.port = args.port
+        # streamable-http 的路径可配置，默认 /mcp；显式设置保证文档与实现一致
+        if args.transport == "streamable-http":
+            mcp.settings.streamable_http_path = os.environ.get(
+                "HARBOR_MCP_PATH", "/mcp")
     mcp.run(transport=args.transport)
 
 
