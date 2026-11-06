@@ -41,6 +41,10 @@ drafting, a compliance gate, and a human in the loop when a platform fights back
 
 *Fifteen adapters, each declaring what it can actually do. Greyed-out actions are not supported by that platform, not missing features.*
 
+![Tag governance](docs/screenshots/07-tags.png)
+
+*Tag governance finds near-duplicate tags (`Python` / `python` / `Pyhton`) and merges them in one click.*
+
 ## Quick start
 
 Requires Python 3.10+, [uv](https://docs.astral.sh/uv/), Node 20+ and pnpm.

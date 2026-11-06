@@ -40,6 +40,10 @@
 
 *十五个适配器，每个都声明自己真实支持的能力。置灰的动作是平台不支持，不是功能缺失。*
 
+![标签治理](docs/screenshots/07-tags.png)
+
+*标签治理自动找出近似重复标签（`Python` / `python` / `Pyhton`），预览后一键合并。*
+
 ## 快速开始
 
 需要 Python 3.10+、[uv](https://docs.astral.sh/uv/)、Node 20+ 与 pnpm。
