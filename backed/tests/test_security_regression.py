@@ -225,3 +225,38 @@ def test_wrong_token_is_rejected_from_untrusted_source(monkeypatch):
             assert "correct-token-value" not in r.text
             ok = c.get("/api/v1/hub/articles", headers={"X-API-Token": "correct-token-value"})
             assert ok.status_code == 200
+
+
+def test_auth_snapshot_is_permission_restricted(tmp_path, monkeypatch):
+    """登录态快照是明文 cookie，写盘后必须收紧权限。
+
+    能读走这个文件 = 直接冒用平台登录态，比 token 更危险。
+    """
+    import os
+    import stat
+
+    from service.publishing.crypto import _restrict_key_file
+
+    f = tmp_path / "zhihu_default.auth.json"
+    f.write_text('{"cookies":[{"name":"z_c0","value":"secret"}]}', encoding="utf-8")
+    _restrict_key_file(f)
+
+    if os.name != "nt":
+        mode = stat.S_IMODE(f.stat().st_mode)
+        assert mode & 0o077 == 0, f"其他用户仍可读: {oct(mode)}"
+    else:
+        import subprocess
+        proc = subprocess.run(["icacls", str(f)], capture_output=True, text=True)
+        out = proc.stdout or ""
+        # 收紧后不应再出现 Users / Everyone / Authenticated Users
+        for other in (r"BUILTIN\Users", "Everyone", r"NT AUTHORITY\Authenticated Users"):
+            assert other not in out, f"ACL 仍包含 {other}: {out}"
+
+
+def test_export_auth_calls_permission_restriction():
+    """源码级断言：export_auth 必须调用权限收紧（行为上难稳定测）。"""
+    import inspect
+
+    from service.publishing import browser
+    src = inspect.getsource(browser.BuiltinBrowser.export_auth)
+    assert "_restrict_key_file" in src, "登录态快照写盘后未收紧权限"

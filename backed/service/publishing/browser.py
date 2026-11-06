@@ -666,13 +666,21 @@ class BuiltinBrowser:
 
     def export_auth(self):
         """把当前登录态快照到独立文件。原子写（tmp + os.replace）：
-        写一半断电/被杀也不会留下半截损坏的快照（2026-09-22 永续登录加固）。"""
+        写一半断电/被杀也不会留下半截损坏的快照（2026-09-22 永续登录加固）。
+
+        快照里是**平台账号的明文 cookie**，能直接冒用登录态。因此写盘后立刻
+        收紧权限（POSIX 600 / Windows 只授权当前用户）——与 Fernet 密钥同一
+        处理方式。此前是默认权限，同机其他用户可直接读走。
+        """
         if not self._ctx:
             return None
         data = self._ctx.storage_state()          # dict：cookies + localStorage
         tmp = self.auth_file.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        from service.publishing.crypto import _restrict_key_file
+        _restrict_key_file(tmp)
         os.replace(tmp, self.auth_file)
+        _restrict_key_file(self.auth_file)
         return str(self.auth_file)
 
     @property

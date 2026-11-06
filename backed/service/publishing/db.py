@@ -357,6 +357,18 @@ def connect(db_path=None):
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA synchronous=NORMAL")
+    # 数据库里有全部文章正文、发布记录与平台账号元数据；WAL 模式下 -wal/-shm
+    # 同样含最新数据。默认权限是同机所有用户可读，等于把内容库公开。
+    # 这里只收紧主库与两个伴随文件（crypto 的同一套处理：POSIX 600 / Win ACL）。
+    try:
+        from service.publishing.crypto import _restrict_key_file
+        for _suffix in ("", "-wal", "-shm"):
+            _p = path.with_name(path.name + _suffix)
+            if _p.exists():
+                _restrict_key_file(_p)
+    except Exception:
+        # 权限收紧失败不阻断启动：已能正常读写，告警即可
+        pass
     conn.executescript(SCHEMA)
     # 建表后再跑增量迁移（v2+ 列变更），migrate 幂等，多开无副作用
     migrate(conn)
