@@ -21,15 +21,43 @@ import markdown as _md_lib
 
 
 def md_to_html(text):
-    """Markdown 转 HTML。知乎/B站/头条/开源中国这类富文本编辑器粘贴时用。"""
+    """Markdown 转 HTML。知乎/B站/头条/开源中国这类富文本编辑器粘贴时用。
+
+    扩展集对齐 GFM 的可用子集：fenced_code / tables / nl2br / sane_lists / toc。
+    python-markdown 没有内置 strikethrough（需 pymdownx 额外依赖），所以
+    ``~~删除线~~`` 用下面那步正则补——只在行内文本上做，代码块与行内代码
+    已被转义成 ``<code>``，不会误伤。
+
+    注意：扩展名写错会让 markdown.markdown 直接抛异常，整篇降级成 ``<pre>``
+    （比不渲染还糟）。所以这里只列经测试确认存在的扩展，并有单测锁住。
+    """
     if not text:
         return ""
     try:
-        return _md_lib.markdown(text, extensions=["fenced_code", "tables", "nl2br"])
+        html = _md_lib.markdown(text, extensions=[
+            "fenced_code", "tables", "nl2br", "sane_lists", "toc",
+        ])
     except Exception:
         # 转不了就整段塞进 <pre>，至少内容不丢
         import html as _html
         return f"<pre>{_html.escape(text)}</pre>"
+    return _apply_strikethrough(html)
+
+
+# 只匹配成对的 ~~文本~~；不跨越标签边界，避免把 <code> 里的波浪号当标记。
+_STRIKE_RE = __import__("re").compile(r"~~(?=\S)([^<>\n]{1,500}?)~~")
+
+
+def _apply_strikethrough(html):
+    """把 ~~x~~ 转成 <del>x</del>（GFM 语义），跳过 code/pre 内部。"""
+    if "~~" not in html:
+        return html
+    parts = __import__("re").split(r"(<code[\s\S]*?</code>|<pre[\s\S]*?</pre>)", html)
+    for i, part in enumerate(parts):
+        if part.startswith("<code") or part.startswith("<pre"):
+            continue
+        parts[i] = _STRIKE_RE.sub(r"<del>\1</del>", part)
+    return "".join(parts)
 
 
 # 通用"往富文本编辑器粘贴 HTML"的 JS。知乎(Draft.js)/头条/开源中国(UEditor) 都吃这套：

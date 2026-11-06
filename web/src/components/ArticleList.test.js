@@ -73,15 +73,21 @@ describe('ArticleList 搜索与状态筛选', () => {
   })
 
   it('筛选无结果时给出提示与一键清空', async () => {
-    const w = mount(ArticleList, { props: { articles: many, total: 3 } })
-    await w.find('input').setValue('不存在的关键字')
-    // FTS5 防抖 400ms + 异步搜索；等它完成后按钮才出现
-    await new Promise(r => setTimeout(r, 600))
-    await w.vm.$nextTick()
-    expect(w.find('.no-match').exists()).toBe(true)
-    const reset = w.findAll('.no-match button').find(b => b.text().includes('清空筛选'))
-    await reset.trigger('click')
-    expect(w.findAll('.art-item').length).toBe(3)
+    // 防抖 400ms 必须用假计时器推进：真实 sleep 在负载高时会不够，
+    // 表现为"本地跑八次绿一次红"的间歇性假失败（已实测复现）。
+    vi.useFakeTimers()
+    try {
+      const w = mount(ArticleList, { props: { articles: many, total: 3 } })
+      await w.find('input').setValue('不存在的关键字')
+      await vi.advanceTimersByTimeAsync(500)
+      await w.vm.$nextTick()
+      expect(w.find('.no-match').exists()).toBe(true)
+      const reset = w.findAll('.no-match button').find(b => b.text().includes('清空筛选'))
+      await reset.trigger('click')
+      expect(w.findAll('.art-item').length).toBe(3)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('筛选态下不隐藏「加载更多」，但提示只作用于已加载页', async () => {

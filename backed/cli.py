@@ -117,6 +117,126 @@ def create(ctx, title, content, tags):
     click.echo("文章 ID = " + str(aid))
 
 
+@cli.command("list", help="列出文章（默认按更新时间倒序）")
+@click.option("--status", default="", help="draft / published / review，留空为全部")
+@click.option("--limit", type=int, default=20)
+@click.option("--offset", type=int, default=0)
+@click.option("--json", "as_json", is_flag=True, help="输出完整 JSON（含正文）")
+@click.pass_context
+def list_cmd(ctx, status, limit, offset, as_json):
+    rows = _hub(ctx.obj["headed"]).list(
+        status=status or None, limit=limit, offset=offset, slim=not as_json)
+    if as_json:
+        _echo_json(rows)
+        return
+    if not rows:
+        click.echo("（没有文章）")
+        return
+    for r in rows:
+        click.echo(f"{r['id']:>5}  [{r.get('status', '')}]  {r.get('title', '')}")
+
+
+@cli.command("show", help="查看单篇文章（正文默认打印）")
+@click.option("--id", type=int, required=True)
+@click.option("--json", "as_json", is_flag=True, help="输出 JSON")
+@click.pass_context
+def show_cmd(ctx, id, as_json):
+    art = _hub(ctx.obj["headed"]).get(id)
+    if not art:
+        raise click.ClickException(f"文章 {id} 不存在")
+    if as_json:
+        _echo_json(art)
+        return
+    click.echo(f"#{art['id']}  {art['title']}")
+    click.echo(f"状态: {art.get('status', '')}  标签: {art.get('tags', '') or '（无）'}")
+    click.echo("")
+    click.echo(art.get("content_md", ""))
+
+
+@cli.command("edit", help="修改文章标题/正文/标签/摘要/状态")
+@click.option("--id", type=int, required=True)
+@click.option("--title", default=None)
+@click.option("--content", default=None, help="新的 Markdown 正文")
+@click.option("--tags", default=None)
+@click.option("--summary", default=None)
+@click.option("--status", default=None, help="draft / published / review")
+@click.pass_context
+def edit_cmd(ctx, id, title, content, tags, summary, status):
+    patch = {}
+    for key, val in (("title", title), ("content_md", content), ("tags", tags),
+                     ("summary", summary), ("status", status)):
+        if val is not None:
+            patch[key] = val
+    if not patch:
+        raise click.ClickException("没有要修改的字段：至少给一个 --title/--content/--tags/--summary/--status")
+    ok, pending = _hub(ctx.obj["headed"]).edit(id, **patch)
+    click.echo(f"{'已更新' if ok else '未更新'} 文章 {id}；{pending} 篇待同步到平台")
+
+
+@cli.command("delete", help="删除文章（平台侧已发布副本不受影响）")
+@click.option("--id", type=int, required=True)
+@click.option("--yes", is_flag=True, help="跳过确认")
+@click.pass_context
+def delete_cmd(ctx, id, yes):
+    hub = _hub(ctx.obj["headed"])
+    art = hub.get(id)
+    if not art:
+        raise click.ClickException(f"文章 {id} 不存在")
+    if not yes:
+        click.confirm(f"确认删除 #{id}「{art['title']}」？平台侧副本不会被删除", abort=True)
+    _echo_json(hub.delete(id))
+
+
+@cli.command("search", help="全文检索文章（SQLite FTS5）")
+@click.option("--keyword", required=True)
+@click.pass_context
+def search_cmd(ctx, keyword):
+    rows = _hub(ctx.obj["headed"]).search(keyword)
+    if not rows:
+        click.echo("（没有命中）")
+        return
+    for r in rows:
+        click.echo(f"{r['id']:>5}  {r.get('title', '')}")
+
+
+@cli.command("export", help="导出文章为带 front-matter 的 Markdown")
+@click.option("--id", type=int, default=0, help="单篇文章 ID（与 --all 二选一）")
+@click.option("--out", default="", help="输出文件/目录；留空打印到 stdout")
+@click.option("--all", "export_all", is_flag=True, help="导出全部文章到 --out 指定目录")
+@click.pass_context
+def export_cmd(ctx, id, out, export_all):
+    from api.routers.articles import build_markdown_export, _safe_filename
+    from pathlib import Path
+
+    if not export_all and not id:
+        raise click.ClickException("需要 --id <文章ID> 或 --all")
+
+    hub = _hub(ctx.obj["headed"])
+    if export_all:
+        if not out:
+            raise click.ClickException("--all 需要配合 --out 指定目录")
+        target = Path(out)
+        target.mkdir(parents=True, exist_ok=True)
+        rows = hub.list(limit=10000)
+        for art in rows:
+            full = hub.get(art["id"])
+            name = _safe_filename(full.get("title") or f"article-{art['id']}")
+            (target / f"{art['id']}-{name}.md").write_text(
+                build_markdown_export(full), encoding="utf-8")
+        click.echo(f"已导出 {len(rows)} 篇到 {target}")
+        return
+
+    art = hub.get(id)
+    if not art:
+        raise click.ClickException(f"文章 {id} 不存在")
+    text = build_markdown_export(art)
+    if out:
+        Path(out).write_text(text, encoding="utf-8")
+        click.echo(f"已导出到 {out}")
+    else:
+        click.echo(text)
+
+
 @cli.command(help="发布到平台（逗号分隔，如 juejin,csdn）")
 @click.option("--id", type=int, required=True)
 @click.option("--platforms", required=True, help="逗号分隔的平台名")

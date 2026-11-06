@@ -359,6 +359,43 @@ def _legacy_model():
            _load_file_cfg().get("AI_MODEL", "deepseek-chat")
 
 
-def is_ready():
-    """至少一个 Provider 可用。"""
-    return len(_resolve_providers()) > 0
+def is_ready(probe_local=False):
+    """是否存在可用的 Provider 配置。
+
+    语义是"有配置可尝试"，不是"服务一定连得上"。本地 Ollama 不需要密钥，
+    所以永远会被解析出来——如果直接拿这个结果当"AI 就绪"展示，用户会看到
+    绿色的「AI 就绪」，实际点一下 AI 功能就连接被拒（本机实测就是这种状态）。
+
+    需要真实可用性时传 ``probe_local=True``：对 Ollama 这类本地且无密钥的
+    provider 做一次短超时探活，连不上就不算 ready。远程 provider 不做探活
+    （每次请求都打一次外部 API 既慢又费额度），按"已配置"计。
+    """
+    providers = _resolve_providers()
+    if not providers:
+        return False
+    if not probe_local:
+        return True
+    for key, p in providers.items():
+        if key != "ollama" and p.get("api_key") not in ("", "ollama"):
+            return True  # 远程 provider 有真密钥，视为可用
+        if _probe_local_ollama(p.get("base_url", "")):
+            return True
+    return False
+
+
+def _probe_local_ollama(base_url, timeout=0.8):
+    """本地 Ollama 是否在监听。只连本机回环地址，避免误把远程当本地。"""
+    if not base_url:
+        return False
+    try:
+        from urllib.parse import urlparse
+        import urllib.request
+        parsed = urlparse(base_url)
+        if parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
+            return False
+        url = base_url.rstrip("/") + "/models"
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return 200 <= r.status < 500
+    except Exception:
+        return False
+

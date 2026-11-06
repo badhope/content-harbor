@@ -166,6 +166,8 @@ export const api = {
   aiOutline: (id) => http.get(`/articles/${id}/ai-outline`),
   aiSeo: (id) => http.get(`/articles/${id}/ai-seo`),
   cloneArticle: (id) => http.post(`/articles/${id}/clone`),
+  // 导出为带 front-matter 的 Markdown（Hexo/Hugo/Obsidian 直接用）
+  exportArticle: (id) => http.get(`/articles/${id}/export`, { responseType: 'text' }),
   aiTemplates: () => http.get('/ai/templates'),
   aiWriteTemplate: (data) => http.post('/ai/write-template', data),
 

@@ -75,7 +75,11 @@ class AIOpsMixin:
         return self.ai.list_ai_templates()
 
 
-    def ai_ready(self):
+    def ai_ready(self, probe_local=True):
         """(委托 AIService)"""
-        return self.ai.ai_ready()
+        try:
+            return self.ai.ai_ready(probe_local=probe_local)
+        except TypeError:
+            # 测试桩/旧实现只接受无参调用
+            return self.ai.ai_ready()
 

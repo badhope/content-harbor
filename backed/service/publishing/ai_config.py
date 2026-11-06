@@ -93,6 +93,12 @@ def get_ai_config() -> dict:
         file_key = (ov.get("api_key") or "").strip()
         effective = env_key or file_key
         live = resolved.get(key) or {}
+        # Ollama 不需要密钥，光看配置永远是 available——本机没起服务时
+        # 卡片显示「可用」而点开就连接被拒。这里补一次真实探活。
+        live_ok = key in resolved
+        if live_ok and key == "ollama":
+            live_ok = ai_providers._probe_local_ollama(
+                live.get("base_url") or ov.get("base_url") or base_url)
         return {
             "key": key,
             "name": ov.get("name", name),
@@ -105,7 +111,8 @@ def get_ai_config() -> dict:
             "key_source": ("env" if env_key else
                            "config" if file_key else
                            "builtin" if key == "ollama" else "none"),
-            "available": key in resolved,
+            "available": live_ok,
+            "requires_local_service": key == "ollama",
         }
 
     items = [

@@ -20,7 +20,7 @@
           <div class="pv-title">
             <b>{{ p.name }}</b>
             <el-tag size="small" :type="p.available ? 'success' : 'info'" effect="plain">
-              {{ p.available ? '可用' : '未生效' }}
+              {{ p.available ? '可用' : (p.requires_local_service ? '服务未启动' : '未生效') }}
             </el-tag>
             <el-tag size="small" effect="plain" type="warning" v-if="p.key_source === 'env'">密钥来自环境变量</el-tag>
             <span class="dim small">{{ keyState(p) }}</span>

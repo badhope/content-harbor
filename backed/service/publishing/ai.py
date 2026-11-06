@@ -297,13 +297,18 @@ def suggest_tags(title, content_md, model=None, preferred_provider=None):
         return ""
 
 
-def is_ready():
+def is_ready(probe_local=False):
+    """AI 是否可用。
+
+    ``probe_local=True`` 时对无密钥的本地 provider（Ollama）做一次短探活，
+    避免"有配置但服务没起"被当成就绪——UI 上那个绿点必须对应真实可用。
+    """
     # 兼容 providers 模块：如果 providers 有配置也认为 ready
     cfg_ready = bool(_cfg("AI_API_KEY"))
     if cfg_ready:
         return True
     try:
         prov_mod = _get_providers()
-        return prov_mod.is_ready()
+        return prov_mod.is_ready(probe_local=probe_local)
     except Exception:
         return False

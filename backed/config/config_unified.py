@@ -160,10 +160,15 @@ class BaseConfig(BaseSettings):
 
     # =================================================================
     # 自定义中间件注册开关（统一在 app/middleware.py 中读取）
-    # 默认全部关闭：避免在未显式开启时影响请求链路与切片测试。
-    # 按环境在对应配置类中置 True 即可启用对应中间件。
+    #
+    # 安全头默认开启：它是纯响应头，不改请求语义，对现有链路零风险，
+    # 而关掉意味着自托管用户直接暴露在点击劫持 / MIME 嗅探 / XSS 外链
+    # 加载下（实测默认部署时 /health 连一个安全头都没有）。
+    #
+    # 限流与审计默认关闭：限流会改变既有调用方的失败语义（SSE 长连接
+    # 尤其敏感），审计会写盘；两者由部署方按环境显式开启。
     # =================================================================
-    middleware_security_headers_enabled: bool = False
+    middleware_security_headers_enabled: bool = True
     middleware_rate_limit_enabled: bool = False
     middleware_audit_enabled: bool = False
 

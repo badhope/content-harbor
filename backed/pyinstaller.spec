@@ -34,6 +34,9 @@ datas = [
 ]
 
 # Hidden imports：uvicorn/logging 等常被动态导入
+# 只列真实存在的：md_editor_v3 是前端 npm 包，Python 侧没有这个模块，
+# 写进来会让 PyInstaller 在分析阶段报 missing module（不致命但污染日志）；
+# playwright 同理——项目实际用 patchright 分叉，未装 playwright。
 hidden_imports = [
     "uvicorn.logging",
     "uvicorn.loops",
@@ -47,11 +50,19 @@ hidden_imports = [
     "uvicorn.lifespan.on",
     "multipart",
     "multipart.multipart",
-    "md_editor_v3",
-    "playwright",
-    "playwright.sync_api",
     "patchright",
     "patchright.sync_api",
+    "ahocorasick",
+    "PIL.Image",
+    "PIL.ImageFile",
+    "rapidfuzz.distance",
+    "trafilatura",
+    "telegraph",
+    "markdown_it",
+    "frontmatter",
+    "croniter",
+    "prometheus_client",
+    "tenacity",
 ]
 
 a = Analysis(
@@ -63,7 +74,9 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "numpy", "PIL", "scipy"],
+    # PIL 不能排除：media.py 用 PIL 做图片魔数校验（防止改扩展名绕过白名单），
+# 排除后打包版一上传图片就崩，而开发环境永远发现不了。
+excludes=["tkinter", "matplotlib", "numpy", "scipy"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

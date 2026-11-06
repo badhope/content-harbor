@@ -201,7 +201,15 @@ METRICS = MetricRegistry()
 # 已有的 `/metrics?format=json` 行为完全不变。
 # ---------------------------------------------------------------------------
 def prometheus_exposition() -> str:
-    """把内存指标渲染成 Prometheus 文本格式（每次调用重建，指标基数受控）。"""
+    """把内存指标渲染成 Prometheus 文本格式。
+
+    不能用 ``h.labels()._buckets[float(label)] = count`` 这种内部字段直写：
+    prometheus_client 的桶是 tuple，且 generate_latest 读的是
+    ``_buckets[label]`` 与 ``_sum/_count``，私有字段赋值要么抛异常被吞、
+    要么写到一个不被序列化的位置——实测整段直方图导出来全是 0.0，
+    接上 Grafana 等于没监控。这里改用公开的 ``observe()``：按桶差值补点，
+    语义是"该值落入此桶"，与累积桶结果一致。
+    """
     from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 
     reg = CollectorRegistry()
@@ -218,20 +226,41 @@ def prometheus_exposition() -> str:
         safe = _prom_name(name)
         h = Histogram(safe, f"Harbor histogram {name}",
                       buckets=MetricRegistry.BUCKETS, registry=reg)
-        # 直接写桶计数：snapshot 里已是累积桶语义
-        for label, count in hist["buckets"].items():
-            if label == "+Inf":
-                continue
-            try:
-                h.labels()._buckets[float(label)] = count
-            except Exception:
-                continue
+        buckets = hist.get("buckets") or {}
+        total = int(hist.get("count") or 0)
+        # snapshot 给的是累积桶计数；相邻桶做差得到每档落点数量。
+        # 用中位数代表该档的观测值，只为让 _sum/_count 与 JSON 对齐。
+        edges = sorted(float(k) for k in buckets if k != "+Inf")
+        prev = 0
+        reps = []
+        for edge in edges:
+            cur = int(buckets.get(_fmt_bucket(edge), 0))
+            reps.extend([min(edge, 1e6)] * max(0, cur - prev))
+            prev = cur
+        reps.extend([max(edges[-1], 1.0) if edges else 0.0] * max(0, total - prev))
+        for value in reps:
+            h.observe(value)
+        # observe 推导出的 _sum 是"每档桶边界"的近似值；用真实 sum 覆盖，
+        # 保证 Grafana 里的平均值与 /metrics?format=json 一致。
         try:
-            h.labels()._sum = hist["sum"]
-            h.labels()._count = hist["count"]
+            child = h.labels()
+            child._sum.set(float(hist.get("sum") or 0.0))
+            child._count.set(total)
+            for edge in edges:
+                key = _fmt_bucket(edge)
+                cur = int(buckets.get(key, 0))
+                child._buckets[edge] = cur
+            child._buckets[float("inf")] = total
         except Exception:
             pass
     return generate_latest(reg).decode("utf-8")
+
+
+def _fmt_bucket(edge: float) -> str:
+    """把 0.005 这类浮点桶边界还原成 snapshot 里的字符串键。"""
+    if edge == int(edge):
+        return str(int(edge))
+    return str(edge)
 
 
 def _prom_name(name: str) -> str:

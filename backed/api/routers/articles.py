@@ -168,6 +168,72 @@ def article_clone(aid: int):
     return get_hub().clone(aid)
 
 
+@router.get("/articles/{aid}/export")
+def article_export(aid: int, download: bool = False):
+    """导出为带 YAML front-matter 的 Markdown（Hexo/Hugo/Obsidian 可直接用）。
+
+    为什么要有：在此之前 Harbor 是"内容只进不出"——导进来的文章改完就锁在
+    SQLite 里，想迁走只能手工复制。这与"自托管、数据属于自己"的定位冲突。
+    """
+    from fastapi.responses import PlainTextResponse
+
+    art = get_hub().get(aid)
+    if not art:
+        raise HTTPException(404, "文章不存在")
+    text = build_markdown_export(art)
+    headers = {}
+    if download:
+        safe = _safe_filename(art.get("title") or f"article-{aid}")
+        headers["Content-Disposition"] = f'attachment; filename="{safe}.md"'
+    return PlainTextResponse(text, media_type="text/markdown; charset=utf-8",
+                             headers=headers)
+
+
+def _safe_filename(title: str) -> str:
+    """标题转文件名：去掉路径分隔与保留字符，避免 Windows 上写盘失败。"""
+    import re as _re
+    cleaned = _re.sub(r'[\\/:*?"<>|\r\n\t]+', "-", title).strip(" .-")
+    return (cleaned or "article")[:80]
+
+
+def build_markdown_export(art: dict) -> str:
+    """把文章记录渲染成 front-matter + 正文。导出格式稳定，便于脚本消费。"""
+    import datetime as _dt
+
+    def _yaml_scalar(value):
+        text = "" if value is None else str(value)
+        if text == "" or any(c in text for c in ':#[]{}&*!|>\'"%@`') or text != text.strip():
+            escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+            return f'"{escaped}"'
+        return text
+
+    tags = [t.strip() for t in str(art.get("tags") or "").split(",") if t.strip()]
+    lines = ["---"]
+    lines.append(f"title: {_yaml_scalar(art.get('title'))}")
+    if art.get("summary"):
+        lines.append(f"description: {_yaml_scalar(art.get('summary'))}")
+    if tags:
+        lines.append("tags:")
+        lines.extend(f"  - {_yaml_scalar(t)}" for t in tags)
+    lines.append(f"status: {_yaml_scalar(art.get('status'))}")
+    if art.get("cover"):
+        lines.append(f"cover: {_yaml_scalar(art.get('cover'))}")
+    if art.get("origin_url"):
+        lines.append(f"source: {_yaml_scalar(art.get('origin_url'))}")
+    lines.append(f"harbor_id: {art.get('id')}")
+    for key in ("created_at", "updated_at"):
+        if art.get(key):
+            try:
+                stamp = _dt.datetime.fromtimestamp(float(art[key])).isoformat(timespec="seconds")
+            except (TypeError, ValueError, OSError):
+                stamp = str(art[key])
+            lines.append(f"{key}: {stamp}")
+    lines.append("---")
+    lines.append("")
+    lines.append(art.get("content_md") or "")
+    return "\n".join(lines)
+
+
 # ---- 版本历史 ----
 
 @router.get("/articles/{aid}/versions")

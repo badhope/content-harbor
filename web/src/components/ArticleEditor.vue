@@ -27,6 +27,7 @@
             <el-dropdown-item command="outline" :icon="List">大纲 / SEO</el-dropdown-item>
             <el-dropdown-item command="qa" :icon="DataAnalysis">内容质检</el-dropdown-item>
             <el-dropdown-item command="clone" :icon="DocumentCopy">克隆文章</el-dropdown-item>
+            <el-dropdown-item command="export" :icon="Download">导出 Markdown</el-dropdown-item>
             <el-dropdown-item divided command="versions" :icon="Clock">版本历史</el-dropdown-item>
           </el-dropdown-menu>
         </template>
@@ -113,7 +114,7 @@
         <MdEditor
           v-model="article.content_md"
           :preview="editorPreview"
-          :theme="'dark'"
+          :theme="editorTheme"
           language="zh-CN"
           :toolbars="toolbars"
           :on-upload-img="onUploadImg"
@@ -221,9 +222,10 @@ import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { api } from '@/api'
 import { Check, PriceTag, Aim, Brush, Menu, Edit, Operation, View, Promotion, Refresh, Files,
-         Paperclip, Picture, List, DocumentCopy, Clock, DataAnalysis } from '@element-plus/icons-vue'
+         Paperclip, Picture, List, DocumentCopy, Clock, DataAnalysis, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { getTheme, onThemeChange } from '@/composables/useTheme'
 import { useHubStore } from '@/stores/hub'
 
 const props = defineProps({
@@ -252,6 +254,11 @@ const toolbars = ref(['bold', 'italic', 'strikethrough', 'heading',
   'revoke', 'next', 'preview', 'expand'])
 
 const chars = computed(() => (props.article?.content_md || '').length)
+
+// 编辑器主题跟随全局明暗，不能写死 dark——写死会让亮色用户在编辑器里
+// 得到一块刺眼的黑底，与整页割裂。
+const editorTheme = ref(getTheme())
+onThemeChange((t) => { editorTheme.value = t })
 
 // ---- 发布设置：发布前「点满」检查 ----
 // 四项：封面 / 标签 / 摘要 / AI 辅助标识。缺一项就不算点满，发布轨会提示。
@@ -384,6 +391,28 @@ const fmtVerTime = (ts) => {
   return `${d.getMonth() + 1}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+// 导出当前文章为带 front-matter 的 .md（浏览器直接下载）
+async function exportMarkdown() {
+  if (!props.article.id) { ElMessage.warning('先保存再导出'); return }
+  try {
+    const text = await api.exportArticle(props.article.id)
+    const blob = new Blob([typeof text === 'string' ? text : String(text)],
+                          { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(props.article.title || 'article').replace(/[/:*?"<>|]/g, '-')}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    // 立即 revoke 会让部分浏览器下载失败，延后释放
+    setTimeout(() => URL.revokeObjectURL(url), 2000)
+    ElMessage.success('已导出 Markdown')
+  } catch (e) {
+    ElMessage.error('导出失败：' + (e?.message || e))
+  }
+}
+
 // 「视图与 AI」下拉：命令分发
 function onMore(cmd) {
   switch (cmd) {
@@ -398,6 +427,7 @@ function onMore(cmd) {
     case 'seo': openAiTool('seo'); break
     case 'qa': openQa(); break
     case 'clone': hub.cloneArticle(props.article.id); break
+    case 'export': exportMarkdown(); break
     case 'versions': openVersions(); break
   }
 }

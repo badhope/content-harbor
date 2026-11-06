@@ -231,24 +231,154 @@ def trending(conn, limit=10):
     return [dict(r) for r in rows]
 
 
+_TECH_TERMS = (
+    "python", "javascript", "typescript", "java", "golang", "go", "rust", "c++", "c#",
+    "php", "ruby", "swift", "kotlin", "scala", "sql", "bash", "shell",
+    "react", "vue", "angular", "svelte", "next.js", "nextjs", "nuxt", "django",
+    "flask", "fastapi", "spring", "express", "nestjs", "tailwindcss", "sass", "webpack",
+    "vite", "node.js", "nodejs", "deno", "bun",
+    "docker", "kubernetes", "k8s", "podman", "helm", "terraform", "ansible",
+    "nginx", "linux", "ubuntu", "debian", "centos", "windows", "macos",
+    "mysql", "postgresql", "postgres", "sqlite", "redis", "mongodb", "elasticsearch",
+    "kafka", "rabbitmq", "clickhouse", "neo4j",
+    "git", "github", "gitlab", "gitee", "ci/cd", "devops", "jenkins", "actions",
+    "aws", "azure", "gcp", "aliyun", "serverless", "cloudflare",
+    "机器学习", "深度学习", "人工智能", "大模型", "大语言模型", "llm", "nlp", "rag",
+    "pytorch", "tensorflow", "transformer", "微调", "推理", "向量数据库",
+    "前端", "后端", "全栈", "架构", "重构", "性能优化", "可观测性", "微服务",
+    "分布式", "高并发", "缓存", "消息队列", "数据库", "算法", "数据结构",
+    "安全", "渗透测试", "加密", "认证", "权限", "合规",
+    "产品设计", "用户体验", "交互设计", "可用性", "无障碍",
+    "开源", "编程", "代码", "测试", "自动化测试", "单元测试", "敏捷开发",
+)
+
+
+_TERM_PATTERNS = None
+
+
+def _term_patterns():
+    """把 _TECH_TERMS 编译成正则，ASCII 词按词边界匹配。
+
+    纯 ``str.find`` 会让 ``go`` 命中 ``golang``、``google``，``sql`` 命中
+    ``mysql``——同一篇文章会同时推荐 ``golang`` 和 ``go``。ASCII 词加
+    ``\b`` 边界，中文词没有词边界概念，直接按子串匹配。
+    """
+    global _TERM_PATTERNS
+    if _TERM_PATTERNS is None:
+        import re
+        patterns = []
+        for term in _TECH_TERMS:
+            if term.isascii():
+                escaped = re.escape(term)
+                # c++ / c# 这类以符号结尾的词，\b 在符号后不成立，改用自定义边界
+                if term[-1].isalnum():
+                    rx = re.compile(r"(?<![a-z0-9])" + escaped + r"(?![a-z0-9])", re.I)
+                else:
+                    rx = re.compile(r"(?<![a-z0-9])" + escaped, re.I)
+            else:
+                rx = re.compile(re.escape(term))
+            patterns.append((term, rx))
+        _TERM_PATTERNS = patterns
+    return _TERM_PATTERNS
+
+
+# 同义词组：同组内只保留最具体的一个（"go" 是 "golang" 的缩写，
+# 同时推荐两个等于给用户制造重复标签）。
+_SYNONYM_GROUPS = (
+    ("golang", "go"),
+    ("kubernetes", "k8s"),
+    ("postgresql", "postgres"),
+    ("node.js", "nodejs"),
+    ("next.js", "nextjs"),
+    ("大语言模型", "llm"),
+    ("人工智能", "ai"),
+)
+
+
+def _preferred_synonyms(scored_terms):
+    """同组同义词里只留最具体的那个（"golang" 胜过 "go"，"kubernetes" 胜过 "k8s"）。
+
+    必须在排序前就定好：如果等挑选时再比较，先出现的是短词，长词反而被
+    当成重复丢掉，结果推荐里留 "GO" 丢 "golang"，与预期相反。
+    """
+    present = set(t.lower() for t in scored_terms)
+    suppress = set()
+    for group in _SYNONYM_GROUPS:
+        lowered = [g.lower() for g in group]
+        hits = [g for g in lowered if g in present]
+        if len(hits) <= 1:
+            continue
+        best = max(hits, key=len)
+        suppress.update(g for g in hits if g != best)
+    return suppress
+
+
+def _local_suggest(title, content_md, hot_tags, limit=5):
+    """离线兜底：从标题+正文里命中已知技术词，再补上历史高频标签。
+
+    没有 AI 时，``suggest_for_article`` 原来直接返回空串——用户点「推荐标签」
+    看到的是"什么都没发生"。这里保证永远能给出候选：先按命中位置与频次排序
+    （标题权重更高、出现次数多的靠前），不够再用历史高频补齐。
+    """
+    text = f"{title or ''}\n{content_md or ''}"
+    title_lower = (title or "").lower()
+    scored = []
+    for term, rx in _term_patterns():
+        matches = list(rx.finditer(text))
+        if not matches:
+            continue
+        weight = len(matches)
+        if term.lower() in title_lower:
+            weight += 10
+        scored.append((weight, -matches[0].start(), term))
+    scored.sort(reverse=True)
+    suppress = _preferred_synonyms([t for _, _, t in scored])
+    picked = []
+    seen = set()
+    for _, _, term in scored:
+        if term.lower() in suppress:
+            continue
+        canonical = term.upper() if len(term) <= 3 and term.isascii() else term
+        key = canonical.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        picked.append(canonical)
+        if len(picked) >= limit:
+            break
+    for tag in hot_tags:
+        if len(picked) >= limit:
+            break
+        if tag.lower() not in seen:
+            seen.add(tag.lower())
+            picked.append(tag)
+    return picked
+
+
 def suggest_for_article(conn, title, content_md, model=None):
-    """基于本地 tag_stats 高频 + AI 兜底，推荐标签。优先本地（快、省 AI 调用）。"""
-    from service.publishing import ai as ai_mod
-    # 本地：取 Top 20 高频
+    """基于本地 tag_stats 高频 + 关键词命中 + AI 兜底，推荐标签。
+
+    顺序：AI 优先（能理解语义），失败/为空则走完全离线的关键词命中。
+    返回值永远是逗号分隔的字符串，可能为空仅当输入也是空。
+    """
+    _ensure_table(conn)
     hot = list_tags(conn, limit=20)
     hot_tags = [t["tag"] for t in hot]
 
-    # AI 推荐：让模型从推荐结果里挑
     try:
+        from service.publishing import ai as ai_mod
         raw = ai_mod.chat([{"role": "user", "content":
             f"为这篇文章推荐 3-5 个中文技术标签，只输出逗号分隔的标签，不要解释。\n"
             f"已有热门标签（优先选）: {','.join(hot_tags)}\n"
             f"标题: {title or ''}\n\n{(content_md or '')[:2000]}"}],
             max_tokens=100, model=model)
         tags = [t.strip() for t in raw.replace("，", ",").split(",") if t.strip()]
-        return ",".join(tags[:5])
+        if tags:
+            return ",".join(tags[:5])
     except Exception:
-        return ",".join(hot_tags[:5])
+        pass
+    return ",".join(_local_suggest(title, content_md, hot_tags))
+
 
 
 def merge_tags(conn, from_tag, to_tag):

@@ -183,12 +183,16 @@ class AIService:
         from service.publishing.ai_enhancements import list_templates
         return list_templates()
 
-    def ai_ready(self):
-        """检查 AI 后端是否可用。"""
+    def ai_ready(self, probe_local=True):
+        """检查 AI 后端是否可用。
+
+        默认探活本地 provider：UI 的「AI 就绪」绿点必须对应真实可用，
+        不能因为 Ollama 不需要密钥就把"配置存在"当"服务在跑"。
+        """
         if self.demo:
             return True
         from service.publishing import ai as ai_mod
-        return ai_mod.is_ready()
+        return ai_mod.is_ready(probe_local=probe_local)
 
     def content_qa(self, article_id=None, content_md=None, title=None,
                    summary=None, tags=None):
