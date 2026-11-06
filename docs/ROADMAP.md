@@ -9,7 +9,24 @@ Legend: `[x]` shipped · `[ ]` planned · `[~]` in progress · `[!]` blocked
 
 ## Shipped
 
-### 0.12.x — hardening (current)
+### 0.14.0 — full-loop verification (current)
+
+Every item below was driven by running the product, not by reading the code.
+
+- [x] Rest and CLI coverage: 91 REST endpoints, 32 MCP tools, 34 CLI commands exercised
+- [x] SSE reliability: monotonic event ids, 256-event replay ring, `Last-Event-ID` gap
+      fill, `resync` when the gap exceeds the window
+- [x] Article CRUD now emits SSE events (previously only tasks/publish did)
+- [x] MCP `streamable-http` transport (supersedes HTTP+SSE since 2025-03-26)
+- [x] Markdown export with YAML front-matter (API + CLI + editor menu)
+- [x] Offline tag suggestions with synonym de-duplication
+- [x] Real Prometheus histograms (were all zeros)
+- [x] Security headers on by default; verified in a real browser with zero CSP violations
+- [x] Single-file executable built and smoke-tested (7/7 checks)
+- [x] Defect sweep: `/api/info` empty routes, fake AI-ready state, hardcoded editor
+      theme, PIL excluded from the bundle, webhook test false success
+
+### 0.12.x — hardening
 
 - [x] Network boundary: public-IP validation, connection pinning, redirect revalidation
 - [x] Browser fetch/screenshot restored with Chromium DNS pinning (was disabled)
@@ -35,6 +52,19 @@ Legend: `[x]` shipped · `[ ]` planned · `[~]` in progress · `[!]` blocked
 ---
 
 ## Next
+
+### 0.15.0 — Editorial workflow depth
+
+- [ ] Draft collaboration: comments and suggestion mode on article bodies
+- [ ] Publish diff preview: show what will change on each platform before syncing
+- [ ] Bulk operations: retag, reschedule, re-publish across a filtered article set
+- [ ] RSS and JSON Feed output so the library is subscribable, not just exportable
+
+### 0.16.0 — Post-publish verification
+
+- [ ] Read back the published URL after a successful submit, compare title and body
+      hash, store `publications.verified_at` — so "success" means the copy exists
+- [ ] On publish failure, capture a Playwright trace plus screenshot for replay
 
 ### 0.13.0 — Verification and packaging
 

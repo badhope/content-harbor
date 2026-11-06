@@ -2,6 +2,69 @@
 
 ---
 
+## [0.14.0] - 2026-11-07（全链路实跑收口：真实缺陷、SSE 可靠性、可观测性与导出）
+
+本轮全部改动由实跑驱动：91 个 REST 端点、32 个 MCP 工具、34 个 CLI 命令、
+四个主页面在真实浏览器里逐页走查，每个修复都配了会红的反证测试。
+
+### Added
+
+- **Markdown 导出**（`GET /articles/{id}/export`、`CLI export`、编辑器「导出
+  Markdown」）：带 YAML front-matter，Hexo / Hugo / Obsidian 可直接消费。
+  此前 Harbor 是"内容只进不出"，与"数据属于自己"的定位冲突。
+- **SSE 断线重放**：事件带单调 id，服务端保留最近 256 条环形缓冲；客户端重连
+  带 `Last-Event-ID` 补发缺口，超出窗口发 `resync` 让前端整体刷新。
+- **文章事件推送**：`article.created/updated/deleted` 走 SSE，`updated` 携带
+  `pending_sync` 与变更字段，多端/多标签页可即时一致（此前只能靠 30 秒轮询）。
+- **MCP streamable-http 传输**（MCP 2025-03-26 起取代 HTTP+SSE），远程仍强制
+  Bearer；旧 `sse` 保留兼容。
+- **CLI 补全** `list / show / edit / delete / search / export`：此前只能建不能
+  改、不能查（"完整 CLI"不成立）。
+- **标签推荐离线兜底**：无 AI 时按关键词命中 + 同义词去重（`golang`/`go`、
+  `kubernetes`/`k8s` 不再同时推荐）。
+- **设置页骨架屏与可见错误**：加载中显示骨架，失败显示原因与重试按钮。
+
+### Fixed
+
+- **`/api/info` 返回 91 条空记录**：FastAPI 0.141 起 `include_router` 插入
+  `_IncludedRouter` 包装，`getattr(route, "path")` 全取空。改为递归展开子路由。
+- **AI 就绪状态造假**：Ollama 无需密钥，`is_ready()` 恒为 True；本机 11434 无
+  监听时界面仍显示绿色「AI 就绪」+ 卡片「可用」，点一下就连接被拒。改为对
+  本地无密钥 provider 做短超时探活；`/ai/config` 与 `/ai/status` 统一口径。
+- **Markdown 编辑器主题写死 `dark`**：亮色用户在编辑器里得到一块黑底，与整页
+  割裂。改为订阅全局主题，切换与冷启动都跟随。
+- **Prometheus 直方图导出全 `0.0`**：直写 `_buckets` 私有字段无效。改用公开
+  `observe()` 按桶差值补点，桶计数与 `sum/count` 与 JSON 一致。
+- **安全响应头默认全关**：默认部署 `/health` 一个安全头都没有。安全头默认开
+  （纯响应头、不改请求语义），CSP 经真实浏览器验证零违规。
+- **打包版上传图片必崩**：`pyinstaller.spec` 排除 `PIL`，而 `media.py` 运行时
+  用 PIL 校验图片魔数；同时清掉 spec 里不存在的 `md_editor_v3` / `playwright`。
+- **webhook 测试端点假成功**：对不存在的 id 也返回 `ok`，改为 404。
+- **设置页与侧栏状态矛盾**：`/ai/config` 失败时侧栏仍显示「AI 就绪」。改为与
+  `settings.aiConfig.ready` 同源，并订阅其变化。
+- **`~~删除线~~` 原样漏到平台**：`md_to_html` 补 strikethrough（行内代码与
+  代码块受保护）。
+- **前端测试间歇性假失败**：`ArticleList` 用例用真实 `sleep(600)` 等 400ms
+  防抖，负载高时不足；改用假计时器。
+- **SSE 重连后仍永久轮询**：一次抖动会让退避计数与轮询定时器永久残留，
+  请求量翻倍且状态互相覆盖。连上即归零并清定时器。
+
+### Changed
+
+- CLI `export` 支持 `--id` 单篇或 `--all` 批量导出目录。
+- 依赖清理：`pyinstaller.spec` 不再声明未安装的模块。
+
+### Verification
+
+- 门禁：后端 569 passed、前端 77 passed（13 文件）、ruff 0 错、八道全绿。
+- 单文件 exe：PyInstaller 构建后实测创建文章、Markdown 导出、标签推荐、
+  路由表 91 条、图片校验、安全头、Prometheus 直方图，7/7 通过。
+- SSE 重放：真实 HTTP 流验证，断线期间 4 条事件全部补发（`replayed: 4`）。
+- MCP：`initialize` / `tools/list`（32）/ `tools/call` 全通；无 token 401、
+  有 token 200。
+
+---
+
 ## [0.13.2] - 2026-11-04（发布设置点满：写库可编辑 + 编辑器/发布轨双闸）
 
 ### Added

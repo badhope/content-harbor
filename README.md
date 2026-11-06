@@ -22,8 +22,10 @@ drafting, a compliance gate, and a human in the loop when a platform fights back
 | **AI drafting with a compliance gate** | Seven provider routes with failover, plus a four-stage gate before anything ships: safety scan → AIGC disclosure → dual-model review → human confirmation. |
 | **Pauses instead of guessing** | CAPTCHA, risk control, expired session: the task stops, tells you, and resumes where it left off. |
 | **Session persistence** | Log in once per platform. Cookies live in a local profile plus an atomic snapshot, so a wiped profile does not force a re-scan. |
-| **MCP server, 32 tools** | Drive the whole pipeline from Claude Code, Cursor or any MCP client. stdio by default; remote SSE requires a bearer token. |
-| **Everything local** | SQLite with FTS5 full-text search, local media store with content-addressed dedupe, no vendor account, no telemetry. |
+| **MCP server, 32 tools** | Drive the whole pipeline from Claude Code, Cursor or any MCP client. stdio, streamable-http or legacy SSE; any non-loopback transport requires a bearer token. |
+| **Everything local, and portable out** | SQLite with FTS5 full-text search, local media store with content-addressed dedupe, no vendor account, no telemetry. Export any article — or the whole library — as Markdown with YAML front-matter for Hexo, Hugo or Obsidian. |
+| **A live view that survives reconnects** | Task and article changes stream over SSE with monotonic event ids; after a dropped connection the client replays what it missed via `Last-Event-ID` instead of showing a stale "stuck" task. |
+| **Measured, not asserted** | `/metrics` exports real Prometheus histograms, every release runs eight gates, and the desktop build is a tested single-file executable — not a claim in a README. |
 
 ## Screens
 
@@ -59,6 +61,16 @@ pnpm dev            # http://127.0.0.1:5173
 ```
 
 Open <http://127.0.0.1:5173>. The Vite dev server proxies `/api` to port 8000.
+
+### Command line
+
+```bash
+uv run --project backed python -m backed.cli status                 # library + account overview
+uv run --project backed python -m backed.cli list                   # newest articles
+uv run --project backed python -m backed.cli create --title "..." --content "..."
+uv run --project backed python -m backed.cli publish --id 12 --platforms juejin,csdn
+uv run --project backed python -m backed.cli export --all --out ./markdown
+```
 
 ### Desktop shell (experimental)
 
