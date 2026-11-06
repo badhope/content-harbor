@@ -139,7 +139,7 @@ export const useArticleStore = defineStore('article', {
         await ElMessageBox.confirm(
           `删除《${label}》？本地版本历史与发布记录一并清除；平台侧已发布的文章不会删除。`,
           '删除文章',
-          { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
+          { type: 'warning', confirmButtonText: '永久删除本地记录', cancelButtonText: '保留',
             confirmButtonClass: 'el-button--danger' }
         )
       } catch { return false }
