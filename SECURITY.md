@@ -54,11 +54,14 @@ content. The threat model assumes:
 | REST authentication | `HARBOR_API_TOKEN`; loopback exemption controlled by `TRUSTED_NETS` |
 | Reverse proxy trust | `X-Forwarded-For` honoured only from `TRUSTED_PROXIES` |
 | Outbound HTTP (importer, media) | public-IP validation, connection pinning, per-hop redirect revalidation, size and concurrency caps |
+| Webhook targets | public http/https only; private targets require explicit `allow_private: true`; re-validated at delivery time (DNS rebinding) |
+| AI provider `base_url` | http/https only, no embedded credentials, private addresses rejected except loopback (for local models) |
+| Error responses | fixed message only — exception text and tracebacks never reach the client |
 | Browser channel | Chromium `--host-resolver-rules` pinning + request-level guard |
 | Markdown import | confined to the import root, `.md`/`.markdown` only, size cap, sensitive names rejected |
 | External MCP servers | child process gets a minimal environment allowlist, never the parent's secrets |
 | MCP SSE | loopback bind by default; remote requires `HARBOR_MCP_TOKEN` |
-| Secrets at rest | webhook secrets encrypted with `FERNET_KEY`; session cookies in local profiles only |
+| Secrets at rest | webhook secrets encrypted with `FERNET_KEY`; session snapshots (`*.auth.json`), `hub.db` and its WAL files are written with owner-only permissions |
 | Production startup | fails fast when `HARBOR_API_TOKEN` / `SECRET_KEY` are missing |
 
 ### Boundaries that are *not* enforced
@@ -70,7 +73,8 @@ Be aware of these before deploying on an untrusted network:
 - **No audit trail of who changed what.** Single-user product; the HTTP audit log records
   requests, not identity.
 - **Browser profiles are not encrypted at rest.** They are ordinary Chromium profile
-  directories.
+  directories. Permissions are restricted to the current user on write, but the files
+  themselves are unencrypted — use full-disk encryption if disk theft is in scope.
 - **MCP tools run with the app's full authority.** A connected agent can publish, delete
   and reconfigure. Scope tokens and MCP access accordingly.
 
@@ -81,3 +85,9 @@ Be aware of these before deploying on an untrusted network:
   high-entropy assignments.
 - If a credential is committed, treat it as public: rotate it first, then rewrite history.
   Deleting the commit is not enough.
+
+### Audit history
+
+- [2026-11-07](docs/audit/SECURITY_AUDIT_2026-11-07.md) — 43 black-box attacks
+  (SSRF, traversal, injection, upload, headers). 8 real defects found and fixed;
+  the report also lists what was deliberately left as-is and why.

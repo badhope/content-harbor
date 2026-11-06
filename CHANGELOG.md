@@ -2,6 +2,52 @@
 
 ---
 
+## [0.14.1] - 2026-11-07（安全审计：8 项真实漏洞修复）
+
+用 43 项黑盒攻击（真实 HTTP，非读代码推断）驱动的一轮安全收口。
+完整报告见 `docs/audit/SECURITY_AUDIT_2026-11-07.md`。
+
+### Security
+
+- **webhook 是裸奔的 SSRF 原语**（Critical）：注册、更新、投递三处都没有目标
+  校验，可直接写 `http://169.254.169.254/latest/meta-data/` 或内网 Redis。
+  补三道校验；投递时再解析一次（防注册后改 DNS 的 rebinding）。自托管推内网
+  n8n 属正当需求，给 `allow_private` 显式开关。
+- **500 响应泄漏完整 traceback**（Critical）：根因是 `FastAPI(debug=settings.debug)`
+  让 Starlette 的 ServerErrorMiddleware 绕过统一 JSON 处理器，响应体里带出
+  本地绝对路径、源码行与调用栈。debug 恒关，响应体只回固定文案。
+- **`Server` 头删不掉**（High）：中间件里 `del` 无效，uvicorn 在中间件之后写
+  协议层。三个启动入口统一 `server_header=False`。
+- **登录态快照明文 cookie 无权限保护**（High）：`*.auth.json` 能直接冒用平台
+  登录态，默认 ACL 同机可读。写盘后收紧（POSIX 600 / Windows icacls）。
+- **数据库文件 `-rw-r--r--`**（High）：`hub.db` 及 WAL 伴生文件含全部正文与
+  发布记录。同样收紧。
+- **AI provider `base_url` 可任意指定**（High）：它决定 API Key 发往哪个主机，
+  允许任意值等于允许静默改道密钥 + SSRF。补校验，放行回环以支持本地模型。
+- **token 比较非常量时间**（Medium）：`!=` 可按字节时序侧信道还原。改
+  `hmac.compare_digest`。
+- **首次启动迁移旧配置会带上开发机 token**（Medium）：导致所有安装共用同一
+  token。迁移时剔除凭据，不含凭据时保持逐字节不变。
+
+### Fixed
+
+- **413 被降级成 400**：`HTTPException(413)` 未在异常处理器里映射，客户端看到
+  "请求参数错误"完全看不出是体积超限。补 413/409/422/429/502/503 逐码映射。
+- **测试污染真实配置文件**：`ai_config` 的 `CONFIG_FILE` 在 import 时钉死路径，
+  跑测试会把 `providers` 段落写进 `backed/config.json`。改惰性解析 + 全局限定。
+- **Vite 代理写死 8000**：改端口就得改源码。改为 `HARBOR_API_PORT` /
+  `HARBOR_API_URL` 可配。
+
+### Verification
+
+- 黑盒攻击 43/43 防御生效（SSRF 18 项、路径穿越 9 项、注入 2 项、上传 3 项…）
+- 新装端到端 21/21：空库 → 写作 → 编辑 → 版本 → 质检 → 导出 → 标签 → 15 平台
+  → 适配器探针 → 删除
+- 浏览器：新装首屏 / 保存 / 导出菜单 / 设置页 7/7，零控制台错误
+- 门禁：后端 599 passed、前端 77 passed、ruff 0 错、八道 exit=0
+
+---
+
 ## [0.14.0] - 2026-11-07（全链路实跑收口：真实缺陷、SSE 可靠性、可观测性与导出）
 
 本轮全部改动由实跑驱动：91 个 REST 端点、32 个 MCP 工具、34 个 CLI 命令、
