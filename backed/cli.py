@@ -440,7 +440,7 @@ def status(ctx):
 def serve(host, port):
     import uvicorn
     uvicorn.run("app.factory:create_app", factory=True,
-                host=host, port=port, reload=False)
+                host=host, port=port, reload=False, server_header=False)
 
 
 if __name__ == "__main__":

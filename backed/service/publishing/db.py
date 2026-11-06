@@ -11,6 +11,7 @@
 import json
 import os
 import sqlite3
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -41,14 +42,63 @@ def config_file() -> Path:
         return legacy_config_file()
     legacy = legacy_config_file()
     if path != legacy and not path.exists() and legacy.is_file():
-        import shutil
+        # 迁移旧配置时**逐字节复制**（既有契约：内容不得被改写）。
+        # 但凭据不能跟着走：直接整份复制会把开发机的 api_token 带进新数据目录，
+        # 所有安装共用同一个 token（等于没有鉴权），而用户完全不知道。
+        # 做法——先原样复制，再把凭据字段就地剔除（只在确实含凭据时才重写，
+        # 且重写仍保持紧凑/缩进两种既有格式不变）。
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with legacy.open("rb") as source, path.open("xb") as target:
                 shutil.copyfileobj(source, target)
         except FileExistsError:
             pass
+        _strip_credentials(path)
     return path
+
+
+_SECRET_KEYS = ("api_token", "api_key", "AI_API_KEY", "SECRET_KEY", "HARBOR_API_TOKEN")
+
+
+def _strip_credentials(path: Path) -> None:
+    """从迁移后的配置里剔除凭据字段。
+
+    原样返回（不改格式）当文件里本来就没有凭据——绝大多数用户属于这种情况。
+    只有真的含凭据时才解析并重写，避免无谓地改动别人的配置排版。
+    """
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+        data = json.loads(raw_text)
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, dict):
+        return
+
+    stripped = False
+    for key in _SECRET_KEYS:
+        if key in data:
+            data.pop(key)
+            stripped = True
+    provs = data.get("providers")
+    if isinstance(provs, dict):
+        for entry in provs.values():
+            if isinstance(entry, dict) and "api_key" in entry:
+                entry.pop("api_key")
+                stripped = True
+    if not stripped:
+        return
+
+    # 保持原文件的排版风格：单行紧凑文件仍写紧凑，多行缩进文件仍写缩进
+    compact = chr(10) not in raw_text
+    try:
+        if compact:
+            path.write_text(json.dumps(data, ensure_ascii=False, separators=(", ", ": ")),
+                            encoding="utf-8")
+        else:
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                            encoding="utf-8")
+    except OSError:
+        pass
 
 
 def legacy_config_file() -> Path:

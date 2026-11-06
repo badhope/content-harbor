@@ -27,22 +27,28 @@ SAFE_CONTENT = "这是一段超过两百字的正常技术正文，用于通过�
 # R1 名称撞车
 # ---------------------------------------------------------------------------
 
-def test_config_paths_point_to_documented_locations():
+def test_config_paths_point_to_documented_locations(monkeypatch):
     """配置路径契约（2026-10-14 修复）：config.json 在 backed/，风格档案在仓库 docs/。
+
+    本用例验证的是"没有任何环境变量覆盖时"的默认路径，
+    因此显式清掉全局测试隔离 fixture 设的 HARBOR_CONFIG_FILE。
 
     旧代码 parent.parent 解析到 backed/service/，与 .gitignore / api/auth.py /
     README 的文档位置不一致——AI 密钥与门禁开关实际从未从文档位置被读到，
     写作风格档案也从未加载。此测试把路径锁死。
     """
+    monkeypatch.delenv("HARBOR_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("HUB_DATA_DIR", raising=False)
     from pathlib import Path as _P
     from service.publishing import ai as ai_mod
-    from service.publishing import ai_config, gate
-    from service.publishing import ai_providers
+    from service.publishing import db as db_mod
 
     backed = _P(__file__).resolve().parents[1]
     repo = backed.parent
-    for mod in (ai_mod, ai_config, gate, ai_providers):
-        assert mod.CONFIG_FILE == backed / "config.json", mod.__name__
+    # 断言"无环境变量覆盖时解析出的路径"，而不是模块级常量：
+    # 常量在 import 那一刻就固定了，全量测试时沙箱环境变量可能已经生效，
+    # 断言常量等于在断言"测试执行顺序"，必然间歇性失败。
+    assert db_mod.config_file() == backed / "config.json"
     assert ai_mod.STYLE_FILE == repo / "docs" / "writing-style.md"
     assert ai_mod.STYLE_FILE.exists(), "写作风格档案必须真实存在于文档位置"
 
@@ -223,6 +229,9 @@ def ai_cfg_file(tmp_path, monkeypatch):
     cfg = tmp_path / "ai-config.json"
     cfg.write_text(json.dumps({"HARBOR_API_TOKEN": "secret-token-keepme"}),
                    encoding="utf-8")
+    # 清掉全局隔离 fixture 设的环境变量，否则 _config_file() 会优先读它
+    monkeypatch.delenv("HARBOR_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("HUB_DATA_DIR", raising=False)
     monkeypatch.setattr(ai_config, "CONFIG_FILE", cfg)
     monkeypatch.setattr(gate, "CONFIG_FILE", cfg)
     for env in ("AI_API_KEY", "OPENAI_API_KEY", "KIMI_API_KEY", "QWEN_API_KEY",

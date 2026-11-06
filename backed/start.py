@@ -48,6 +48,9 @@ def main():
             port=args.port,
             log_level=settings.log_level.lower() if hasattr(settings, "log_level") else "info",
             access_log=True,
+            # 关掉 server 响应头：中间件里 del response.headers["Server"] 是无效的，
+            # uvicorn 在中间件之后才把 server 头写进协议层（实测仍返回 "uvicorn"）。
+            server_header=False,
         )
         server = uvicorn.Server(config)
 
@@ -78,6 +81,7 @@ def main():
             reload=False,
             log_level=settings.log_level.lower() if hasattr(settings, "log_level") else "info",
             access_log=True,
+            server_header=False,
         )
 
 

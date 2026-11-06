@@ -119,7 +119,11 @@ def _enqueue_webhook(evt):
 
 
 def _dispatch_async(evt):
-    """把事件 POST 到所有匹配的 webhook（在后台线程执行）。"""
+    """把事件 POST 到所有匹配的 webhook（在后台线程执行）。
+
+    投递时再做一次目标校验：注册时可能域名还没上线（DNS 解析失败被放行），
+    或者注册后 DNS 被改成内网地址（DNS rebinding）。这里是真正的 SSRF 关口。
+    """
     rows = _wh_list_enabled()
     if not rows:
         return
@@ -129,6 +133,9 @@ def _dispatch_async(evt):
         if "*" not in evts and evt["type"] not in evts:
             continue
         try:
+            if not _webhook_target_allowed(url):
+                _update_webhook_status(wid, success=False, prev_fail=fail_count)
+                continue
             headers = {"Content-Type": "application/json", "X-Harbor-Event": evt["type"]}
             sig = _wh.sign_payload(payload, secret_enc)
             if sig:
@@ -140,6 +147,30 @@ def _dispatch_async(evt):
             _update_webhook_status(wid, success=True)
         except Exception:
             _update_webhook_status(wid, success=False, prev_fail=fail_count)
+
+
+def _webhook_target_allowed(url: str) -> bool:
+    """投递前的目标校验。解析失败/内网地址一律不投递。
+
+    用与抓取通道同一套 `resolve_public_ips`（含 IPv4 映射、CGNAT、回环、
+    链路本地等判定），保证"注册时"和"投递时"不会出现两套标准。
+    """
+    try:
+        from urllib.parse import urlparse
+
+        from .url_safety import URLSafetyError, resolve_public_ips
+        parsed = urlparse(url)
+        if parsed.scheme.lower() not in ("http", "https"):
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        resolve_public_ips(host)
+        return True
+    except URLSafetyError:
+        return False
+    except Exception:
+        return False
 
 
 def _wh_list_enabled():

@@ -22,7 +22,36 @@ from service.publishing import ai_providers
 
 # config.json 的文档位置是 backed/config.json（2026-10-14 路径修复，同 gate.py）
 ROOT = Path(__file__).resolve().parents[2]
+
+
+# 兜底默认路径：只在没有任何环境变量覆盖时使用。
+# 存在的意义是让测试可以 monkeypatch 这个属性来指向临时文件（既有约定）。
 CONFIG_FILE = config_file()
+_ORIGINAL_CONFIG_FILE = CONFIG_FILE
+
+
+def _config_file() -> Path:
+    """当前应使用的配置路径。
+
+    优先级：环境变量（HUB_DATA_DIR / HARBOR_CONFIG_FILE）> CONFIG_FILE 属性。
+
+    为什么不能只用模块级常量：`config_file()` 依赖环境变量，而测试沙箱是在
+    import 之后才设它们的，常量会在导入那一刻把路径钉死成真实
+    backed/config.json——结果跑一次测试就把开发配置写脏（实测：新增的
+    base_url 用例把 "providers" 段落留在了真实 config.json 里）。
+
+    为什么保留常量：既有测试用 monkeypatch.setattr(ai_config, "CONFIG_FILE", ...)
+    打桩已经指向临时文件；有环境变量时以环境变量为准，没有时尊重这个打桩值。
+    """
+    import os as _os
+    # 显式 setattr 打桩（测试）优先级最高：它是"这次调用就用这个文件"的强意图
+    if CONFIG_FILE != _ORIGINAL_CONFIG_FILE:
+        return CONFIG_FILE
+    if _os.environ.get("HARBOR_CONFIG_FILE", "").strip():
+        return config_file()
+    if _os.environ.get("HUB_DATA_DIR", "").strip():
+        return config_file()
+    return CONFIG_FILE
 
 # 可写白名单
 TOP_LEVEL_KEYS = {"REVIEW_MODEL", "AI_DIRECT_PUBLISH"}
@@ -78,7 +107,7 @@ def get_ai_config() -> dict:
     from service.publishing import ai as ai_mod
 
     try:
-        cfg = _read_json(CONFIG_FILE)
+        cfg = _read_json(_config_file())
     except Exception:   # aqg: top-level boundary（读配置失败降级为空，设置页显示未配置）
         cfg = {}
     prov_overrides = cfg.get("providers", {}) or {}
@@ -171,6 +200,60 @@ def get_ai_config() -> dict:
     }
 
 
+def _validate_provider_base_url(value):
+    """校验 AI provider 的 base_url。
+
+    这条不是"防外部攻击"，而是防止**拿到 API 写权限的人**把密钥送到别处：
+    base_url 决定 `Authorization: Bearer <key>` 发往哪个主机。允许任意值
+    等于允许静默改道。同时拦住内网目标（SSRF）。
+
+    允许：http/https、公网域名或 IP、本机回环（Ollama 就是 127.0.0.1）。
+    拒绝：非 http(s) 协议、带凭据的 URL、解析到内网/链路本地的域名。
+    """
+    import ipaddress
+    from urllib.parse import urlparse
+
+    from .url_safety import URLSafetyError, _is_public_ip
+
+    if value is None:
+        return
+    url = str(value).strip()
+    if not url:
+        return
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in ("http", "https"):
+        raise ValueError(f"base_url 仅支持 http/https: {url[:100]}")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("base_url 不允许携带用户凭据")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("base_url 必须含有效主机名")
+
+    # 本机回环是合法用法（Ollama / LM Studio / 本地 vLLM）
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if literal.is_loopback:
+            return
+        if not _is_public_ip(literal):
+            raise ValueError(f"base_url 指向非公网地址 {host}；本地模型请用 127.0.0.1")
+        return
+
+    lowered = host.lower().rstrip(".")
+    if lowered in {"localhost", "localhost.localdomain"} or lowered.endswith(".localhost"):
+        return
+    try:
+        from .url_safety import resolve_public_ips
+        resolve_public_ips(host)
+    except URLSafetyError as e:
+        # 解析失败不拦（离线环境/内网 DNS 的部署很常见），但解析到内网必须拦
+        if "无法解析" in str(e):
+            return
+        raise ValueError(f"base_url 校验失败: {e}")
+
+
 def update_ai_config(patch: dict) -> dict:
     """白名单合并写。
 
@@ -179,7 +262,7 @@ def update_ai_config(patch: dict) -> dict:
     返回写入后的 get_ai_config()（掩码）。
     """
     try:
-        cfg = _read_json(CONFIG_FILE)
+        cfg = _read_json(_config_file())
     except Exception as e:   # aqg: top-level boundary（解析失败转 ValueError，拒绝写入防写坏）
         raise ValueError(f"config.json 解析失败，拒绝写入（防写坏）: {e}")
 
@@ -205,6 +288,12 @@ def update_ai_config(patch: dict) -> dict:
                     target.pop("api_key", None)
                 else:
                     target["api_key"] = v
+            elif f == "base_url":
+                # base_url 决定服务端把 API Key 发到哪个地址。允许任意值等于：
+                # 拿到 API 写权限的人可以把请求指向自己控制的服务器，
+                # 顺带把密钥送过去；指向内网则是 SSRF 原语。
+                _validate_provider_base_url(v)
+                target[f] = v if v is not None else ""
             elif v is None:
                 target.pop(f, None)
             else:
@@ -231,7 +320,7 @@ def update_ai_config(patch: dict) -> dict:
     elif "providers" in cfg:
         cfg.pop("providers", None)
     if changed:
-        _atomic_write(CONFIG_FILE, cfg)
+        _atomic_write(_config_file(), cfg)
     return get_ai_config()
 
 

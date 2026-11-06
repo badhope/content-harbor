@@ -76,3 +76,18 @@ def conn(sandbox):
     c = db.connect(sandbox["db_file"])
     yield c
     c.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_config_json(tmp_path, monkeypatch):
+    """把 config.json 指向沙箱，绝不允许测试写真实 backed/config.json。
+
+    回归：ai_config 曾经把配置路径存成模块级常量，导入时就钉死成真实路径；
+    新增的 base_url 校验用例因此把 "providers" 段落写进了开发配置，
+    进而让另一个用例（test_provider 无 key 分支）读到脏数据而失败。
+    这类"测试互相污染 + 污染开发环境"的坑最难查，用环境变量彻底隔离。
+    """
+    cfg = tmp_path / "sandbox-config.json"
+    cfg.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("HARBOR_CONFIG_FILE", str(cfg))
+    yield cfg

@@ -16,10 +16,11 @@ from service.publishing import observability as obs
 
 from service.publishing.db import config_file
 
-ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
-
-
 # ---------------- 可选 API 鉴权 ----------------
+
+# 基准目录：仅作为测试打桩点存在（既有用例 monkeypatch.setattr(auth_mod, "ROOT", tmp_path)
+# 期望 token 写到该目录）。真实路径一律走 config_file()，它才是环境变量的唯一口径。
+ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 
 _api_token_cache: Optional[tuple[float, str]] = None
 
@@ -30,20 +31,28 @@ def _resolve_token() -> str:
     if tok:
         return tok
     try:
-        cfg_path = (ROOT / "config.json") if ROOT != __import__("pathlib").Path(__file__).resolve().parent.parent else config_file()
+        # 路径解析：
+        #   - ROOT 被测试打过桩 → 写到桩目录（既有 bootstrap 用例的契约）
+        #   - 否则走 config_file()，它是"环境变量 > 数据根 > 旧版位置"的唯一口径
+        import pathlib as _pathlib
+        default_root = _pathlib.Path(__file__).resolve().parent.parent
+        cfg_path = (ROOT / "config.json") if ROOT != default_root else config_file()
         cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
         tok = (cfg or {}).get("api_token") or ""
         if not tok:
+            # uuid4 由 os.urandom 支撑，122 位熵足够做 API token；
+            # 保持 UUID 形态是 README 与既有测试的契约（"自动生成 UUID"）。
             import uuid as _uuid
             tok = str(_uuid.uuid4())
             cfg_path.write_text(json.dumps({**(cfg or {}), "api_token": tok},
                                            ensure_ascii=False, indent=2),
                                 encoding="utf-8")
             obs.get_logger(__name__).warning(
-                "api_token 未配置：已自动生成并写入 config.json（生产环境建议改设 HARBOR_API_TOKEN）")
+                "api_token 未配置：已自动生成并写入 %s（生产环境建议改设 HARBOR_API_TOKEN）",
+                cfg_path)
     except Exception:  # aqg: top-level boundary
-        import secrets as _secrets
-        tok = _secrets.token_hex(16)
+        import uuid as _uuid
+        tok = str(_uuid.uuid4())
     return tok
 
 

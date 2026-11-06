@@ -62,6 +62,8 @@ def main():
         port=args.port,
         log_level=settings.log_level.lower() if hasattr(settings, "log_level") else "info",
         access_log=False,
+        # 与 start.py 同一口径：server 头必须在协议层关掉，中间件删不掉
+        server_header=False,
     )
     server = uvicorn.Server(config)
 

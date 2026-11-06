@@ -28,6 +28,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {
     ".git", ".venv", "node_modules", "__pycache__", "dist", "build",
     ".ruff_cache", ".pytest_cache", "server/static", "target", ".aqg",
+    # 本地临时目录：放的是调试脚本与一次性数据，既已被 .gitignore 排除、
+    # 也不会进仓库，扫它只会用"我自己写的测试脚本里的占位 token"制造假红。
+    ".tmp",
 }
 SKIP_SUFFIXES = {
     ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".svg",

@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from config import settings
 from utils.logger import get_logger, log_security_event
 from service.publishing.gate import GateError
 from utils.custom_exceptions import BaseAPIException
@@ -113,10 +112,14 @@ def setup_exception_handlers(app: FastAPI) -> None:
                 "method": request.method,
             },
         )
-        detail = str(exc) if settings.debug else "服务器内部错误"
+        # 响应体只给固定文案：即使 debug=True 也不能把异常字符串回给客户端。
+        # 异常字符串经常包含 SQL 片段、文件路径、上游响应体——这是最容易被
+        # 忽略的信息泄漏面（实测 500 里能直接读到本地绝对路径）。
+        # 完整信息只进日志（含 traceback），排障时看日志即可。
+        logger.exception("未处理异常 path=%s method=%s", request.url.path, request.method)
         body = ErrorResponse(
             code=ResponseCode.INTERNAL_SERVER_ERROR.code,
-            message=detail,
+            message=ResponseCode.INTERNAL_SERVER_ERROR.message,
             success=False,
             data=None,
         )
