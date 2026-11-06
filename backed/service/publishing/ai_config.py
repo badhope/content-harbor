@@ -135,10 +135,15 @@ def get_ai_config() -> dict:
             "price_level": ov.get("price_level", "standard"),
             "key_set": bool(effective), "key_masked": mask_key(effective),
             "key_source": "env" if env_key else ("config" if file_key else "none"),
-            "available": key in resolved, "custom": True,
+            "available": live_ok if key == "ollama" else (key in resolved),
+            "requires_local_service": key == "ollama", "custom": True,
         })
 
     legacy_key = os.environ.get("AI_API_KEY", "").strip() or (cfg.get("AI_API_KEY") or "").strip()
+    # ready 不能只看"有没有解析出 provider"：Ollama 无密钥恒被解析出来，
+    # 服务没起时会让 UI 同时出现"AI 已就绪"与"所有 provider 都不可用"。
+    # 这里与 /ai/status 用同一口径——至少一个 provider 真的可用。
+    any_available = any(p.get("available") for p in items)
     return {
         "providers": items,
         "routing": ai_providers.TASK_ROUTING,
@@ -158,7 +163,7 @@ def get_ai_config() -> dict:
             "file": str(ai_mod.style_file()),
             "loaded": bool(ai_mod.load_style()),
         },
-        "ready": bool(resolved),
+        "ready": any_available,
     }
 
 

@@ -66,3 +66,21 @@ def test_list_providers_remote_provider_is_available(monkeypatch):
     row = prov.list_providers()[0]
     assert row["available"] is True
     assert row["requires_local_service"] is False
+
+
+def test_ai_config_ready_false_when_all_unavailable(monkeypatch, tmp_path):
+    """配置存在但全都连不上时，/ai/config 的 ready 必须是 False。
+
+    回归：ready 原来取 bool(resolved)，Ollama 无密钥恒被解析出来，
+    于是 UI 同时显示"AI 已就绪"和"所有 provider 不可用"。
+    """
+    from service.publishing import ai_config as cfg_mod
+    monkeypatch.setattr(cfg_mod.ai_providers, "_resolve_providers", lambda: {
+        "ollama": {"key": "ollama", "name": "Ollama", "base_url": "http://localhost:11434/v1",
+                   "models": [], "default_model": "", "price_level": "economy",
+                   "api_key": "ollama"},
+    })
+    monkeypatch.setattr(cfg_mod.ai_providers, "_probe_local_ollama", lambda url, timeout=0.8: False)
+    cfg = cfg_mod.get_ai_config()
+    assert cfg["ready"] is False
+    assert all(p["available"] is False for p in cfg["providers"] if p["key"] == "ollama")
