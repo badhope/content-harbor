@@ -127,15 +127,19 @@ def get_ai_config() -> dict:
         env_key = os.environ.get(ov.get("api_key_env", f"{key.upper()}_API_KEY"), "").strip()
         file_key = (ov.get("api_key") or "").strip()
         effective = env_key or file_key
+        custom_base = (ov.get("base_url") or "").rstrip("/")
+        custom_available = key in resolved
+        if custom_available and key == "ollama":
+            custom_available = ai_providers._probe_local_ollama(custom_base)
         items.append({
             "key": key, "name": ov.get("name", key),
-            "base_url": (ov.get("base_url") or "").rstrip("/"),
+            "base_url": custom_base,
             "models": ov.get("models", []),
             "default_model": ov.get("default_model", ""),
             "price_level": ov.get("price_level", "standard"),
             "key_set": bool(effective), "key_masked": mask_key(effective),
             "key_source": "env" if env_key else ("config" if file_key else "none"),
-            "available": live_ok if key == "ollama" else (key in resolved),
+            "available": custom_available,
             "requires_local_service": key == "ollama", "custom": True,
         })
 
