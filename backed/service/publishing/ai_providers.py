@@ -219,18 +219,32 @@ def _resolve_providers():
 
 
 def list_providers():
-    """返回已配置的 Provider 列表（masked api_key）。"""
+    """返回已配置的 Provider 列表（masked api_key）。
+
+    带上 ``available``：键存在不等于能用——本地 Ollama 无需密钥，
+    服务没起时照样会出现在这个列表里（本机实测：11434 无监听）。
+    两个端点（/ai/status 与 /ai/config）必须给出一致的可用性口径，
+    否则前端会同时显示"就绪"与"服务未启动"。
+    """
     providers = _resolve_providers()
-    return [{
-        "key": p["key"],
-        "name": p["name"],
-        "base_url": p["base_url"],
-        "models": p["models"],
-        "default_model": p["default_model"],
-        "price_level": p["price_level"],
-        "has_key": bool(p["api_key"]),
-        "cooling": _state.is_cooling(p["key"]),
-    } for p in providers.values()]
+    out = []
+    for p in providers.values():
+        available = True
+        if p["key"] == "ollama":
+            available = _probe_local_ollama(p.get("base_url", ""))
+        out.append({
+            "key": p["key"],
+            "name": p["name"],
+            "base_url": p["base_url"],
+            "models": p["models"],
+            "default_model": p["default_model"],
+            "price_level": p["price_level"],
+            "has_key": bool(p["api_key"]),
+            "available": available,
+            "requires_local_service": p["key"] == "ollama",
+            "cooling": _state.is_cooling(p["key"]),
+        })
+    return out
 
 
 def _select_provider_for_level(level, preferred_key=None):

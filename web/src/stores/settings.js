@@ -10,6 +10,7 @@ export const useSettingsStore = defineStore('settings', {
     aiConfig: null,     // {providers[], routing{}, review{}, legacy{}, style{}, ready}
     aiGate: null,       // /ai/gate 快照（高危词数/最近拒绝）
     loading: false,
+    loadError: '',      // 读取失败的可见原因（空串=无错误）
     saving: false,
     testing: '',        // 正在测连通的 provider key
   }),
@@ -25,9 +26,14 @@ export const useSettingsStore = defineStore('settings', {
   actions: {
     async loadAI() {
       this.loading = true
+      this.loadError = ''
       try {
         this.aiConfig = await api.aiConfig()
-      } catch { /* 后端不可达时保持 null，界面自行降级 */ }
+      } catch (e) {
+        // 以前这里静默吞掉异常：后端不可达时设置页只是一片空白，
+        // 用户无法区分"没有 provider"和"请求失败"。现在把原因带给界面。
+        this.loadError = e?.message || '网络错误'
+      }
       try {
         this.aiGate = await api.aiGate()
       } catch { this.aiGate = null }

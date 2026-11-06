@@ -42,3 +42,27 @@ def test_no_providers_is_not_ready(monkeypatch):
 def test_probe_rejects_non_loopback_host():
     assert prov._probe_local_ollama("https://api.deepseek.com/v1") is False
     assert prov._probe_local_ollama("") is False
+
+
+def test_list_providers_marks_ollama_unavailable_when_down(monkeypatch):
+    """/ai/status 与 /ai/config 的口径必须一致：都不能把未运行的 Ollama 说成可用。"""
+    monkeypatch.setattr(prov, "_resolve_providers", lambda: {
+        "ollama": {"key": "ollama", "name": "Ollama", "base_url": "http://localhost:11434/v1",
+                   "models": [], "default_model": "", "price_level": "economy",
+                   "api_key": "ollama"},
+    })
+    monkeypatch.setattr(prov, "_probe_local_ollama", lambda url, timeout=0.8: False)
+    row = prov.list_providers()[0]
+    assert row["available"] is False
+    assert row["requires_local_service"] is True
+
+
+def test_list_providers_remote_provider_is_available(monkeypatch):
+    monkeypatch.setattr(prov, "_resolve_providers", lambda: {
+        "deepseek": {"key": "deepseek", "name": "DeepSeek", "base_url": "https://api.deepseek.com/v1",
+                     "models": [], "default_model": "deepseek-chat", "price_level": "economy",
+                     "api_key": "sk-x"},
+    })
+    row = prov.list_providers()[0]
+    assert row["available"] is True
+    assert row["requires_local_service"] is False

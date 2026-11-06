@@ -94,7 +94,16 @@ export const useHubStore = defineStore('hub', {
       }
       task.connectSSE()
 
-      try { this.aiReady = (await api.aiStatus()).ready } catch { this.aiReady = false }
+      // 就绪状态与设置页同源：settings.aiConfig.ready 已经带本地探活，
+      // 再单独打一次 /ai/status 会出现"侧栏说就绪、设置页说未配置"的自相矛盾
+      // （实测：/ai/config 请求失败时侧栏仍是绿点）。
+      this.aiReady = !!settings.aiConfig?.ready
+      // 之后用户在设置页点「重新读取」也要同步侧栏，否则绿点会一直停在旧状态。
+      // 订阅的是 settings store，不是本 store——读错对象这个回调永远不会触发。
+      this._aiWatch && this._aiWatch()
+      this._aiWatch = settings.$subscribe(() => {
+        this.aiReady = !!settings.aiConfig?.ready
+      }, { detached: true })
 
       this._phTimer && clearInterval(this._phTimer)
       this._phTimer = setInterval(() => {
@@ -105,6 +114,7 @@ export const useHubStore = defineStore('hub', {
 
     dispose() {
       if (this._phTimer) { clearInterval(this._phTimer); this._phTimer = null }
+      if (this._aiWatch) { this._aiWatch(); this._aiWatch = null }
       useTaskStore().disconnectSSE()
     },
 

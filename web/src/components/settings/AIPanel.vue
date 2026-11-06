@@ -13,6 +13,20 @@
       <el-button size="small" :icon="Refresh" :loading="settings.loading" @click="settings.loadAI()">重新读取</el-button>
     </div>
 
+    <!-- 首次加载骨架：此前打开设置页是白屏，用户不知道在等什么 -->
+    <div v-if="settings.loading && !settings.providers.length" class="pv-skeleton" aria-busy="true">
+      <el-skeleton :rows="1" animated v-for="i in 5" :key="i" class="pv-skel-row" />
+    </div>
+
+    <!-- 加载失败：明确告知 + 可重试，而不是空列表让人以为"没有 provider" -->
+    <el-alert
+      v-else-if="settings.loadError"
+      type="error" :closable="false" show-icon class="pv-error"
+      :title="'读取 AI 配置失败：' + settings.loadError"
+    >
+      <el-button size="small" :loading="settings.loading" @click="settings.loadAI()">重试</el-button>
+    </el-alert>
+
     <!-- Provider 列表 -->
     <el-collapse v-model="opened" class="prov-collapse">
       <el-collapse-item v-for="p in settings.providers" :key="p.key" :name="p.key">
@@ -295,4 +309,10 @@ async function saveReview() {
 .dim { color: var(--tx-4); }
 .small { font-size: var(--fs-xs); }
 .mono { font-family: var(--font-mono); font-size: 11px; color: var(--tx-2); }
+</style>
+
+<style scoped>
+.pv-skeleton { padding: 8px 4px; }
+.pv-skel-row { margin-bottom: 18px; }
+.pv-error { margin-bottom: 14px; }
 </style>
