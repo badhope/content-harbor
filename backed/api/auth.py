@@ -134,9 +134,14 @@ def attach_auth_middleware(app: FastAPI) -> None:
     @app.middleware("http")
     async def _auth(request: Request, call_next):
         token = _api_token()
+        # 常量时间比较：`!=` 会按首个不同字节提前返回，攻击者可用响应时间
+        # 逐字节猜 token（经典时序侧信道）。hmac.compare_digest 与内容无关。
+        import hmac as _hmac
+        supplied = request.headers.get("X-API-Token") or ""
+        token_ok = bool(token) and bool(supplied) and _hmac.compare_digest(supplied, token)
         if token and not is_trusted(request) \
                 and request.url.path.rstrip("/") not in _PUBLIC_PATHS \
-                and request.headers.get("X-API-Token") != token:
+                and not token_ok:
             # 中间件层抛 HTTPException 不走 FastAPI 异常处理器，会退化成 500；
             # 必须直接返回 JSONResponse（审计 B4）。
             from fastapi.responses import JSONResponse

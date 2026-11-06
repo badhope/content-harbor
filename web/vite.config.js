@@ -44,8 +44,15 @@ export default defineConfig(({ command }) => ({
   },
 
   server: {
+    // 后端端口可配置：写死 8000 时，用户改端口（8000 被占是常态）
+    // 就得改源码，属于"文档没写、但一定会踩"的坑。
+    // 用法：HARBOR_API_PORT=8021 pnpm dev
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true }
+      '/api': {
+        target: process.env.HARBOR_API_URL
+          || `http://127.0.0.1:${process.env.HARBOR_API_PORT || 8000}`,
+        changeOrigin: true
+      }
     }
   }
 }))

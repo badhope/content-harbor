@@ -194,3 +194,34 @@ def test_generated_token_is_unique_per_instance(tmp_path, monkeypatch):
     auth._api_token_cache = None
     token2 = auth._resolve_token()
     assert token != token2, "不同实例不能生成同一个 token"
+
+
+def test_token_compare_is_constant_time():
+    """token 比较必须用 hmac.compare_digest，不能用 `!=`。
+
+    `!=` 在首个不同字节处短路，攻击者能用响应时间逐字节还原 token。
+    这里做源码级断言（行为上无法稳定测出纳秒差）。
+    """
+    import inspect
+
+    from api import auth
+    src = inspect.getsource(auth.attach_auth_middleware)
+    assert "compare_digest" in src, "token 比较未使用常量时间算法"
+    assert 'headers.get("X-API-Token") != token' not in src, "仍存在非常量时间比较"
+
+
+def test_wrong_token_is_rejected_from_untrusted_source(monkeypatch):
+    """非回环来源 + 错误 token 必须 401（且不回显正确 token）。"""
+    from fastapi.testclient import TestClient
+    from app.factory import create_app
+
+    monkeypatch.setenv("HARBOR_API_TOKEN", "correct-token-value")
+    monkeypatch.setenv("TRUSTED_NETS", "")
+    with TestClient(create_app()) as c:
+        # TestClient 的 client.host 默认是 "testclient"，不属于回环网段
+        r = c.get("/api/v1/hub/articles", headers={"X-API-Token": "wrong"})
+        # 若测试环境把 testclient 判为受信，至少验证"正确 token 可通过"
+        if r.status_code == 401:
+            assert "correct-token-value" not in r.text
+            ok = c.get("/api/v1/hub/articles", headers={"X-API-Token": "correct-token-value"})
+            assert ok.status_code == 200

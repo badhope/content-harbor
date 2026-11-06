@@ -18,6 +18,7 @@ class ResponseCode(Enum):
     RESOURCE_NOT_FOUND = (404, "资源不存在")
     METHOD_NOT_ALLOWED = (405, "方法不允许")
     CONFLICT = (409, "资源冲突")
+    PAYLOAD_TOO_LARGE = (413, "请求体过大")
     VALIDATION_ERROR = (422, "数据验证失败")
     TOO_MANY_REQUESTS = (429, "请求过于频繁")
     

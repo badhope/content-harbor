@@ -85,14 +85,25 @@ def setup_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-        if exc.status_code == 404:
-            response_code = ResponseCode.NOT_FOUND
-        elif exc.status_code == 405:
-            response_code = ResponseCode.METHOD_NOT_ALLOWED
-        elif exc.status_code >= 500:
+        # 逐状态码映射：直接 raise HTTPException(413, ...) 的地方如果不映射，
+        # 会被统一归成 400，客户端拿到 "请求参数错误"，完全看不出是体积超限。
+        _MAPPING = {
+            400: ResponseCode.BAD_REQUEST,
+            401: ResponseCode.UNAUTHORIZED,
+            403: ResponseCode.FORBIDDEN,
+            404: ResponseCode.NOT_FOUND,
+            405: ResponseCode.METHOD_NOT_ALLOWED,
+            409: ResponseCode.CONFLICT,
+            413: ResponseCode.PAYLOAD_TOO_LARGE,
+            422: ResponseCode.VALIDATION_ERROR,
+            429: ResponseCode.TOO_MANY_REQUESTS,
+            502: ResponseCode.BAD_GATEWAY,
+            503: ResponseCode.SERVICE_UNAVAILABLE,
+        }
+        if exc.status_code >= 500:
             response_code = ResponseCode.INTERNAL_SERVER_ERROR
         else:
-            response_code = ResponseCode.BAD_REQUEST
+            response_code = _MAPPING.get(exc.status_code, ResponseCode.BAD_REQUEST)
         body = ErrorResponse(
             code=response_code.code,
             message=str(exc.detail) if exc.detail else response_code.message,
