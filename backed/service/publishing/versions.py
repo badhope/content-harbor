@@ -45,6 +45,11 @@ def _md_hash(title, content_md, summary):
         f"{title}\n{content_md}\n{summary}".encode("utf-8")).hexdigest()
 
 
+# 每篇文章保留的版本数。30 对"回滚误改"够用；再多也翻不到，
+# 却要一直占着全文副本（每版含完整 content_md）。
+VERSION_KEEP = 30
+
+
 def capture(conn, article, change_kind="edit", change_note="", created_by="human"):
     """在修改 article 之前快照一份旧版本。
 
@@ -73,6 +78,10 @@ def capture(conn, article, change_kind="edit", change_note="", created_by="human
          article.get("summary", ""), article.get("tags", ""),
          h, change_kind, change_note, time.time(), created_by))
     conn.commit()
+    # 捕获后立即裁剪：prune_versions 此前只有测试在调，生产代码从不调——
+    # 实测连续编辑 40 次留下 40 个完整正文副本，长期使用会让库无限膨胀。
+    # 每次捕获都是"刚新增一条"，正是裁剪的最佳时机（摊销成本 O(1) 次删除）。
+    prune_versions(conn, article["id"], keep=VERSION_KEEP)
     return cur.lastrowid
 
 

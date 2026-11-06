@@ -208,6 +208,8 @@ export const api = {
   mediaIngest: (url) => http.post('/media/ingest', { url }),
   mediaList: (limit = 100) => http.get('/media', { params: { limit } }),
   mediaStats: () => http.get('/media/stats'),
+  mediaOrphans: () => http.get('/media/orphans'),
+  mediaPurgeOrphans: () => http.post('/media/orphans/purge?dry_run=false'),
 
   // ---------------- 导入（本地 Markdown / 网页 URL） ----------------
   importArticle: (body) => http.post('/articles/import', body),

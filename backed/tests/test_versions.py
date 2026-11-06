@@ -109,3 +109,37 @@ def test_prune_versions_keeps_recent(conn):
     rows = versions.list_versions(conn, art["id"], limit=100)
     assert len(rows) == 30
     assert rows[0]["content_md"] == "v39"   # 最新保留
+
+
+def test_capture_auto_prunes_old_versions(conn):
+    """捕获版本后必须自动裁剪。
+
+    回归：prune_versions 只有测试在调，生产代码从不调——实测连续编辑 40 次
+    留下 40 个完整正文副本，长期使用会让数据库无限膨胀。
+    """
+    from service.publishing import db as db_mod, versions
+
+    aid = db_mod.create_article(conn, "裁剪测试", "v0")
+    for i in range(1, 36):
+        art = dict(conn.execute(
+            "SELECT * FROM articles WHERE id=?", (aid,)).fetchone())
+        versions.capture(conn, art, change_kind="edit")
+        db_mod.update_article(conn, aid, content_md=f"v{i}")
+
+    rows = conn.execute(
+        "SELECT COUNT(*) AS n FROM version_history WHERE article_id=?", (aid,)).fetchone()
+    assert rows["n"] <= versions.VERSION_KEEP, f"版本未裁剪: {rows['n']}"
+
+
+def test_newest_version_survives_pruning(conn):
+    """裁剪只能删最老的，最新一条必须留着（否则回滚到最近状态就没了）。"""
+    from service.publishing import db as db_mod, versions
+
+    aid = db_mod.create_article(conn, "顺序测试", "v0")
+    for i in range(1, 36):
+        art = dict(conn.execute("SELECT * FROM articles WHERE id=?", (aid,)).fetchone())
+        versions.capture(conn, art, change_kind="edit")
+        db_mod.update_article(conn, aid, content_md=f"v{i}")
+
+    latest = versions.list_versions(conn, aid, limit=1)[0]
+    assert latest["content_md"] == "v34", f"最新版本被误删或内容错: {latest['content_md']}"

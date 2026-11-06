@@ -75,11 +75,24 @@ class BrowserPoolManager:
                         self._pool[key] = br
                         self._pool_order.append(key)
                         while len(self._pool_order) > self.POOL_MAX:
-                            old = self._pool_order.pop(0)
-                            victim = self._pool.pop(old, None)
+                            # 跳过正在被使用的 key：它的 _busy 锁已被占用，
+                            # 现在 close 掉会让对方正在跑的发布直接 Target closed。
+                            # 以前只看 LRU 顺序、不看占用，并发超过 POOL_MAX 个
+                            # 平台时必然误杀（实测并发 5 个 key 就会触发）。
+                            victim_key = None
+                            for cand in list(self._pool_order):
+                                lock = self._busy.get(cand)
+                                if lock is None or not lock.locked():
+                                    victim_key = cand
+                                    break
+                            if victim_key is None:
+                                # 所有实例都在用：本次不淘汰，宁可暂时超限
+                                break
+                            self._pool_order.remove(victim_key)
+                            victim = self._pool.pop(victim_key, None)
                             if victim:
-                                ev, owner = self._mark_closing(old)
-                                victims.append((old, victim, ev, owner))
+                                ev, owner = self._mark_closing(victim_key)
+                                victims.append((victim_key, victim, ev, owner))
             if wait_ev is not None:
                 # 同 key 的旧实例还在关：等它关完再重试，避免 profile 被占用
                 wait_ev.wait()

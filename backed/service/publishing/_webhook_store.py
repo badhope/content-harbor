@@ -26,11 +26,24 @@ _DB_PATH = _default_db_path()
 
 
 def _conn():
+    """独立连接（仅用于没有共享连接可用的场景）。
+
+    busy_timeout 与主库 db.connect 保持一致（30s）：此前写 5000，是主库的
+    1/6。并发写入时（API 线程 + webhook 派发线程 + 测试）5 秒就放弃，
+    直接抛 sqlite3.OperationalError: database is locked——实测复现。
+    """
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     c = _sql.connect(str(_DB_PATH), timeout=30)
     c.execute("PRAGMA journal_mode=WAL")
-    c.execute("PRAGMA busy_timeout=5000")
+    c.execute("PRAGMA busy_timeout=30000")
     return c
+
+
+def _use(conn=None):
+    """返回 (连接, 是否自建，需要在结束时关闭)。"""
+    if conn is not None:
+        return conn, False
+    return _conn(), True
 
 
 def init(conn=None):
@@ -61,10 +74,10 @@ def init(conn=None):
             c.close()
 
 
-def register(url, events=None, secret="", enabled=True):
+def register(url, events=None, secret="", enabled=True, conn=None):
     """注册一个 webhook（secret 加密落库）。返回 id。"""
-    init()
-    c = _conn()
+    init(conn)
+    c, own = _use(conn)
     encrypted_secret = crypto.encrypt(secret) if secret else ""
     events_json = json.dumps(events or ["*"], ensure_ascii=False)
     cur = c.execute(
@@ -72,18 +85,20 @@ def register(url, events=None, secret="", enabled=True):
         (url, encrypted_secret, events_json, 1 if enabled else 0))
     c.commit()
     wid = cur.lastrowid
-    c.close()
+    if own:
+        c.close()
     return wid
 
 
-def list_all():
+def list_all(conn=None):
     """查询所有 webhook（secret 不返回实际值，仅返回 has_secret）。"""
-    init()
-    c = _conn()
+    init(conn)
+    c, own = _use(conn)
     rows = c.execute(
         "SELECT id, url, secret, events, enabled, created_at, last_triggered, fail_count "
         "FROM webhooks ORDER BY id").fetchall()
-    c.close()
+    if own:
+        c.close()
     result = []
     for r in rows:
         evts = json.loads(r[3]) if r[3] else ["*"]
@@ -99,7 +114,8 @@ def list_all():
 
 def update(wid, **kw):
     """更新 webhook。只接受 url/secret/events/enabled 四个字段。"""
-    init()
+    conn = kw.pop("conn", None)
+    init(conn)
     allowed = {"url", "secret", "events", "enabled"}
     sets, vals = [], []
     for k, v in kw.items():
@@ -116,22 +132,26 @@ def update(wid, **kw):
     if not sets:
         return False
     vals.append(wid)
-    c = _conn()
-    c.execute(f"UPDATE webhooks SET {','.join(sets)} WHERE id=?", vals)
+    c, own = _use(conn)
+    cur = c.execute(f"UPDATE webhooks SET {','.join(sets)} WHERE id=?", vals)
     c.commit()
-    ok = c.total_changes > 0
-    c.close()
+    # 必须用 rowcount 而不是 total_changes：total_changes 是连接级累计值，
+    # 共享连接下永远 > 0，于是"更新不存在的 id"也会返回成功（实测 200 而非 404）。
+    ok = cur.rowcount > 0
+    if own:
+        c.close()
     return ok
 
 
-def delete(wid):
+def delete(wid, conn=None):
     """删除 webhook。返回 True/False。"""
-    init()
-    c = _conn()
-    c.execute("DELETE FROM webhooks WHERE id=?", (wid,))
+    init(conn)
+    c, own = _use(conn)
+    cur = c.execute("DELETE FROM webhooks WHERE id=?", (wid,))
     c.commit()
-    ok = c.total_changes > 0
-    c.close()
+    ok = cur.rowcount > 0
+    if own:
+        c.close()
     return ok
 
 

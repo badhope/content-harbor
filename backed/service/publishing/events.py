@@ -89,14 +89,14 @@ def emit(event_type, data=None):
 
 # ---------------- Webhook CRUD（代理） -----------------
 
-def register_webhook(url, events=None, secret="", enabled=True):
-    """注册 webhook。"""
-    return _wh.register(url, events, secret, enabled)
+def register_webhook(url, events=None, secret="", enabled=True, conn=None):
+    """注册 webhook。conn 为共享连接时复用它，避免与主连接争抢写锁。"""
+    return _wh.register(url, events, secret, enabled, conn=conn)
 
 
-def list_webhooks():
+def list_webhooks(conn=None):
     """列出所有 webhook。"""
-    return _wh.list_all()
+    return _wh.list_all(conn=conn)
 
 
 def update_webhook(wid, **kw):
@@ -104,9 +104,9 @@ def update_webhook(wid, **kw):
     return _wh.update(wid, **kw)
 
 
-def delete_webhook(wid):
+def delete_webhook(wid, conn=None):
     """删除 webhook。"""
-    return _wh.delete(wid)
+    return _wh.delete(wid, conn=conn)
 
 
 # ---------------- 异步 Webhook 派发 -----------------

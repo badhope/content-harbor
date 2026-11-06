@@ -23,6 +23,9 @@
           <el-tab-pane label="标签治理" name="tags" lazy>
             <TagsPanel />
           </el-tab-pane>
+          <el-tab-pane label="媒体库" name="media" lazy>
+            <MediaPanel />
+          </el-tab-pane>
           <el-tab-pane label="外观" name="appearance" lazy>
             <div class="appearance-panel">
               <div class="ap-row">
@@ -64,6 +67,7 @@ import AccountsPanel from '@/components/settings/AccountsPanel.vue'
 import SchedulesPanel from '@/components/settings/SchedulesPanel.vue'
 import WebhooksPanel from '@/components/settings/WebhooksPanel.vue'
 import TagsPanel from '@/components/settings/TagsPanel.vue'
+import MediaPanel from '@/components/settings/MediaPanel.vue'
 import { getApiToken, setApiToken } from '@/api'
 import { useHubStore } from '@/stores/hub'
 import { getTheme, setTheme } from '@/composables/useTheme'

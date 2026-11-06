@@ -246,8 +246,10 @@ def test_auth_snapshot_is_permission_restricted(tmp_path, monkeypatch):
         assert mode & 0o077 == 0, f"其他用户仍可读: {oct(mode)}"
     else:
         import subprocess
-        proc = subprocess.run(["icacls", str(f)], capture_output=True, text=True)
-        out = proc.stdout or ""
+        # Windows 中文系统的 icacls 输出是 GBK，text=True 默认按 locale 解码，
+        # 有时仍会撞上无法解码的字节（实测 UnicodeDecodeError 打挂整个测试）。
+        proc = subprocess.run(["icacls", str(f)], capture_output=True)
+        out = (proc.stdout or b"").decode("utf-8", errors="replace")
         # 收紧后不应再出现 Users / Everyone / Authenticated Users
         for other in (r"BUILTIN\Users", "Everyone", r"NT AUTHORITY\Authenticated Users"):
             assert other not in out, f"ACL 仍包含 {other}: {out}"

@@ -91,3 +91,32 @@ def _isolate_config_json(tmp_path, monkeypatch):
     cfg.write_text("{}", encoding="utf-8")
     monkeypatch.setenv("HARBOR_CONFIG_FILE", str(cfg))
     yield cfg
+
+
+@pytest.fixture
+def client():
+    """共享 TestClient（带完整应用装配）。
+
+    必须重置 Hub 单例：`api.deps._hub_instance` 是进程级全局，上一个测试
+    留下的 Hub（连着已关闭/已迁移的库）会被下一个测试直接复用，
+    表现为随机 500 或 database is locked。每次建 client 前先清空并
+    在结束后再清一次。
+    """
+    from fastapi.testclient import TestClient
+
+    import api.deps as deps
+    from app.factory import create_app
+
+    def _reset():
+        hub = getattr(deps, "_hub_instance", None)
+        if hub is not None:
+            try:
+                hub.close_all()
+            except Exception:
+                pass
+        deps._hub_instance = None
+
+    _reset()
+    with TestClient(create_app()) as c:
+        yield c
+    _reset()

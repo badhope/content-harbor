@@ -70,6 +70,77 @@ def _ensure_table(conn):
         pass
 
 
+class ScheduleExpressionError(ValueError):
+    """调度表达式非法。创建时就抛，而不是排到 24 小时后静默失败。"""
+
+
+def validate_schedule_expr(schedule_type: str, schedule_expr: str) -> str:
+    """校验并规范化调度表达式；非法直接抛 ScheduleExpressionError。
+
+    为什么要独立一个严格入口：`_calc_next_run` 的兜底逻辑（解析失败延后
+    1h/24h）是为了**运行时**不中断调度器，但它把"用户配错了"这件事彻底
+    藏了起来——实测传 `not a cron` / `99 99 99 99 99` / 空串都能创建成功，
+    任务被排到 24 小时后，用户永远等不到、也看不到任何报错。
+    创建/更新时先过这里，把错误当场还给用户。
+    """
+    stype = (schedule_type or "").strip() or "once"
+    expr = (schedule_expr or "").strip()
+
+    if stype == "once":
+        if not expr:
+            # 空表达式 = 立即执行一次（"现在就发"的语义）。这是既有的默认
+            # 行为，保留；只有**给了表达式但格式错**才拒绝。
+            return expr
+        for fmt in ("%Y-%m-%d %H:%M", "%H:%M"):
+            try:
+                datetime.strptime(expr, fmt)
+                return expr
+            except ValueError:
+                continue
+        raise ScheduleExpressionError(
+            f"once 格式应为 YYYY-MM-DD HH:MM 或 HH:MM，收到 {expr!r}")
+
+    if stype == "daily":
+        m = re.match(r"^(\d{1,2}):(\d{2})$", expr)
+        if not m:
+            raise ScheduleExpressionError(f"daily 格式应为 HH:MI（如 09:30），收到 {expr!r}")
+        h, mi = int(m.group(1)), int(m.group(2))
+        if not (0 <= h <= 23 and 0 <= mi <= 59):
+            raise ScheduleExpressionError(f"daily 时间越界：{expr}（小时 0-23，分钟 0-59）")
+        return expr
+
+    if stype == "weekly":
+        m = re.match(r"^([1-7])-(\d{1,2}):(\d{2})$", expr)
+        if not m:
+            raise ScheduleExpressionError(
+                f"weekly 格式应为 周几-HH:MI（如 1-08:30，1=周一…7=周日），收到 {expr!r}")
+        h, mi = int(m.group(2)), int(m.group(3))
+        if not (0 <= h <= 23 and 0 <= mi <= 59):
+            raise ScheduleExpressionError(f"weekly 时间越界：{expr}（小时 0-23，分钟 0-59）")
+        return expr
+
+    if stype == "cron":
+        if not expr:
+            raise ScheduleExpressionError("cron 需要 5 段表达式，如 '0 9 * * *'")
+        if _croniter is not None:
+            try:
+                _croniter(expr, datetime.now()).get_next(datetime)
+                return expr
+            except Exception as e:
+                raise ScheduleExpressionError(
+                    f"cron 表达式非法：{expr!r}（{type(e).__name__}）。"
+                    f"需要 5 段：分 时 日 月 周，例如 '0 9 * * 1-5'") from e
+        # 无 croniter 时用内置解析器试算一次
+        try:
+            _cron_next(expr, datetime.now())
+            return expr
+        except Exception as e:
+            raise ScheduleExpressionError(f"cron 表达式非法：{expr!r}") from e
+
+    raise ScheduleExpressionError(
+        f"未知调度类型 {stype!r}，可选 once / daily / weekly / cron")
+
+
 def _calc_next_run(schedule_type: str, schedule_expr: str, base: float = None) -> float:
     """根据调度类型 + 表达式，计算下一次执行的时间戳。
 
@@ -308,6 +379,8 @@ class Scheduler:
                schedule_type="once", schedule_expr="", title=""):
         """创建定时任务。自动计算 next_run。"""
         now = time.time()
+        # 先严格校验：非法表达式当场报错，不排进调度表
+        schedule_expr = validate_schedule_expr(schedule_type, schedule_expr)
         # 表达式为空也交给 _calc_next_run：它有 +1h 兜底，返回非空。
         # 原先写成 `if schedule_expr else None`，结果是建出一条 next_run=NULL
         # 的僵尸任务——_tick 明确过滤 NULL，它永远不会执行也没人报错。
@@ -354,6 +427,10 @@ class Scheduler:
                 return False
             st = kw.get("schedule_type", cur_row["schedule_type"])
             se = kw.get("schedule_expr", cur_row["schedule_expr"]) or ""
+            # 注意是"合并后"的整体校验：只改 type 不改 expr 时（比如
+            # daily 的 "09:30" 改成 cron），旧表达式对新类型可能非法，
+            # 不校验就会排出一个 24 小时后的假 next_run。
+            validate_schedule_expr(st, se)
             kw["next_run"] = _calc_next_run(st, se)
         kw["updated_at"] = time.time()
         sets = ", ".join(f"{k}=?" for k in kw)

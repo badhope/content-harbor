@@ -684,12 +684,21 @@ def update_task(conn, task_id, **kw):
 
 
 def prune_tasks(conn, keep=200):
-    """tasks 表只留最近 keep 条（含全部 waiting_human），防无限膨胀。"""
+    """tasks 表只留最近 keep 条已完成任务，防无限膨胀。
+
+    只清**终态**（ok/failed）与长期不动的 pending；waiting_human 与人正在
+    处理的 pending 一律保留。
+
+    回归：旧实现 `status != 'waiting_human'` 会把积压的 pending 也删掉——
+    任务多到超过 200 条上限时，排在后面的待执行任务静默消失，用户既没看到
+    报错，任务也再不会跑。
+    """
     try:
-        conn.execute("""DELETE FROM tasks WHERE status != 'waiting_human'
-                        AND id NOT IN (SELECT id FROM tasks
-                                       WHERE status != 'waiting_human'
-                                       ORDER BY id DESC LIMIT ?)""", (keep,))
+        conn.execute("""DELETE FROM tasks
+                        WHERE status IN ('ok', 'failed')
+                          AND id NOT IN (SELECT id FROM tasks
+                                         WHERE status IN ('ok', 'failed')
+                                         ORDER BY id DESC LIMIT ?)""", (keep,))
         conn.commit()
     except Exception:
         pass

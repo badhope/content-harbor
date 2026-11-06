@@ -455,3 +455,57 @@ def stats(conn) -> dict:
         "SELECT COUNT(*) c, COALESCE(SUM(bytes),0) b FROM media_assets").fetchone()
     return {"count": row["c"], "bytes": row["b"], "root": str(media_root()),
             "public_base": public_base() or "(未配置 PUBLIC_BASE_URL，图片不会改写)"}
+
+
+def find_orphans(conn):
+    """找出没有被任何文章引用的媒体资产。
+
+    为什么要它：这个模块只有"入库"没有"出库"。删掉一篇文章后，它的配图
+    仍永久占用磁盘，用户既看不到（列表里没入口）也删不掉——实测媒体目录
+    只增不减。这里做只读扫描，删除动作交给 ``purge_orphans`` 显式触发。
+    """
+    ensure_schema(conn)
+    rows = conn.execute("SELECT * FROM media_assets ORDER BY created_at").fetchall()
+    if not rows:
+        return []
+
+    # 一次性把全部正文捞出来，避免每个资产查一次库（N+1）
+    articles = conn.execute(
+        "SELECT content_md, cover FROM articles").fetchall()
+    haystack = "\n".join(
+        f"{a['content_md'] or ''}\n{a['cover'] or ''}" for a in articles)
+
+    orphans = []
+    for row in rows:
+        sha = row["sha256"]
+        # 只认完整 hash 出现，避免 sha 前缀误判（内容寻址 URL 里是完整 64 位）
+        if sha in haystack:
+            continue
+        orphans.append(dict(row))
+    return orphans
+
+
+def purge_orphans(conn, dry_run=False):
+    """删除未引用的媒体资产（数据库行 + 磁盘文件）。
+
+    ``dry_run=True`` 只统计不删。返回 ``{count, bytes, deleted, errors, dry_run}``。
+    """
+    ensure_schema(conn)
+    orphans = find_orphans(conn)
+    total_bytes = sum(int(o.get("bytes") or 0) for o in orphans)
+    result = {"count": len(orphans), "bytes": total_bytes,
+              "deleted": 0, "errors": 0, "dry_run": bool(dry_run)}
+    if dry_run or not orphans:
+        return result
+
+    for asset in orphans:
+        try:
+            path = asset_path(asset)
+            if path.is_file():
+                path.unlink()
+            conn.execute("DELETE FROM media_assets WHERE sha256=?", (asset["sha256"],))
+            result["deleted"] += 1
+        except OSError:
+            result["errors"] += 1
+    conn.commit()
+    return result

@@ -38,9 +38,15 @@ def schedules_list(include_disabled: bool = False):
 
 @router.post("/schedules")
 def schedules_create(body: ScheduleIn):
-    sid = get_hub().scheduler.create(
-        body.article_id, body.platforms, body.account, body.draft_only,
-        body.schedule_type, body.schedule_expr, body.title)
+    from service.publishing.scheduler import ScheduleExpressionError
+    try:
+        sid = get_hub().scheduler.create(
+            body.article_id, body.platforms, body.account, body.draft_only,
+            body.schedule_type, body.schedule_expr, body.title)
+    except ScheduleExpressionError as e:
+        # 非法表达式必须当场 422：此前不校验，任务被静默排到 24 小时后，
+        # 用户既等不到执行，也看不到任何错误。
+        raise HTTPException(422, str(e)) from e
     return {"id": sid, **get_hub().scheduler.get(sid)}
 
 
@@ -54,8 +60,12 @@ def schedules_get(sid: int):
 
 @router.put("/schedules/{sid}")
 def schedules_update(sid: int, body: SchedulePatch):
+    from service.publishing.scheduler import ScheduleExpressionError
     data = {k: v for k, v in body.model_dump().items() if v is not None}
-    ok = get_hub().scheduler.update(sid, **data)
+    try:
+        ok = get_hub().scheduler.update(sid, **data)
+    except ScheduleExpressionError as e:
+        raise HTTPException(422, str(e)) from e
     if not ok:
         raise HTTPException(404, "定时任务不存在")
     return {"ok": True, **get_hub().scheduler.get(sid)}

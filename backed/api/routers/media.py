@@ -81,6 +81,30 @@ def media_stats():
     return out
 
 
+@router.get("/media/orphans")
+def media_orphans():
+    """未被任何文章引用的媒体资产（预览用，不删）。"""
+    from service.publishing import media
+    orphans = media.find_orphans(get_hub().conn)
+    return {
+        "count": len(orphans),
+        "bytes": sum(int(o.get("bytes") or 0) for o in orphans),
+        "items": [{"sha256": o["sha256"], "bytes": o.get("bytes", 0),
+                   "source": o.get("source", "")} for o in orphans],
+    }
+
+
+@router.post("/media/orphans/purge")
+def media_purge_orphans(dry_run: bool = False):
+    """清理未引用的媒体资产。
+
+    这个模块此前只有"入库"没有"出库"：删掉文章后配图永久占盘且无入口清理。
+    默认 dry_run，显式传 dry_run=false 才真删。
+    """
+    from service.publishing import media
+    return media.purge_orphans(get_hub().conn, dry_run=dry_run)
+
+
 # 注意：/media/{sha}{ext} 必须最后声明，否则会把 /media/stats 当产物名匹配
 @router.get("/media/{name}", include_in_schema=False)
 def media_file(name: str):

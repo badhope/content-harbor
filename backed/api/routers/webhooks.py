@@ -91,14 +91,17 @@ def _validate_webhook_url(url: str, allow_private: bool = False) -> str:
 @router.get("/webhooks")
 def webhooks_list():
     from service.publishing import events as evt_mod
-    return evt_mod.list_webhooks()
+    from ..deps import get_hub
+    return evt_mod.list_webhooks(conn=get_hub().conn)
 
 
 @router.post("/webhooks")
 def webhooks_create(body: WebhookIn):
     from service.publishing import events as evt_mod
     _validate_webhook_url(body.url, body.allow_private)
-    wid = evt_mod.register_webhook(body.url, body.events, body.secret, body.enabled)
+    from ..deps import get_hub
+    wid = evt_mod.register_webhook(body.url, body.events, body.secret, body.enabled,
+                                   conn=get_hub().conn)
     return {"id": wid, "message": "Webhook 注册成功"}
 
 
@@ -111,7 +114,8 @@ def webhooks_update(wid: int, body: WebhookIn):
         _validate_webhook_url(data["url"], data.pop("allow_private", False))
     else:
         data.pop("allow_private", None)
-    ok = evt_mod.update_webhook(wid, **data)
+    from ..deps import get_hub
+    ok = evt_mod.update_webhook(wid, conn=get_hub().conn, **data)
     if not ok:
         raise HTTPException(404, "Webhook 不存在")
     return {"ok": True}
@@ -120,7 +124,8 @@ def webhooks_update(wid: int, body: WebhookIn):
 @router.delete("/webhooks/{wid}")
 def webhooks_delete(wid: int):
     from service.publishing import events as evt_mod
-    ok = evt_mod.delete_webhook(wid)
+    from ..deps import get_hub
+    ok = evt_mod.delete_webhook(wid, conn=get_hub().conn)
     if not ok:
         raise HTTPException(404, "Webhook 不存在")
     return {"ok": True}

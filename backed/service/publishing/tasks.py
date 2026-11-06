@@ -48,6 +48,29 @@ def _load_result(task) -> object:
         return []
 
 
+def _failed_platforms(result):
+    """从逐平台结果里挑出显式失败的项。
+
+    兼容三种形状：
+      - list[dict]：publish/update 的 results
+      - dict 含 results 键
+      - 其它：视为没有平台级失败
+
+    只认显式 ``ok is False``：有些适配器只回 status 不带 ok，
+    用"缺失即失败"会误伤正常的成功路径。
+    """
+    items = None
+    if isinstance(result, list):
+        items = result
+    elif isinstance(result, dict):
+        inner = result.get("results")
+        if isinstance(inner, list):
+            items = inner
+    if not items:
+        return []
+    return [i for i in items if isinstance(i, dict) and i.get("ok") is False]
+
+
 class TaskManager:
     """后台任务队列。线程安全：submit/get/list/resume 可跨线程调用。"""
 
@@ -56,6 +79,11 @@ class TaskManager:
         "验证码", "captcha", "风控", "异常请求", "登录已失效",
         "需要重新登录", "滑块", "安全验证", "security check",
         "simulate", "click to verify",
+        # 未登录/凭证缺失：重试一百次也不会自己好，必须人去登录一次。
+        # 补这些之前，未登录发布会被归进"未分类错误"自动重试 1 次，
+        # 用户看到任务在 pending 与 failed 之间来回跳，却没人提示要登录。
+        "未登录", "not logged in", "login required", "未授权",
+        "凭据缺失", "缺少 token", "cookie 失效", "登录态失效",
     )
     RETRY_HINTS = (
         "超时", "timeout", "timed out", "connection", "网络",
@@ -80,9 +108,29 @@ class TaskManager:
         # 实例级覆盖，便于测试与特殊部署（0 = 立即重试）
         self.backoff_base = self.BACKOFF_BASE if backoff_base is None else backoff_base
         self.backoff_max = self.BACKOFF_MAX if backoff_max is None else backoff_max
+        # 启动时回收僵尸任务：上个进程被 kill -9 / 崩溃时，正在跑的任务
+        # 会永远停在 running（没有 finally 能执行）。不回收的话它们既不会被
+        # 重试也不会被清理，前端永远显示"执行中"。
+        self._recover_stuck_running()
         self._worker = threading.Thread(target=self._loop, daemon=True,
                                         name="task-manager")
         self._worker.start()
+
+    def _recover_stuck_running(self):
+        """把上次进程残留的 running 任务放回 pending。
+
+        只在构造时调用一次（此刻还没有本进程的任务在跑），所以不存在
+        "把正在执行的任务误判成僵尸"的窗口。
+        """
+        try:
+            cur = self.conn.execute(
+                "UPDATE tasks SET status='pending', "
+                "message='进程重启，任务已重新排队', updated_at=? "
+                "WHERE status='running'", (time.time(),))
+            if cur.rowcount:
+                self.conn.commit()
+        except Exception:   # aqg: top-level boundary（回收失败不阻断启动）
+            pass
 
     def _backoff_state(self):
         """惰性保证退避状态存在（测试会用 __new__ 直接构造实例）。"""
@@ -165,13 +213,29 @@ class TaskManager:
     # ---------------- 内部实现 ----------------
 
     def _loop(self):
+        """worker 主循环。
+
+        必须给每一轮加兜底：_run_task 内部虽然有自己的 try/except，但
+        `_next_pending` 之后的任何意外（磁盘满、SQLITE_BUSY 在 update_task
+        里抛出、json 损坏）都会冒到这里，线程一死就再也没有任务被消费——
+        所有任务永久停在 pending，且没有任何健康检查会发现。这里吞掉异常
+        并继续下一轮，让系统在单次故障后自愈。
+        """
         while not self._stop.is_set():
-            task = self._next_pending()
-            if task is None:
-                self._wake.wait(2.0)
+            try:
+                task = self._next_pending()
+                if task is None:
+                    self._wake.wait(2.0)
+                    self._wake.clear()
+                    continue
+                self._run_task(task)
+            except Exception as e:   # aqg: top-level boundary
+                # 记录但绝不退出循环：worker 是唯一消费者，退出等于系统停摆
+                import logging as _logging
+                _logging.getLogger(__name__).exception(
+                    "任务循环单轮异常（已继续）: %s", e)
+                self._wake.wait(1.0)
                 self._wake.clear()
-                continue
-            self._run_task(task)
 
     def _next_pending(self):
         with self._lock:
@@ -239,6 +303,15 @@ class TaskManager:
             if isinstance(result, (tuple, list)) and len(result) == 2 \
                     and isinstance(result[0], bool) and not result[0]:
                 raise RuntimeError(str(result[1] or "业务失败"))
+            # 逐平台结果：publish/update 返回的是 results 列表，每项带 ok 字段。
+            # 以前只认 (False, msg) 二元组，列表直接落进下面"完成"，于是
+            # 「所有平台都未登录失败」也被标成 ok 并发 publish.ok 事件——
+            # 前端与 webhook 都看到假成功，用户在平台侧什么都没有。
+            failed = _failed_platforms(result)
+            if failed:
+                raise RuntimeError(
+                    "以下平台发布失败：" + "；".join(
+                        f"{f['platform']}: {f.get('error') or '未知错误'}" for f in failed))
             db.update_task(self.conn, task_id, status="ok",
                            result=json.dumps(result, ensure_ascii=False),
                            message="完成", finished_at=time.time())

@@ -114,13 +114,31 @@ def test_task_crud_and_filters(sandbox, conn):
 
 
 def test_prune_tasks_keeps_waiting_human(sandbox, conn):
+    """prune 只清终态，绝不删 pending / waiting_human。
+
+    旧实现用 `status != 'waiting_human'` 做过滤，会把积压的 pending 一起删——
+    任务超过 keep 上限时，排在后面的待执行任务静默消失（既不跑也不报错）。
+    """
     for i in range(250):
         db.create_task(conn, f"wh{i}", "publish")
     db.update_task(conn, "wh0", status="waiting_human")
     db.prune_tasks(conn, keep=200)
     rows = db.list_tasks(conn, limit=1000)
-    assert len(rows) == 201
+    # 250 条全是 pending：一条都不该被删
+    assert len(rows) == 250, f"pending 被误删: 剩 {len(rows)}"
     assert any(r["task_id"] == "wh0" for r in rows)
+
+
+def test_prune_tasks_removes_old_terminal_only(sandbox, conn):
+    """终态任务超限才清理，且只清最老的。"""
+    for i in range(30):
+        db.create_task(conn, f"t{i}", "publish")
+        db.update_task(conn, f"t{i}", status="ok")
+    db.prune_tasks(conn, keep=10)
+    rows = db.list_tasks(conn, limit=1000)
+    assert len(rows) == 10
+    ids = {r["task_id"] for r in rows}
+    assert "t29" in ids and "t0" not in ids, "应保留最新的、删最老的"
 
 
 def test_upsert_account_conflict_updates(sandbox, conn):
