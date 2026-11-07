@@ -5,6 +5,35 @@ use std::time::Duration;
 use tauri::Manager;
 use tokio::time::sleep;
 
+/// 解析 sidecar 可执行文件的真实路径。
+///
+/// Tauri 2 的 `externalBin` 在打包后会把二进制放在**与主程序同目录**，
+/// 并去掉 target-triple 后缀。手写 `resource_dir()/binaries/<triple>.exe`
+/// 与真实布局不符，实测启动报 "系统找不到指定的路径 (os error 3)"。
+fn resolve_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."));
+    let name = if cfg!(windows) { "harbor-backend.exe" } else { "harbor-backend" };
+    let beside_exe = exe_dir.join(name);
+    if beside_exe.is_file() {
+        return beside_exe;
+    }
+    // 兜底：bundle 的 resource 目录（某些打包器会把 externalBin 放这里）
+    let resources = app.path().resource_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let in_resources = resources.join(name);
+    if in_resources.is_file() {
+        return in_resources;
+    }
+    // 最后回退到旧路径，让错误信息能指出找过哪里
+    resources.join("binaries").join(format!(
+        "harbor-backend-{}{}",
+        std::env::consts::ARCH,
+        if cfg!(windows) { ".exe" } else { "" }
+    ))
+}
+
 /// 后端实际端口，由 sidecar 写入端口文件后读取
 struct BackendPort(Mutex<Option<u16>>);
 
@@ -140,13 +169,8 @@ pub fn run() {
                     .join("backed")
                     .join("desktop_sidecar.py")
             } else {
-                // 生产模式：PyInstaller 打包后的 exe
-                app_handle
-                    .path()
-                    .resource_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join("binaries")
-                    .join("harbor-backend-x86_64-pc-windows-msvc.exe")
+                // 生产模式：PyInstaller 打包后的 sidecar（路径由 Tauri 决定）
+                resolve_sidecar_path(&app_handle)
             };
 
             // 数据目录
@@ -200,6 +224,13 @@ pub fn run() {
                         return;
                     }
                 }
+                // 说明：生产模式下 Tauri 的 externalBin 会把 sidecar 放到
+                // 与主程序同级的目录并去掉 target-triple 后缀，手写
+                // resource_dir()/binaries/<triple> 路径必然找不到（实测报
+                // os error 3）。因此生产分支改用绝对路径 + 主程序所在目录：
+                //   Windows: <install>/harbor-backend.exe
+                //   macOS:   Harbor.app/Contents/MacOS/harbor-backend
+                // 见下方 _resolve_sidecar_path()。
 
                 // 等待端口文件出现（最多 30 秒）
                 for _ in 0..300 {

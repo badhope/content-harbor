@@ -84,8 +84,17 @@ pnpm install
 pnpm run tauri dev
 ```
 
-Tauri launches the Python backend as a sidecar. **Packaging is not verified across
-platforms** — see [Known limits](#known-limits).
+For a release build, stage the sidecar under the name Tauri expects first:
+
+```bash
+uv run --project backed python scripts/stage_sidecar.py   # copies dist/ -> binaries/<triple>
+cd web && pnpm tauri build
+```
+
+Tauri launches the Python backend as a sidecar and reads its port from a handshake
+file. **Verified on Windows** (2026-11-07): `tauri build` compiles, the app starts,
+the sidecar binds a loopback port, and the data directory is created under
+`%APPDATA%`. macOS and Linux are untested — see [Known limits](#known-limits).
 
 ## Connect a platform
 
@@ -172,9 +181,12 @@ Read this before trusting any claim above.
 - **Real publishing is not regression-tested against live platform DOM.** Adapters pass
   a static contract probe; only Juejin has a captured DOM sample. Verify with a draft
   before relying on any platform.
-- **Docker and Tauri builds are unverified on this machine.** Docker daemon unavailable;
-  Tauri fails with a local linker error. The compose file and sidecar script exist but
-  have not produced a tested artifact here.
+- **Tauri is verified on Windows only.** `tauri build --no-bundle` compiles, the app
+  launches, and the sidecar serves `/api/v1/hub/health` on a loopback port
+  (2026-11-07). macOS/Linux and installer packaging (NSIS/MSI) are untested.
+- **Docker is still unverified.** The daemon is unavailable on this machine; the
+  compose file and Dockerfiles are lint-checked but have never produced a running
+  container here.
 - **No auto-update, no signed release manifest, no cross-platform installer.**
 
 ## Documentation

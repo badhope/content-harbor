@@ -83,7 +83,16 @@ pnpm install
 pnpm run tauri dev
 ```
 
-Tauri 以 sidecar 方式拉起 Python 后端。**跨平台打包尚未验证**，见「已知限制」。
+打正式包前先准备 sidecar（Tauri 要求文件带 target-triple 后缀）：
+
+```bash
+uv run --project backed python scripts/stage_sidecar.py
+cd web && pnpm tauri build
+```
+
+Tauri 以 sidecar 方式拉起 Python 后端，并通过端口握手文件发现实际端口。
+**Windows 已实测**（2026-11-07）：`tauri build` 编译通过、应用能启动、
+sidecar 绑定回环端口、数据目录建在 `%APPDATA%`。macOS 与 Linux 未测。
 
 ## 接入平台
 
