@@ -10,6 +10,7 @@ A capability row in the README is only trustworthy when it links here or has a t
 
 | Date | Version | Covers |
 |---|---|---|
+| [2026-11-08](2026-11-08-publish-settings.md) | 0.16.0-wip | Real publish on CSDN (11/12 settings) and 知乎 (3/4 settings); six silent form-filling defects on CSDN, title-prefix defect on 知乎; 掘金 and B站 recorded as platform-blocked |
 | [2026-11-07](2026-11-07-release-gates.md) | 0.15.0 | Real GitHub Pages publish + read-back (found 2 real defects), MSI/NSIS install & launch, CI root cause, Docker limitation |
 | [2026-11-04](2026-11-04-release-gates.md) | 0.13.2 | Eight gates re-run, publish-settings feature round-trip, real draft chain |
 | [2026-11-03](2026-11-03-release-gates.md) | 0.13.0 | Release gates for the repository-hygiene/versioning release |

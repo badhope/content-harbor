@@ -102,6 +102,9 @@ def test_publish_single_passes_ai_assist_and_mode(monkeypatch):
         # 这里用真实方法（纯函数，无副作用），只是把宿主换成极简 stub。
         _prepare_article_for_platform = (
             service_mod.Hub._prepare_article_for_platform)
+        # 0.16.0 把 options 组装抽成了 _publish_options（发布/更新共用）。
+        # stub 里用真实实现（纯函数，无副作用），只换宿主。
+        _publish_options = service_mod.Hub._publish_options
         # 0.15.0 起 publish_single 在成功落库后调回读验证。本用例只关心 options
         # 透传；真实方法会打网络，显式 stub 成"平台不支持"，同时锁住
         # "回读不得改变发布返回结构"这条约束。

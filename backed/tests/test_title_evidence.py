@@ -51,3 +51,22 @@ def test_short_actual_fails():
     """太短的"标题"（比如只回读到站点名）不能靠前缀规则蒙混过关。"""
     ok, _ = title_evidence(TITLE, "博客")
     assert ok is False
+
+
+@pytest.mark.parametrize("actual,why", [
+    ("(13 封私信 / 44 条消息) Harbor 全流程发布验证：知乎发布设置逐项填满 - 知乎",
+     "知乎把站内通知塞进了 <title> 前缀"),
+    ("（99+ 条未读）Harbor 全流程发布验证：知乎发布设置逐项填满 - 知乎",
+     "全角括号前缀"),
+    ("【系统通知】Harbor 全流程发布验证：知乎发布设置逐项填满_CSDN博客",
+     "方括号前缀 + 下划线后缀"),
+])
+def test_notification_prefix_is_stripped(actual, why):
+    """知乎/站内信前缀必须剥掉。
+
+    2026-11-08 真机发布知乎文章后回读判"标题不符"，肉眼一看标题完全正确，
+    只是 <title> 前面挂了 "(13 封私信 / 44 条消息)"。这类前缀每个用户都不一样
+    （数字会变），不可能靠写死字符串比对——必须按"括号包起来的前缀"识别。
+    """
+    ok, detail = title_evidence("Harbor全流程发布验证：知乎发布设置逐项填满", actual)
+    assert ok is True, f"{why} 应判一致，实际：{detail}"

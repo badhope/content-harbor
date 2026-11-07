@@ -260,7 +260,19 @@ class JuejinAdapter(PlatformAdapter):
             page.locator("button:has-text('发布')").first.click(timeout=8000)
         time.sleep(4)
 
-        # 3. 直接点"确定并发布"（草稿创建时已带 tag_ids，面板里 tag 显示正确）
+        # 2.5 发布面板逐项核对 + 补填（0.16.0）
+        # 面板项（2026-11-08 截图确认，见 docs/verification/2026-11-08-publish-settings.md）：
+        #   分类 *      —— byte-select 三选一（后端/前端/Android/iOS/人工智能/开发工具/代码人生/阅读）
+        #   添加标签 *  —— byte-select 搜索
+        #   文章封面     —— 上传
+        #   收录至专栏   —— 搜索专栏（最多三个）
+        #   创作话题     —— 搜索话题（最多一个）
+        #   编辑摘要 *   —— 100 字上限
+        # 草稿创建时 API 已带 category_id/tag_ids/cover_image/brief_content，
+        # 但"收录至专栏"和"创作话题"API 没带，必须在这个面板里补。
+        panel = self._fill_publish_panel(page, options)
+
+        # 3. 点"确定并发布"
         try:
             page.locator("button:has-text('确定并发布')").first.click(timeout=8000)
         except Exception:
@@ -284,6 +296,12 @@ class JuejinAdapter(PlatformAdapter):
                 "post_url": f"https://juejin.cn/post/{article_id}",
                 "edit_url": f"https://juejin.cn/editor/drafts/{draft_id}",
                 "draft_only": False,
+                "settings_filled": panel.get("filled", []),
+                "settings_skipped": panel.get("skipped", []),
+                "settings_failed": panel.get("failed", []),
+                "settings_detail": panel.get("detail", ""),
+                **({"warning": "发布设置未填满：" + panel["detail"]}
+                   if panel.get("failed") else {}),
             }
 
         # 5. 发布未成功——返回 draft-only（用户可手动在浏览器里完成最后一步）
@@ -292,8 +310,263 @@ class JuejinAdapter(PlatformAdapter):
             "post_url": "",
             "edit_url": f"https://juejin.cn/editor/drafts/{draft_id}",
             "draft_only": True,
+            "settings_detail": panel.get("detail", ""),
+            "settings_failed": panel.get("failed", []),
             "warning": "掘金 2026-09 版 publish API 变更，自动发布未成功，草稿已创建，请手动在浏览器里点'确定并发布'",
         }
+
+    def _fill_publish_panel(self, page, options):
+        """掘金发布面板：逐项核对 + 补填 API 带不过去的项。
+
+        面板 6 项（2026-11-08 真机截图确认，见
+        docs/verification/2026-11-08-publish-settings.md）：
+
+            分类 *      —— 八个分类按钮，选中态是 .item.active
+            添加标签 *  —— byte-select，输入关键词后下拉出 .byte-select-option
+            文章封面     —— 上传（API 的 cover_image 只吃外链，本地图必须 UI 传）
+            收录至专栏   —— byte-select，最多 3 个
+            创作话题     —— byte-select，最多 1 个
+            编辑摘要 *   —— 100 字上限
+
+        **关键教训**：草稿 API 收下了 category_id/tag_ids/cover_image，但
+        2026-11 实测下来 tag_ids 完全不渲染（面板标签栏是空的），cover_image
+        传本地路径会变成破图。所以不能信 API 返回值，必须在面板上**回读核对**，
+        缺什么补什么。
+        """
+        filled, skipped, failed = [], [], []
+        import json as _json
+
+        # ---- 1) 分类：回读选中态（.item.active）----
+        try:
+            cat = page.evaluate("""() => {
+                const el = document.querySelector('.category-list .item.active, '
+                                             + '[class*=categor] .item.active');
+                return el ? (el.innerText||'').trim() : '';
+            }""")
+            if cat:
+                filled.append(f"分类={cat}")
+            else:
+                # 没选中就点第一个（用户要求填满，分类是必填）
+                clicked = page.evaluate("""() => {
+                    const items = [...document.querySelectorAll('.category-list .item, '
+                        + '[class*=categor] .item')]
+                        .filter(e => (e.innerText||'').trim() && e.innerText.length < 12);
+                    if (items.length) { items[0].click(); return (items[0].innerText||'').trim(); }
+                    return '';
+                }""")
+                if clicked:
+                    filled.append(f"分类={clicked}(自动选)")
+                else:
+                    failed.append("分类(找不到分类按钮)")
+            time.sleep(0.5)
+        except Exception as e:
+            failed.append(f"分类({str(e)[:40]})")
+
+        # ---- 2) 添加标签：API 不可靠，直接在面板里搜 ----
+        tags = options.get("tags") or []
+        if isinstance(tags, str):
+            tags = [t.strip() for t in tags.split(",") if t.strip()]
+        picked_tags = []
+        for name in tags[:3]:
+            try:
+                ok = self._pick_tag(page, name)
+                if ok:
+                    picked_tags.append(name)
+            except Exception:
+                pass
+            time.sleep(0.8)
+        if picked_tags:
+            filled.append(f"标签={','.join(picked_tags)}")
+        elif tags:
+            failed.append(f"标签(一个都没选上：{','.join(tags[:3])})")
+        else:
+            skipped.append("标签(文章没有标签)")
+
+        # ---- 3) 文章封面 ----
+        # 掘金封面区只在"已经有封面"时才渲染预览，空态下点"上传封面"才会
+        # 冒出截图区。直接给隐藏的 `.file-input` 塞文件最稳——点击触发的是
+        # 系统文件选择器，在无头环境里会超时（实测 Timeout 8000ms）。
+        cover = (options.get("cover") or "").strip()
+        try:
+            if not cover:
+                skipped.append("文章封面(没有封面)")
+            elif cover.startswith(("http://", "https://")):
+                skipped.append("文章封面(外链封面，API 已带)")
+            else:
+                inp = page.query_selector('input.file-input')
+                if not inp:
+                    failed.append("文章封面(找不到 .file-input)")
+                else:
+                    inp.set_input_files(cover)
+                    time.sleep(5)
+                    # 轮询等预览图出现
+                    ok = False
+                    for _ in range(10):
+                        ok = page.evaluate("""() => {
+                            const imgs = [...document.querySelectorAll('img')]
+                                .filter(i => i.naturalWidth > 0
+                                          && /cover|blob|http/.test(i.src));
+                            return imgs.length > 0;
+                        }""")
+                        if ok:
+                            break
+                        time.sleep(1)
+                    (filled if ok else failed).append(
+                        "文章封面" if ok else "文章封面(上传后无预览)")
+        except Exception as e:
+            failed.append(f"文章封面({str(e)[:40]})")
+
+        # ---- 4) 收录至专栏 ----
+        column = (options.get("column") or "").strip()
+        try:
+            if not column:
+                skipped.append("收录至专栏(未指定专栏)")
+            else:
+                ok = self._pick_byte_select(page, "收录至专栏", column)
+                (filled if ok else failed).append(
+                    f"收录至专栏={column}" if ok else f"收录至专栏(没选上 {column})")
+        except Exception as e:
+            failed.append(f"收录至专栏({str(e)[:40]})")
+
+        # ---- 5) 创作话题 ----
+        topic = (options.get("topics") or "").strip()
+        try:
+            if not topic:
+                skipped.append("创作话题(未指定话题)")
+            else:
+                first = topic.split(",")[0].strip()
+                ok = self._pick_byte_select(page, "创作话题", first)
+                (filled if ok else failed).append(
+                    f"创作话题={first}" if ok else f"创作话题(没选上 {first})")
+        except Exception as e:
+            failed.append(f"创作话题({str(e)[:40]})")
+
+        # ---- 6) 编辑摘要：回读字数 ----
+        try:
+            brief = page.evaluate("""() => {
+                const ta = document.querySelector('textarea.byte-input__textarea');
+                return ta ? (ta.value||'').trim() : '';
+            }""")
+            if brief:
+                filled.append(f"摘要({len(brief)}字)")
+            else:
+                # 空就补文章标题（掘金必填）
+                filled_title = page.evaluate("""(t) => {
+                    const ta = document.querySelector('textarea.byte-input__textarea');
+                    if (!ta) return false;
+                    const s = Object.getOwnPropertyDescriptor(
+                        window.HTMLTextAreaElement.prototype, 'value').set;
+                    s.call(ta, t);
+                    ta.dispatchEvent(new Event('input', {bubbles: true}));
+                    return true;
+                }""", (options.get("summary") or "")[:100])
+                (filled if filled_title else failed).append(
+                    "摘要(自动补)" if filled_title else "摘要(空且补不上)")
+        except Exception as e:
+            failed.append(f"摘要({str(e)[:40]})")
+
+        detail = f"已填 {len(filled)} 项"
+        if skipped:
+            detail += f"，跳过 {len(skipped)}：" + "、".join(skipped)
+        if failed:
+            detail += f"，**失败 {len(failed)}**：" + "、".join(failed)
+        _ = _json   # 保留导入位置（后续可能用它序列化 payload）
+        return {"filled": filled, "skipped": skipped, "failed": failed, "detail": detail}
+
+    def _pick_tag(self, page, name):
+        """在掘金的标签选择器里搜一个标签并选中。
+
+        真实结构（2026-11-08 实测）：标签那一行的 input 是 byte-select 的
+        展示框，点开后**可以真实键入**，下拉项是 `.byte-select-option`。
+        选完会渲染成 chip，输入框恢复成占位文案。
+
+        两个必须的等待：
+          - 面板刚打开时 form-item 还没渲染，立刻找会返回"找到行但点击无效"
+          - 输入后下拉是异步请求（tag 搜索接口），2s 内到不齐
+        """
+        for attempt in range(3):
+            try:
+                opened = page.evaluate("""() => {
+                    const rows = [...document.querySelectorAll('.form-item')];
+                    for (const r of rows) {
+                        const t = (r.innerText || '').trim();
+                        if (!t.startsWith('添加标签')) continue;
+                        const inp = r.querySelector('input.byte-select__input');
+                        if (inp) {
+                            const rect = inp.getBoundingClientRect();
+                            if (rect.width < 5) continue;   // 还没布局好
+                            inp.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                }""")
+                if not opened:
+                    time.sleep(2)
+                    continue
+                time.sleep(1.2)
+                page.keyboard.type(name, delay=90)
+                # 轮询等可选项目出现（最多 8s），别用固定 sleep
+                found = False
+                for _ in range(16):
+                    time.sleep(0.5)
+                    found = page.evaluate("""(val) => {
+                        const opts = [...document.querySelectorAll('.byte-select-option')]
+                            .filter(e => e.getBoundingClientRect().height > 8);
+                        return opts.some(e => (e.innerText||'').trim().includes(val));
+                    }""", name)
+                    if found:
+                        break
+                if not found:
+                    continue
+                picked = page.evaluate("""(val) => {
+                    const opts = [...document.querySelectorAll('.byte-select-option')]
+                        .filter(e => e.getBoundingClientRect().height > 8);
+                    const target = opts.find(e => (e.innerText||'').trim() === val)
+                                || opts.find(e => (e.innerText||'').trim().includes(val));
+                    if (!target) return false;
+                    target.click();
+                    return true;
+                }""", name)
+                time.sleep(1.5)
+                if picked:
+                    return True
+            except Exception:
+                time.sleep(1.5)
+        return False
+
+    def _pick_byte_select(self, page, label_text, value):
+        """在掘金的 byte-select 里选一项（专栏 / 话题）。
+
+        按 label 文本定位到那一行，再点该行 input——全局取第一个 input 会点到
+        分类或标签。下拉项同样是 `.byte-select-option`。
+        """
+        try:
+            opened = page.evaluate("""(label) => {
+                const rows = [...document.querySelectorAll('.form-item, div')];
+                for (const r of rows) {
+                    const t = (r.innerText || '').trim();
+                    if (!t.startsWith(label) || t.length > 120) continue;
+                    const inp = r.querySelector('input.byte-select__input');
+                    if (inp) { inp.click(); return true; }
+                }
+                return false;
+            }""", label_text)
+            if not opened:
+                return False
+            time.sleep(1.5)
+            picked = page.evaluate("""(val) => {
+                const opts = [...document.querySelectorAll('.byte-select-option')]
+                    .filter(e => e.getBoundingClientRect().height > 8);
+                if (!opts.length) return false;
+                let target = opts.find(e => (e.innerText||'').trim().includes(val)) || opts[0];
+                target.click();
+                return true;
+            }""", value)
+            time.sleep(1.5)
+            return bool(picked)
+        except Exception:
+            return False
 
     # ---------------- 原地更新 ----------------
 

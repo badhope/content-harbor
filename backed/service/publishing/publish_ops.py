@@ -134,28 +134,8 @@ class PublishOpsMixin:
                 # 平台特有字段从 options 下发（标签/分类/摘要等），
                 # 各适配器自行决定用哪些、忽略哪些。
                 # 发布面板里手动设置的（settings[platform]）优先于文章字段。
-                ps = (settings or {}).get(platform) or {}
-                art_tags = [t.strip() for t in (article.get("tags") or "").split(",")
-                            if t.strip()]
-                set_tags = [t.strip() for t in (ps.get("tags") or "").split(",")
-                            if t.strip()]
-                tag_list = set_tags or art_tags
-                return ad.publish(page, article, {
-                    "draft_only": draft_only,
-                    "tags": tag_list,                 # 标签：面板设置 > 文章 tags
-                    "tag_category": tag_list[0] if tag_list else "",
-                    "category": (ps.get("category") or "").strip() or None,
-                    "summary": article.get("summary") or "",
-                    # 0.7.1 新增：发布设置面板选项（知乎话题/AI 辅助/活动等）
-                    "topics": (ps.get("topics") or "").strip(),
-                    "ai_assist": ps.get("ai_assist", False),
-                    "event": (ps.get("event") or "").strip(),
-                    "allow_comment": ps.get("allow_comment", True),
-                    # 2026-10-14 新增：知乎回答问题模式（问题链接给了就写回答而非专栏）
-                    "question_url": (ps.get("question_url") or "").strip(),
-                    # 2026-10-14 新增：发布模式（auto/assist/manual）
-                    "mode": (ps.get("mode") or "auto").strip() or "auto",
-                })
+                return ad.publish(page, article, self._publish_options(
+                    platform, article, settings, draft_only=draft_only))
             r = self._with_adapter(platform, account, _do, page_hook=page_hook)
             # 体检 B1 修复（QA 标质力 2026-09-21）：适配器返回 error 键时
             # 必须走失败分支，否则"发布未完成"会被静默记成"发布成功"
@@ -437,7 +417,49 @@ class PublishOpsMixin:
         return results
 
 
-    def update_single(self, article_id, platform, pub, article, account="default"):
+    def _publish_options(self, platform, article, settings=None,
+                         draft_only=False):
+        """把「发布设置」组装成适配器 options。发布与更新共用同一套映射。
+
+        单独抽出来的原因：更新也必须带完整设置（CSDN/知乎的更新弹窗是空的，
+        不重填就会把原有标签/专栏/封面/摘要清掉）。两处各写一份必然漂移。
+        """
+        ps = (settings or {}).get(platform) or {}
+        art_tags = [t.strip() for t in (article.get("tags") or "").split(",")
+                    if t.strip()]
+        set_tags = [t.strip() for t in (ps.get("tags") or "").split(",")
+                    if t.strip()]
+        tag_list = set_tags or art_tags
+        return {
+            "draft_only": draft_only,
+            "tags": tag_list,                 # 标签：面板设置 > 文章 tags
+            "tag_category": tag_list[0] if tag_list else "",
+            "category": (ps.get("category") or "").strip() or None,
+            "summary": (ps.get("summary") or article.get("summary") or ""),
+            "topics": (ps.get("topics") or "").strip(),
+            "ai_assist": ps.get("ai_assist", False),
+            "event": (ps.get("event") or "").strip(),
+            "allow_comment": ps.get("allow_comment", True),
+            "question_url": (ps.get("question_url") or "").strip(),
+            "mode": (ps.get("mode") or "auto").strip() or "auto",
+            "cover": (ps.get("cover") or article.get("cover") or ""),
+            "visibility": (ps.get("visibility") or "public").strip(),
+            "article_type": (ps.get("article_type") or "original").strip(),
+            "creation_statement": (ps.get("creation_statement") or "").strip(),
+            "template": (ps.get("template") or "").strip(),
+            "backup_gitcode": ps.get("backup_gitcode", False),
+            "multiplatform": ps.get("multiplatform", False),
+            "column": (ps.get("column") or "").strip(),
+            "column_publish": ps.get("column_publish", True),
+            "scheduled_at": (ps.get("scheduled_at") or "").strip(),
+        }
+
+    def _update_options(self, platform, article, settings=None):
+        """更新用的 options：内容字段与发布完全一致（不传 draft_only）。"""
+        return self._publish_options(platform, article, settings, draft_only=False)
+
+    def update_single(self, article_id, platform, pub, article, account="default",
+                      settings=None):
         """原地更新单个平台实例并完成落库（jobs/publications 记账）。
 
         演示模式：直接返回更新成功。"""
@@ -464,7 +486,13 @@ class PublishOpsMixin:
         job = db.add_job(self.conn, "update", article_id, platform)
         try:
             def _do(ad, page):
-                return ad.update(page, dict(pub), article)
+                # 把发布设置一并传下去：CSDN/知乎的更新弹窗同样是空的，不重填就会
+                # 把原有标签/专栏/封面/摘要清掉（2026-11-08 实测）。
+                try:
+                    return ad.update(page, dict(pub), article,
+                                     options=self._update_options(platform, article, settings))
+                except TypeError:
+                    return ad.update(page, dict(pub), article)
             self._with_adapter(platform, account, _do)
             db.upsert_publication(self.conn, article_id, platform, account,
                                   status="ok", last_error="",

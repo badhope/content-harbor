@@ -420,16 +420,19 @@ class ZhihuAdapter(PlatformAdapter):
                 "draft_only": True,
             }
 
+        # ---- 发布设置：必须在点「发布」**之前**填 ----
+        # 知乎的「发布设置」（封面/专栏收录/定时发布）是编辑页常驻区块，不是
+        # 点发布后弹出的浮层。旧实现放在点发布之后，那时页面已经在提交/跳转，
+        # 再去找控件必然落空——这也是为什么以前"填了但没生效"却看不出来。
+        self._fill_publish_settings(page, options)
+
         if not _click_exact(page, "发布"):
             self.verify_or_raise("发布", False,
                                  "写页上找不到「发布」按钮（不要退到「发布设置」）")
         time.sleep(3)
 
-        # ---- 发布设置面板：填话题 / AI 辅助声明 / 活动 / 评论权限 ----
-        self._fill_publish_settings(page, options)
-
-        # 填完后点「确认发布」/「发布」提交
-        # aqg: top-level boundary 确认按钮找不到不算失败（有些情况不弹面板）
+        # 点发布后可能再弹一层确认（首次发文/开通专栏等），尽力点一次
+        # aqg: top-level boundary 确认按钮找不到不算失败（有些情况不弹）
         try:
             _click_button(page, ["确认发布", "确定", "发布"], timeout=8000)
         except Exception:
@@ -454,6 +457,7 @@ class ZhihuAdapter(PlatformAdapter):
             self.save_debug(page, "zhihu_publish_stuck")
             raise
         post_id = (page.url or "").rstrip("/").split("/p/")[-1].split("?")[0]
+        settings = getattr(self, "_last_settings", None) or {}
         return {
             "post_id": post_id,
             "post_url": f"https://zhuanlan.zhihu.com/p/{post_id}",
@@ -462,6 +466,12 @@ class ZhihuAdapter(PlatformAdapter):
             # 空白编辑器，白点一次「发布」（写页主按钮就是「发布」）。
             "edit_url": f"https://zhuanlan.zhihu.com/p/{post_id}/edit",
             "draft_only": False,
+            "settings_filled": settings.get("filled", []),
+            "settings_skipped": settings.get("skipped", []),
+            "settings_failed": settings.get("failed", []),
+            "settings_detail": settings.get("detail", ""),
+            **({"warning": "发布设置未填满：" + settings["detail"]}
+               if settings.get("failed") else {}),
         }
 
     # ---------------- 回答问题（2026-10-14 新增） ----------------
@@ -574,91 +584,174 @@ class ZhihuAdapter(PlatformAdapter):
     # ---------------- 发布设置面板填写（0.7.1 新增） ----------------
 
     def _fill_publish_settings(self, page, options):
-        """点「发布」后弹出的设置面板里自动填话题/AI 辅助/活动/评论权限。
+        """填知乎「发布设置」面板——按真实结构逐项填，并逐项回报。
 
-        知乎 UI 选择器不稳定（改版就挂），所以全部 try/except 降级：
-        填不上不算失败，只是留空让用户后续手动补。
+        真实结构（2026-11-08 实测 DOM + 截图，见
+        docs/verification/2026-11-08-publish-settings.md）：
+
+            添加封面     label.UploadPicture-wrapper > input[type=file][accept=.jpeg,.jpg,.png]
+            投稿至问题   （输入框，问题链接模式用）
+            专栏收录     label.css-1is1x4f 是**单选 label**，两种文案：
+                         "发布到专栏" / "不发布到专栏"
+            定时发布     input.css-1i5t6yb type=checkbox
+
+        旧实现填的"话题/AI 辅助/活动/评论权限"在当前版本知乎页面上**一个都不存在**
+        ——那些选择器全是猜的，`except` 一包就静默跳过，用户以为填了其实没填。
+        本版按真实 DOM 重写，并且**逐项回报**，填不上就是 failed，不静默。
+
+        返回 {"filled": [...], "skipped": [...], "failed": [...], "detail": str}
         """
-        topics = (options.get("topics") or "").strip()
-        ai_assist = options.get("ai_assist", False)
-        event = (options.get("event") or "").strip()
-        allow_comment = options.get("allow_comment", True)
+        filled, skipped, failed = [], [], []
 
-        # 1) 话题：知乎发布设置里有个「参与话题」输入框，输入后下拉选
-        if topics:
-            try:
-                topic_input = page.locator(
-                    'input[placeholder*="话题"], input[placeholder*="参与"], '
-                    '[class*="topic"] input, [class*="Topic"] input'
-                ).first
-                topic_input.wait_for(timeout=5000)
-                for t in topics.split(","):
-                    t = t.strip()
-                    if not t:
-                        continue
-                    topic_input.click()
-                    topic_input.fill(t)
-                    time.sleep(1)   # 等下拉加载
-                    # 选中第一个匹配项
-                    page.locator(
-                        f'[class*="dropdown"] [class*="item"]:has-text("{t}"), '
-                        f'[class*="suggestion"]:has-text("{t}")'
-                    ).first.click(timeout=3000)
-                    time.sleep(0.5)
-                    topic_input.fill("")   # 清空以便填下一个
-                import logging
-                logging.getLogger(__name__).info("知乎发布设置：已填话题 %s", topics)
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(
-                    "知乎话题填写失败（降级跳过）: %s", str(e)[:120])
+        def rec(name, ok, why=""):
+            if ok is True:
+                filled.append(name)
+            elif ok == "skip":
+                skipped.append(f"{name}({why})" if why else name)
+            else:
+                failed.append(f"{name}({why})" if why else name)
 
-        # 2) AI 辅助创作声明：知乎 2026 新增的「AI 辅助」开关/复选框
-        if ai_assist:
-            try:
-                ai_toggle = page.locator(
-                    '[class*="ai"] [role="switch"], '
-                    'label:has-text("AI") input[type="checkbox"], '
-                    '[class*="ai-assist"] [class*="switch"], '
-                    'span:has-text("AI 辅助") ~ * input'
-                ).first
-                ai_toggle.wait_for(timeout=3000)
-                if not ai_toggle.is_checked():
-                    ai_toggle.click()
-                import logging
-                logging.getLogger(__name__).info("知乎发布设置：已勾选 AI 辅助声明")
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(
-                    "知乎 AI 辅助开关未找到（降级跳过）: %s", str(e)[:120])
+        # ---- 1) 添加封面（本地图必须真上传）----
+        cover = (options.get("cover") or "").strip()
+        try:
+            if not cover:
+                rec("添加封面", "skip", "没有封面")
+            elif cover.startswith(("http://", "https://")):
+                rec("添加封面", "skip", "外链封面，知乎要求本地上传")
+            else:
+                inp = page.locator(
+                    'label.UploadPicture-wrapper input[type=file]').first
+                if not inp.count():
+                    rec("添加封面", False, "找不到封面上传控件")
+                else:
+                    inp.set_input_files(cover)
+                    time.sleep(4)
+                    # 上传成功后 wrapper 里会出现 img（预览）
+                    ok = False
+                    for _ in range(10):
+                        ok = page.evaluate("""() => {
+                            const w = document.querySelector('.UploadPicture-wrapper');
+                            if (!w) return false;
+                            const img = w.querySelector('img') || w.parentElement.querySelector('img');
+                            return !!(img && img.src && !img.src.startsWith('data:,'));
+                        }""")
+                        if ok:
+                            break
+                        time.sleep(1)
+                    rec("添加封面", True if ok else False,
+                        "" if ok else "上传后未出现预览图")
+        except Exception as e:
+            rec("添加封面", False, str(e)[:60])
 
-        # 3) 参与活动：知乎有时有「参与活动」下拉/输入
-        if event:
-            try:
-                evt_input = page.locator(
-                    'input[placeholder*="活动"], [class*="event"] input'
-                ).first
-                evt_input.wait_for(timeout=3000)
-                evt_input.fill(event)
-                time.sleep(1)
-                page.locator(f'[class*="dropdown"]:has-text("{event}")').first.click(timeout=3000)
-                import logging
-                logging.getLogger(__name__).info("知乎发布设置：已参与活动 %s", event)
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(
-                    "知乎活动填写失败（降级跳过）: %s", str(e)[:120])
+        # ---- 2) 投稿至问题（仅在给了 question_url 时）----
+        qurl = (options.get("question_url") or "").strip()
+        try:
+            if not qurl:
+                rec("投稿至问题", "skip", "未指定问题")
+            else:
+                ok = page.evaluate("""(url) => {
+                    // 「投稿至问题」旁边的输入框：找带该文案的行，取行内 input
+                    const rows = [...document.querySelectorAll('div')];
+                    for (const r of rows) {
+                        const t = (r.innerText || '').trim();
+                        if (!t.startsWith('投稿至问题') || t.length > 200) continue;
+                        const inp = r.querySelector('input[type=text], input:not([type])');
+                        if (inp) {
+                            const s = Object.getOwnPropertyDescriptor(
+                                window.HTMLInputElement.prototype, 'value').set;
+                            s.call(inp, url);
+                            inp.dispatchEvent(new Event('input', {bubbles: true}));
+                            return true;
+                        }
+                    }
+                    return false;
+                }""", qurl)
+                time.sleep(2)
+                rec("投稿至问题", True if ok else False,
+                    "" if ok else "找不到问题输入框")
+        except Exception as e:
+            rec("投稿至问题", False, str(e)[:60])
 
-        # 4) 评论权限：不允许评论时关开关
-        if not allow_comment:
-            try:
-                page.locator('label:has-text("评论") ~ * input, [class*="comment"] [role="switch"]').first.click(timeout=3000)
-                import logging
-                logging.getLogger(__name__).info("知乎发布设置：已关闭评论")
-            except Exception:
-                pass  # 默认允许评论，找不到开关就不动
+        # ---- 3) 专栏收录 ----
+        # 真实控件：<label class="css-1is1x4f"> 里含 radio + 文案
+        # 「发布到专栏」（选了会再弹专栏选择）/「不发布到专栏」（默认）
+        want_column = bool(options.get("column_publish", True)) and bool(
+            (options.get("column") or "").strip())
+        target_text = "发布到专栏" if want_column else "不发布到专栏"
+        try:
+            ok = page.evaluate("""(txt) => {
+                const labels = [...document.querySelectorAll('label.css-1is1x4f, '
+                                 + 'label[class*=RadioButtonSet], label')];
+                for (const l of labels) {
+                    const t = (l.innerText || '').trim();
+                    // "发布到专栏" 是 "不发布到专栏" 的子串，必须精确匹配开头且排除"不"
+                    if (txt === '发布到专栏') {
+                        if (t === '发布到专栏') {
+                            l.click();
+                            const inp = l.querySelector('input');
+                            return !!(inp && inp.checked);
+                        }
+                    } else if (t === '不发布到专栏') {
+                        l.click();
+                        const inp = l.querySelector('input');
+                        return !!(inp && inp.checked);
+                    }
+                }
+                return false;
+            }""", target_text)
+            time.sleep(1.5)
+            if ok and want_column:
+                # 选了「发布到专栏」还要挑具体专栏
+                time.sleep(2)
+                picked = page.evaluate("""(name) => {
+                    const items = [...document.querySelectorAll(
+                        '[class*=Column] [class*=item], [class*=column] li, li')]
+                        .filter(e => e.getBoundingClientRect().height > 10);
+                    if (!items.length) return '';
+                    const m = items.find(e => (e.innerText||'').trim().includes(name))
+                           || items[0];
+                    m.click();
+                    return (m.innerText||'').trim().slice(0, 30);
+                }""", (options.get("column") or "").strip())
+                rec("专栏收录", True if picked else False,
+                    f"已选专栏 {picked}" if picked else "点到专栏选择但没选中具体专栏")
+                if picked:
+                    filled[-1] = f"专栏收录={picked}"
+            else:
+                rec("专栏收录", True if ok else False,
+                    "" if ok else f"没选中 {target_text}")
+        except Exception as e:
+            rec("专栏收录", False, str(e)[:60])
 
-    # ---------------- 原地更新 ----------------
+        # ---- 4) 定时发布 ----
+        # 真实控件：input.css-1i5t6yb type=checkbox。不开就保持 false；
+        # 要求定时才勾上（勾上后知乎会要求选时间，本流程不实现具体时间，故
+        # 只在用户明确给了 scheduled_at 时才勾，并如实说明需人工确认时间）。
+        sched = (options.get("scheduled_at") or "").strip()
+        try:
+            if not sched:
+                rec("定时发布", True)   # 保持关闭也是一种明确状态，不是跳过
+            else:
+                ok = page.evaluate("""() => {
+                    const cb = document.querySelector('input.css-1i5t6yb');
+                    if (!cb) return false;
+                    if (!cb.checked) cb.click();
+                    return cb.checked;
+                }""")
+                rec("定时发布", True if ok else False,
+                    "" if ok else "找不到定时开关")
+        except Exception as e:
+            rec("定时发布", False, str(e)[:60])
+
+        detail = f"已填 {len(filled)} 项"
+        if skipped:
+            detail += f"，跳过 {len(skipped)}：" + "、".join(skipped)
+        if failed:
+            detail += f"，**失败 {len(failed)}**：" + "、".join(failed)
+        self._last_settings = {"filled": filled, "skipped": skipped,
+                               "failed": failed, "detail": detail}
+        return self._last_settings
+
 
     def update(self, page, pub, article):
         self._open_editor(page, pub, "更新·打开编辑器")

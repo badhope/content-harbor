@@ -353,16 +353,31 @@ def content_evidence(target, actual, min_ratio=0.35, check_lead=True):
 
 
 def _strip_site_suffix(raw):
-    """从页面标题里剥掉站点后缀，返回候选列表（原串排第一）。
+    """从页面标题里剥掉站点后缀与前缀，返回候选列表（原串排第一）。
 
     注意必须在 `_flatten` **之前**做：flatten 会把 `_` `|` `-` 和空格全部删掉，
     剥完就看不出分隔符了（这也是第一版实现失败的原因——测试里肉眼一样的两个
-    标题判不符）。分隔符按"最像站点分隔符"的顺序尝试。
+    标题判不符）。
+
+    前后缀都要剥：
+      - 后缀：`文章标题_CSDN博客`、`标题 - 知乎`
+      - 前缀：知乎会把自己的站内通知塞进 `<title>`：
+        `(13 封私信 / 44 条消息) 文章标题 - 知乎`
+        ——2026-11-08 真机发布后回读判"标题不符"，肉眼一看标题完全正确，
+        只是前面挂了这么一串。括号包起来的前缀一律当噪声去掉。
     """
     out = [raw]
+    cleaned = raw
+    # 前缀：开头的 (xxx) / 【xxx】 / [xxx]
+    m = re.match(r"^\s*[\(（\[【][^\)）\]】]{0,40}[\)）\]】]\s*", cleaned)
+    if m:
+        cleaned = cleaned[m.end():]
+        if cleaned and cleaned not in out:
+            out.append(cleaned)
+    # 后缀：站点名
     for sep in ("_", " | ", " - ", " — ", " – ", "|", "-", "·"):
-        if sep in raw:
-            head = raw.split(sep, 1)[0]
+        if sep in cleaned:
+            head = cleaned.split(sep, 1)[0]
             if head and head not in out:
                 out.append(head)
     return out
@@ -546,13 +561,18 @@ class PlatformAdapter:
             return {"supported": True, "found": False,
                     "detail": "页面正文为空或过短（可能未渲染/被墙/需要登录）",
                     "url": cur}
+        # 标题优先取 <h1>：文章页的 h1 就是文章标题，干净；
+        # <title> 常带站点后缀甚至站内通知前缀（知乎实测 "(13 封私信 / 44 条消息) 标题 - 知乎"）。
         title = ""
         try:
-            title = page.title() or ""
+            title = (self.read_text(page, "h1") or "").strip()
         except Exception:
             title = ""
         if not title:
-            title = self.read_text(page, "h1")
+            try:
+                title = page.title() or ""
+            except Exception:
+                title = ""
         return {"supported": True, "found": True, "title": title,
                 "body": body, "url": cur, "detail": ""}
 
