@@ -76,10 +76,41 @@ class DevToAdapter(PlatformAdapter):
     id = "devto"
     name = "Dev.to"
     needs_browser = False
+    readback_mode = "api"
 
     home_url = "https://dev.to/"
     login_url = "https://dev.to/enter"
     list_url = "https://dev.to/dashboard"
+
+    def read_back(self, pub: dict, article: dict = None) -> dict:
+        """回读：GET /api/articles/{id} 拿平台侧真实标题与正文。
+
+        这是结果级证据——比 publish 返回的 201 更硬，因为它是**再查一次**平台上
+        现在有什么。draft 文章用 /articles/{id} 也能读到（作者本人 token）。
+        """
+        pid = (pub or {}).get("post_id") or ""
+        if not pid:
+            return {"supported": True, "found": False, "detail": "缺 post_id，无法回读"}
+        try:
+            r = requests.get(f"{API_BASE}/articles/{pid}", headers=_headers(),
+                             timeout=TIMEOUT)
+        except Exception as e:
+            return {"supported": True, "found": False,
+                    "detail": f"回读请求失败：{type(e).__name__}: {str(e)[:120]}"}
+        if r.status_code == 404:
+            return {"supported": True, "found": False, "detail": "平台上找不到这篇文章（可能已删除）"}
+        if r.status_code in (401, 403):
+            return {"supported": True, "found": False, "detail": f"回读无权限（HTTP {r.status_code}）"}
+        if r.status_code != 200:
+            return {"supported": True, "found": False,
+                    "detail": f"回读失败 HTTP {r.status_code}: {r.text[:120]}"}
+        a = r.json() or {}
+        return {"supported": True, "found": True,
+                "title": a.get("title", ""),
+                "body": a.get("body_markdown") or a.get("body_html") or "",
+                "url": a.get("url", ""),
+                "published": bool(a.get("published")),
+                "detail": ""}
 
     def check_auth(self, page=None) -> bool:
         try:

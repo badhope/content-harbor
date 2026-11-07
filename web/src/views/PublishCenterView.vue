@@ -144,13 +144,27 @@
               <span v-else class="dim">—</span>
             </template>
           </el-table-column>
+          <el-table-column label="回读" width="104">
+            <template #default="{ row }">
+              <el-tooltip v-if="row.verify_detail" :content="row.verify_detail" placement="top">
+                <el-tag size="small" :type="verifyTagType(row.verify_state)" effect="plain">
+                  {{ verifyText(row.verify_state) }}
+                </el-tag>
+              </el-tooltip>
+              <el-tag v-else size="small" :type="verifyTagType(row.verify_state)" effect="plain">
+                {{ verifyText(row.verify_state) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="更新时间" width="130">
             <template #default="{ row }">{{ fmtTime(row.updated_at) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
+          <el-table-column label="操作" width="150">
             <template #default="{ row }">
               <el-button v-if="row.post_id" size="small" text :loading="hub.publishing"
                          @click="hub.updateArticleRemote(row.article_id, [row.platform])">更新</el-button>
+              <el-button v-if="row.post_id" size="small" text :loading="verifying === row.id"
+                         @click="reverify(row)">重新回读</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -163,8 +177,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import { useHubStore } from '@/stores/hub'
+import { api } from '@/api'
 import EmptyState from '@/components/EmptyState.vue'
 import ChartPanel from '@/components/ChartPanel.vue'
 import { fmtDateTime } from '@/utils/format'
@@ -174,6 +189,7 @@ const hub = useHubStore()
 const keyword = ref('')
 const reloading = ref(false)
 const resuming = ref('')
+const verifying = ref(0)   // 正在回读的 publication id
 
 const waitTotal = computed(() => hub.pendingHuman.length + hub.waitingTasks.length)
 const pendingSync = computed(() => {
@@ -294,6 +310,32 @@ const pubText = (s) => ({
   ok: '已发布', pending: '待同步', failed: '失败',
   pending_human: '待人工', pending_user: '等你确认'
 }[s] || s)
+
+// 回读状态：区分「平台上确认存在」与「只是提交成功没核过」。
+// unverified 用 info 而不是 success —— 没核过就不是已确认，别给绿色。
+const verifyTagType = (s) => s === 'verified' ? 'success'
+  : s === 'failed' ? 'danger'
+  : s === 'unsupported' ? 'info' : 'warning'
+const verifyText = (s) => ({
+  verified: '已确认', failed: '核对失败',
+  unsupported: '不可回读', unverified: '未核过'
+}[s] || '未核过')
+
+async function reverify(row) {
+  verifying.value = row.id
+  try {
+    const r = await api.verifyPublication(row.id)
+    await hub.loadPubs()
+    if (r.verify_state === 'verified') ElMessage.success('回读已确认：平台上确实有这篇')
+    else if (r.verify_state === 'unsupported') ElMessage.info('该平台暂不支持发布后回读')
+    else ElMessage.warning(r.verify_detail || '回读未通过')
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || '回读请求失败')
+  } finally {
+    verifying.value = 0
+  }
+}
+
 const fmtTime = (ts) => fmtDateTime(ts)
 </script>
 

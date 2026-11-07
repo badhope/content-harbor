@@ -1,6 +1,7 @@
 {
   "name": "harbor-web",
-  "version": "0.14.2",
+  "version": "0.15.0",
+  "packageManager": "pnpm@9.15.9",
   "private": true,
   "type": "module",
   "scripts": {

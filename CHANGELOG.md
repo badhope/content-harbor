@@ -2,6 +2,76 @@
 
 ---
 
+## [0.15.0] - 2026-11-07（发布后回读：让"成功"等于平台上真有这篇）
+
+本版的核心是一句话：**接口返回 200 不等于发布成功。** 从 0.8 到 0.14，所有
+"假成功"缺陷都出在这个缝里——掘金点完发布只发草稿、知乎编辑器没替换上、
+思否按钮 disabled 也走成功分支。之前的修法都是逐个平台补判定；本版加的是
+一层统一的**结果级证据**：发布完再去平台读一次，读得到的才算数。
+
+### Added
+
+- **发布后回读验证（`publications.verify_state` / `verified_at` / `verify_detail`）。**
+  每条发布记录现在带四态：`verified`（平台上确认存在）/ `failed`（读了但不符）/
+  `unsupported`（该平台没有回读能力，如实说没验）/ `unverified`（还没跑过）。
+  默认是 `unverified` 而不是 `verified` —— 没核过就是没核过。
+- **协议平台回读**：Dev.to（`GET /articles/{id}` 比对标题与 `body_markdown`）、
+  GitHub Pages（`GET contents/{path}` 解码后比对 + 站点层探活）。
+- **页面平台回读**：通用 `read_back_in_page()`，打开已发布 URL 读 `<title>` 与
+  正文，与编辑器回读共用同一套 `content_evidence` / `title_evidence`。
+- **`POST /api/v1/hub/publications/{id}/verify`**：随时重新核一次。发布时站点还在
+  异步构建、或事后怀疑平台内容不对时用。
+- **发布中心新增「回读」列**：显示四态并带 tooltip 说明，附「重新回读」按钮。
+- **`scripts/verify_real_publish.py`**：可复跑的真机发布验证脚本（真 commit、
+  真回读、真站点探活、原地更新再验证、默认自动清理）。
+- **`docs/verification/index.md`**：验证记录索引，与各期记录互相链接。
+
+### Fixed
+
+- **CI 在三个 GitHub 镜像仓连红两天。** 根因：`web/pnpm-workspace.yaml` 只有
+  `allowBuilds` 没有 `packages`，pnpm 9+ 进入 workspace 模式后直接报
+  `packages field missing or empty`，`Install dependencies` 失败，后面 lint/test/build
+  全部 skipped。本地因为 `node_modules` 已存在从未暴露。补 `packages: ["."]`，
+  并在 `package.json` 锁 `packageManager: pnpm@9.15.9` 防止再次漂移。
+- **MSI 安装包打不出来。** `productName` 是中文「内容港 Harbor」，WiX 3.14 默认
+  代码页 1252 装不下中文字符，`light.exe` 直接退出。加
+  `bundle.windows.wix.language = ["zh-CN"]` 后通过（54.93 MiB）。
+- **GitHub Pages 发布出来是 404（真机发现）。** front-matter 的 `date` 用了本地
+  时间（UTC+8），Pages 构建机在 UTC，于是文章被当成"未来日期"，Jekyll 默认
+  `future: false` 静默丢弃。commit 成功、API 回读成功、`list_articles` 能看到，
+  但公开链接 404——仓库层验证完全无感。改为统一 UTC 并显式带 `+0000`。
+- **回读 URL 用「现在」重算（真机发现）。** 跨过 UTC 零点回读会指向一个不存在的
+  日期目录，必然 404。改为优先用发布时记录的 `post_url`。
+- **标题比对被站点后缀打挂（真机发现）。** `<title>` 是
+  `文章标题_CSDN博客`，与目标标题肉眼一致却判"不符"。改为剥掉站点分隔符后缀
+  再比；`_flatten` 会删掉分隔符，所以必须在压平**之前**剥。
+- **已发布页面被追加检测误杀（真机发现）。** `content_evidence` 的"目标首段必须
+  在实际正文开头"是为编辑器设计的（检测追加不替换），套到已发布页面上必然误判——
+  页面正文前有 470 字导航栏就被判成"追加未实现"。新增 `check_lead` 开关，
+  页面类回读关闭该检测，编辑器回读保持开启。
+- **Pages 构建异步被误判为失败。** 刚 commit 完的几十秒站点必然 404，盲探 URL
+  会把正常等待判成失败。改为查 `GET /pages/builds/latest`，区分 `building`
+  （标"稍后复核"）与 `errored`（真失败）。
+- **README 的 `07-tags.png` 从未被脚本生成过。** 截图脚本漏了标签治理面板，
+  文件一直停留在早期版本。补上按文本定位 tab 的截图逻辑。
+
+### Changed
+
+- CI 新增 `docker-smoke`（compose config → build → up → 容器内 healthcheck →
+  认证 API 调用 → teardown）与 `desktop-build`（windows-latest 打 NSIS+MSI 并
+  上传 artifact）。原注释里"未验证所以不上 Docker/Tauri"的取舍到此作废。
+- `title_evidence` / `content_evidence` 增加明确的可关闭追加检测参数，并补齐
+  为什么只在编辑器侧开启的说明。
+- README 中英的"验证记录"链接改指 `docs/verification/index.md`。
+
+### 已知限制（本版未验证，如实记录）
+
+- 浏览器类平台中只有 CSDN 做了真机回读（账号里有真实已发布文章）；知乎 / 掘金 /
+  B站 / 头条 / 开源中国 / 小红书只有离线契约探针与单测。
+- `docker-smoke` 与 `desktop-build` 两个 CI job 在本机无法执行（宿主是虚拟机、
+  未开嵌套虚拟化，Docker 引擎起不来），首次运行结论以 CI 为准。
+- Dev.to / Telegraph 未对真实账号发布（无 API key；telegra.ph 在本网络不可达）。
+
 ## [0.14.2] - 2026-11-07（深挖修复：任务状态机假成功 + 部署链路）
 
 独立代码审计 + 黑盒验证驱动，每条先复现再改。

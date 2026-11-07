@@ -1,3 +1,9 @@
+# 单包工作区：pnpm 9+ 见到本文件即进入 workspace 模式，packages 必须显式声明，
+# 否则 `pnpm install` 直接报 "packages field missing or empty"（CI 曾因此连续失败）。
+# 本仓只有 web/ 自身一个包，用 "." 声明即可。
+packages:
+  - "."
+
 allowBuilds:
   "@parcel/watcher": true
   esbuild: true

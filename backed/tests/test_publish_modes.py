@@ -102,6 +102,11 @@ def test_publish_single_passes_ai_assist_and_mode(monkeypatch):
         # 这里用真实方法（纯函数，无副作用），只是把宿主换成极简 stub。
         _prepare_article_for_platform = (
             service_mod.Hub._prepare_article_for_platform)
+        # 0.15.0 起 publish_single 在成功落库后调回读验证。本用例只关心 options
+        # 透传；真实方法会打网络，显式 stub 成"平台不支持"，同时锁住
+        # "回读不得改变发布返回结构"这条约束。
+        def _verify_publication(self, *a, **kw):
+            return "回读：平台不支持"
 
         def _with_adapter(self, platform, account, fn, page_hook=None):
             return fn(_Ad(), None)

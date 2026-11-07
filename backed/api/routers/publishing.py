@@ -92,6 +92,37 @@ def sync_pending(body: Optional[UpdateIn] = None):
     return {"task_id": task_id, "status": "pending", "poll": f"/tasks/{task_id}"}
 
 
+@router.post("/publications/{pub_id}/verify")
+def verify_publication(pub_id: int):
+    """对一条已发布记录重新做回读验证（0.15.0）。
+
+    用于：发布当时站点还在异步构建、或用户事后怀疑平台侧内容不对时，
+    手动再核一次。同步执行——回读是读操作，耗时在秒级。
+    """
+    hub = get_hub()
+    row = hub.conn.execute(
+        "SELECT * FROM publications WHERE id=?", (pub_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, f"发布记录 {pub_id} 不存在")
+    pub = dict(row)
+    article = hub.get(pub["article_id"])
+    if not article:
+        raise HTTPException(404, f"文章 {pub['article_id']} 不存在")
+    if not pub.get("post_id"):
+        return {"id": pub_id, "verify_state": "unsupported",
+                "detail": "没有 post_id，无法回读（可能是草稿或发布失败）"}
+    detail = hub._verify_publication(
+        pub_id, pub["platform"], pub.get("account") or "default", article)
+    fresh = hub.conn.execute(
+        "SELECT verify_state, verified_at, verify_detail FROM publications WHERE id=?",
+        (pub_id,)).fetchone()
+    return {"id": pub_id, "platform": pub["platform"],
+            "verify_state": fresh["verify_state"] if fresh else "",
+            "verified_at": fresh["verified_at"] if fresh else None,
+            "verify_detail": fresh["verify_detail"] if fresh else "",
+            "message": detail}
+
+
 # ---- 统一任务查询 / 恢复 ----
 
 def _task_row(row: dict, parse_result: bool = False) -> dict:

@@ -210,6 +210,9 @@ CREATE TABLE IF NOT EXISTS publications (
     content_hash TEXT DEFAULT '',      -- 上次发布内容的 sha256，update 前比对用
     published_at REAL,
     updated_at  REAL,
+    verify_state TEXT DEFAULT 'unverified',  -- unverified/verified/failed/unsupported
+    verified_at  REAL,                 -- 回读确认平台上确实存在这篇的时间
+    verify_detail TEXT DEFAULT '',     -- 回读失败原因或证据摘要
     UNIQUE(article_id, platform, account)
 );
 
@@ -297,6 +300,14 @@ MIGRATIONS = [
     (1, []),
     # v2: publications 加 content_hash（update 前内容比对，没变不空发）
     (2, ["ALTER TABLE publications ADD COLUMN content_hash TEXT DEFAULT ''"]),
+    # v3: 发布后回读验证（0.15.0）。三列一起加：状态、时间、证据。
+    # 老库升级后 verify_state 统一为 'unverified'——不是 'verified'，
+    # 历史发布没有回读过，不能凭空标成已确认。
+    (3, [
+        "ALTER TABLE publications ADD COLUMN verify_state TEXT DEFAULT 'unverified'",
+        "ALTER TABLE publications ADD COLUMN verified_at REAL",
+        "ALTER TABLE publications ADD COLUMN verify_detail TEXT DEFAULT ''",
+    ]),
 ]
 
 
@@ -544,14 +555,35 @@ def upsert_publication(conn, article_id, platform, account="default", **kw):
     cur = conn.execute(
         """INSERT INTO publications (article_id, platform, account, post_id, post_url,
            edit_url, status, draft_only, stats, last_error, content_hash,
-           published_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           published_at, updated_at, verify_state, verified_at, verify_detail)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (article_id, platform, account, kw.get("post_id", ""), kw.get("post_url", ""),
          kw.get("edit_url", ""), kw.get("status", "pending"),
          kw.get("draft_only", 1), kw.get("stats", "{}"), kw.get("last_error", ""),
-         kw.get("content_hash", ""), kw.get("published_at"), now()))
+         kw.get("content_hash", ""), kw.get("published_at"), now(),
+         kw.get("verify_state", "unverified"), kw.get("verified_at"),
+         kw.get("verify_detail", "")))
     conn.commit()
     return cur.lastrowid
+
+
+def mark_verify(conn, publication_id, state, detail="", verified_at=None):
+    """记录一次回读验证的结果。
+
+    state 只接受四态：verified（平台上确认存在）/ failed（回读了但内容不对或
+    不存在）/ unsupported（平台没有回读能力）/ unverified（没跑过）。
+    verified_at 只在 verified 时打时间戳——失败也记时间会让人误以为成功过。
+    """
+    if state not in ("verified", "failed", "unsupported", "unverified"):
+        raise ValueError(f"非法 verify_state: {state}")
+    conn.execute(
+        "UPDATE publications SET verify_state=?, verify_detail=?, verified_at=?, "
+        "updated_at=? WHERE id=?",
+        (state, (detail or "")[:500],
+         (verified_at if verified_at is not None
+          else (now() if state == "verified" else None)),
+         now(), publication_id))
+    conn.commit()
 
 
 def get_publications(conn, article_id=None, platform=None, status=None):

@@ -15,15 +15,19 @@ def test_connect_creates_schema_and_migrates(sandbox):
         "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     for t in ("accounts", "articles", "publications", "jobs", "tasks", "meta"):
         assert t in tables
+    # 断言"升到了最新一版"而不是写死数字：每次加迁移都要改测试，等于逼人
+    # 把断言当噪音删掉。这里只锁住 migrate() 的结果等于 MIGRATIONS 的顶版。
+    latest = max(v for v, _ in db.MIGRATIONS)
     assert c.execute("SELECT value FROM meta WHERE key='schema_version'"
-                     ).fetchone()[0] == "2"
+                     ).fetchone()[0] == str(latest)
     c.close()
 
 
 def test_migrate_is_idempotent(sandbox):
     c = db.connect(sandbox["db_file"])
-    assert db.migrate(c) == 2
-    assert db.migrate(c) == 2  # 二次执行不得报 duplicate column
+    latest = max(v for v, _ in db.MIGRATIONS)
+    assert db.migrate(c) == latest
+    assert db.migrate(c) == latest  # 二次执行不得报 duplicate column
     c.close()
 
 

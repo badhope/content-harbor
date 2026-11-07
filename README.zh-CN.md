@@ -187,7 +187,7 @@ Vue 3 SPA  ──REST/SSE──►  FastAPI  ──►  发布中枢
 | [路线图](docs/ROADMAP.md) | 已交付 / 下一步 / 待排期 / 明确不做 |
 | [平台接入](PLATFORM_CONNECTION.md) | 各平台凭据与 CLI |
 | [架构](docs/architecture/ARCHITECTURE.md) | 模块边界与数据流 |
-| [验证记录](docs/verification/) | 人工检查的带日期证据 |
+| [验证记录](docs/verification/index.md) | 真实平台、安装包与部署的带日期证据 |
 | [审计报告](docs/audit/AUDIT.md) | 历史缺陷审计与修复记录 |
 | [贡献指南](CONTRIBUTING.md) | 如何提交改动 |
 | [安全策略](SECURITY.md) | 漏洞上报方式 |

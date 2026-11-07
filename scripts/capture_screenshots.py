@@ -113,6 +113,19 @@ def main() -> int:
                 time.sleep(args.wait + 1)
                 page.screenshot(path=str(OUT / "06-platforms.png"))
                 print("  ok 06-platforms.png")
+            # 标签治理：README 引用了 07-tags.png，但旧脚本从没生成过它，
+            # 文件一直停留在早期版本。按文本找 tab，不按序号硬点（tab 顺序会变）。
+            tag_tab = page.locator('.el-tabs__item:has-text("标签")').first
+            try:
+                if tag_tab.count() and tag_tab.is_visible():
+                    tag_tab.click()
+                    time.sleep(args.wait + 1.5)   # 聚类要等接口返回
+                    page.screenshot(path=str(OUT / "07-tags.png"))
+                    print("  ok 07-tags.png")
+                else:
+                    print("  warn 未找到标签治理 tab，跳过 07-tags.png", file=sys.stderr)
+            except Exception as e:   # aqg: top-level boundary（截图失败不该中断整批）
+                print(f"  warn 标签治理截图失败：{e}", file=sys.stderr)
 
         page.set_viewport_size({"width": 375, "height": 812})
         page.goto(args.base, wait_until="domcontentloaded", timeout=45000)

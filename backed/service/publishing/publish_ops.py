@@ -168,16 +168,25 @@ class PublishOpsMixin:
             status = "ok"
             if r.get("draft_only") and not draft_only:
                 status = "pending_human"
-            db.upsert_publication(self.conn, article_id, platform, account,
-                                  post_id=r.get("post_id", ""),
-                                  post_url=r.get("post_url", ""),
-                                  edit_url=r.get("edit_url", ""),
-                                  status=status,
-                                  draft_only=1 if r.get("draft_only") else 0,
-                                  content_hash=_content_hash(article),
-                                  published_at=db.now())
+            pub_id = db.upsert_publication(
+                self.conn, article_id, platform, account,
+                post_id=r.get("post_id", ""),
+                post_url=r.get("post_url", ""),
+                edit_url=r.get("edit_url", ""),
+                status=status,
+                draft_only=1 if r.get("draft_only") else 0,
+                content_hash=_content_hash(article),
+                published_at=db.now())
+            # 发布后回读（0.15.0）：接口返回成功不等于平台上真有这篇。
+            # 拿到 post_id 的已发布内容再查一次，把证据记进 publications。
+            # 只在真正"发布完成"时回读——草稿/待人工没有可回读的公开内容，
+            # 标记 unsupported 而不是伪造一次验证。
+            verify = self._verify_publication(
+                pub_id, platform, account, article,
+                skip=status != "ok")
             db.finish_job(self.conn, job, True,
-                          "发布成功" + (f"（警告: {warning}）" if warning else ""))
+                          "发布成功" + (f"（警告: {warning}）" if warning else "")
+                          + (f"；{verify}" if verify else ""))
             out = {"platform": platform, "ok": True, "status": status,
                    "post_id": r.get("post_id", ""), "post_url": r.get("post_url", ""),
                    "edit_url": r.get("edit_url", ""),
@@ -188,6 +197,8 @@ class PublishOpsMixin:
                                      "edit_url", "draft_only")})
             if warning:
                 out["warning"] = warning
+            if verify:
+                out["verify"] = verify
             return out
         except Exception as e:
             db.upsert_publication(self.conn, article_id, platform, account,
@@ -195,6 +206,75 @@ class PublishOpsMixin:
             db.finish_job(self.conn, job, False, str(e)[:300])
             raise   # aqg: top-level boundary（失败记账后重抛，任务引擎据此分诊）
 
+
+    def _verify_publication(self, pub_id, platform, account, article, skip=False):
+        """发布后回读，把结果落到 publications.verify_state。
+
+        三种结果：
+          - 适配器不支持回读 → unsupported（如实记录，不假装验证过）
+          - 回读通过        → verified + verified_at 时间戳
+          - 回读不通过      → failed + 原因（不改 status：平台上可能确实有这篇，
+                              只是我们比对不上，交给用户判断，比直接标失败更诚实）
+
+        回读本身抛异常时**不能让整次发布失败**——发布已经成功了。异常折成
+        failed + 原因，与"回读不通过"同一条路径。
+        """
+        if skip:
+            db.mark_verify(self.conn, pub_id, "unsupported", "草稿/待人工，无可回读的公开内容")
+            return "回读：跳过（草稿/待人工）"
+        try:
+            ad = get_adapter(platform)
+            pub = {"post_id": self._last_post_id(pub_id), "account": account,
+                   "post_url": self._last_post_url(pub_id)}
+            if ad.needs_browser:
+                # 页面类平台：必须借浏览器线程拿 page。回读失败（浏览器起不来、
+                # 登录态过期）一律折成 failed，不能影响已经完成的发布。
+                def _do(a, page):
+                    return a.read_back_in_page(page, pub, article)
+
+                try:
+                    ev = self._with_adapter(platform, account, _do)
+                    ok = None if not ev.get("supported") else bool(ev.get("found"))
+                    if ok:
+                        from service.publishing.adapters.base import (
+                            content_evidence, title_evidence)
+                        t_ok, t_detail = title_evidence(
+                            (article or {}).get("title", ""), ev.get("title", ""))
+                        c_ok, c_detail = content_evidence(
+                            (article or {}).get("content_md", ""), ev.get("body", ""),
+                            check_lead=False)   # 已发布页面必有导航/侧栏，不做追加检测
+                        if not (t_ok and c_ok):
+                            ok = False
+                            ev["detail"] = (t_detail if not t_ok else c_detail)
+                        else:
+                            ev["detail"] = "回读通过：页面上的标题与正文都对得上"
+                except Exception as e:
+                    ev = {"supported": True, "found": False,
+                          "detail": f"页面回读失败：{type(e).__name__}: {str(e)[:150]}"}
+                    ok = False
+            else:
+                ok, ev = ad.verify_readback(pub, article)
+        except Exception as e:   # aqg: top-level boundary（回读失败不得影响已完成的发布）
+            db.mark_verify(self.conn, pub_id, "failed", f"回读异常：{type(e).__name__}: {e}")
+            return f"回读：异常（{type(e).__name__}）"
+        if ok is None:
+            db.mark_verify(self.conn, pub_id, "unsupported", ev.get("detail", ""))
+            return "回读：平台不支持"
+        if ok:
+            db.mark_verify(self.conn, pub_id, "verified", ev.get("detail", ""))
+            return "回读：已确认"
+        db.mark_verify(self.conn, pub_id, "failed", ev.get("detail", ""))
+        return f"回读：未通过（{ev.get('detail', '')[:80]}）"
+
+    def _last_post_id(self, pub_id):
+        row = self.conn.execute(
+            "SELECT post_id FROM publications WHERE id=?", (pub_id,)).fetchone()
+        return (row["post_id"] if row else "") or ""
+
+    def _last_post_url(self, pub_id):
+        row = self.conn.execute(
+            "SELECT post_url FROM publications WHERE id=?", (pub_id,)).fetchone()
+        return (row["post_url"] if row else "") or ""
 
     def _publish_with_handoff(self, article_id, platform, article, account="default",
                               draft_only=False, settings=None, mode="assist",

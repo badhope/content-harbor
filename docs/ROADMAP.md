@@ -9,7 +9,26 @@ Legend: `[x]` shipped · `[ ]` planned · `[~]` in progress · `[!]` blocked
 
 ## Shipped
 
-### 0.14.0 — full-loop verification (current)
+### 0.15.0 — read-back verification (current)
+
+"Success" now means the copy exists on the platform, not that an API returned 201.
+
+- [x] Post-publish read-back for every publication record
+      (`publications.verify_state`: verified / failed / unsupported / unverified)
+- [x] Protocol read-back: Dev.to (article API) and GitHub Pages (contents API)
+- [x] Page read-back: open the published URL, compare title and body against the source
+- [x] `POST /publications/{id}/verify` to re-check on demand
+- [x] Publish centre shows the read-back state with a "re-check" action
+- [x] Real publish verification script + dated record in `docs/verification/`
+- [x] CI: docker-smoke and Windows desktop-build jobs added
+- [x] MSI + NSIS installers built, installed, launched and uninstalled on Windows
+
+Four real defects were found by running this against a live account, none of which any
+mock had caught: future-dated front-matter silently dropped by Jekyll, read-back
+recomputing the URL instead of reusing the published one, site suffixes breaking title
+comparison, and the editor-only "append detection" rule rejecting valid published pages.
+
+### 0.14.0 — full-loop verification
 
 Every item below was driven by running the product, not by reading the code.
 
@@ -60,10 +79,10 @@ Every item below was driven by running the product, not by reading the code.
 - [ ] Bulk operations: retag, reschedule, re-publish across a filtered article set
 - [ ] RSS and JSON Feed output so the library is subscribable, not just exportable
 
-### 0.16.0 — Post-publish verification
+### 0.16.0 — Publish failure forensics
 
-- [ ] Read back the published URL after a successful submit, compare title and body
-      hash, store `publications.verified_at` — so "success" means the copy exists
+- [x] Read back the published URL after a successful submit, compare title and body,
+      store `publications.verified_at` — shipped in 0.15.0
 - [ ] On publish failure, capture a Playwright trace plus screenshot for replay
 
 ### 0.13.0 — Verification and packaging

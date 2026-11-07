@@ -280,11 +280,17 @@ def _target_body_flat(md):
     return _flatten("\n".join(lines))
 
 
-def content_evidence(target, actual, min_ratio=0.35):
+def content_evidence(target, actual, min_ratio=0.35, check_lead=True):
     """回读比对：目标 Markdown 与页面实际文本讲的是不是同一篇。
 
     返回 (ok, detail)。ok=False 时 detail 直接进 PlatformError 消息。
     min_ratio 是篇幅下限：只对上了几段开头但正文大半没写进去，同样算没生效。
+
+    check_lead 控制「目标首段必须在实际正文开头」这条追加检测。**只在编辑器
+    回读时该开**：编辑器里正文就该从第一行开始，前面压着东西说明是追加而没
+    替换。已发布页面上必然有导航栏/作者信息/目录/推荐位，把同一判据套上去会
+    必然误判——2026-11-07 真机回读 CSDN 时，页面正文前压着 470 字导航就被
+    判成"追加未替换"，而文章其实完全正常。页面类回读传 check_lead=False。
     """
     t = _flatten(target)
     a = _flatten(actual)
@@ -315,7 +321,7 @@ def content_evidence(target, actual, min_ratio=0.35):
     # 关键片段齐全 ≠ 替换成功：旧正文还留在前面、新正文被追加在后面时，
     # 上面的"齐全"与篇幅下限都会通过。所以还要看目标首段落在实际正文的哪。
     head = _doc_order_fragments(target)
-    if head:
+    if check_lead and head:
         pos = _frag_pos(head[0], a)
         first_line = _flatten((target or "").splitlines()[0]) if (target or "").strip() else ""
         lead_budget = len(first_line) + _HEAD_LEAD_EXTRA
@@ -346,19 +352,52 @@ def content_evidence(target, actual, min_ratio=0.35):
     )
 
 
+def _strip_site_suffix(raw):
+    """从页面标题里剥掉站点后缀，返回候选列表（原串排第一）。
+
+    注意必须在 `_flatten` **之前**做：flatten 会把 `_` `|` `-` 和空格全部删掉，
+    剥完就看不出分隔符了（这也是第一版实现失败的原因——测试里肉眼一样的两个
+    标题判不符）。分隔符按"最像站点分隔符"的顺序尝试。
+    """
+    out = [raw]
+    for sep in ("_", " | ", " - ", " — ", " – ", "|", "-", "·"):
+        if sep in raw:
+            head = raw.split(sep, 1)[0]
+            if head and head not in out:
+                out.append(head)
+    return out
+
+
 def title_evidence(expected, actual):
-    """标题回读比对。忽略纯空白差异（知乎/CSDN 的标题框会吞空格）。"""
+    """标题回读比对。
+
+    三件事要做对，都是真机踩出来的：
+      1. 忽略纯空白差异（知乎/CSDN 的标题框会吞空格）
+      2. 剥掉页面后缀。`<title>` 通常是 "文章标题_CSDN博客" / "标题 - 知乎"，
+         直接拿去比必然判不符——2026-11-07 真机回读 CSDN 时两个标题肉眼
+         完全一样却判失败，就是这个。
+      3. 只认「实际是目标的前缀」这一个方向：平台截断只截尾不截头。反方向
+         （实际比目标还长）不是截断，是别的东西写进了标题框。
+    """
     e = _flatten(expected)
-    a = _flatten(actual)
     if not e:
         return True, "目标标题为空，跳过标题比对"
-    if e == a:
-        return True, "标题一致"
-    # 只认「实际是目标的前缀」这一个方向：平台截断只截尾不截头。反方向
-    # （实际比目标还长）不是截断，是别的东西写进了标题框。
-    if len(a) >= _TITLE_PREFIX_MIN and e.startswith(a):
-        return True, "标题前缀一致（平台截断）"
-    return False, "标题回读为 %r，与目标 %r 不符" % (a[:30], e[:30])
+    raw = (actual or "").strip()
+    if not raw:
+        return False, "标题回读为空（页面没渲染标题，或根本没打开对页面）"
+    candidates = []
+    for cand in _strip_site_suffix(raw):
+        c = _flatten(cand)
+        if c and c not in candidates:
+            candidates.append(c)
+    for a in candidates:
+        if e == a:
+            return True, ("标题一致" if a == _flatten(raw)
+                          else f"标题一致（已剥掉页面后缀，取 {a[:30]!r}）")
+        # 只认「实际是目标的前缀」：平台截断只截尾不截头。
+        if len(a) >= _TITLE_PREFIX_MIN and e.startswith(a):
+            return True, "标题前缀一致（平台截断）"
+    return False, "标题回读为 %r，与目标 %r 不符" % (_flatten(raw)[:30], e[:30])
 
 
 class PlatformAdapter:
@@ -438,6 +477,108 @@ class PlatformAdapter:
     def update(self, page, pub: dict, article: dict) -> bool:
         """原地更新。pub 里带着 post_id / edit_url"""
         raise NotImplementedError
+
+    # ---------------- 发布后回读（read-back verification）----------------
+    #
+    # 2026-11 新增：`verify_or_raise` 那套是**动作级**证据（页面文案/编辑器内容），
+    # 证明的是"我按下了按钮且编辑器里是这篇"。它证明不了"这篇真的在平台上存在"——
+    # 接口 201 但平台排队失败、commit 成功但 Pages 构建失败、草稿被风控扣下，
+    # 这几种都会让动作级验证通过而用户点开链接是 404。
+    #
+    # 所以再补一层**结果级**证据：拿 post_id/post_url 回读平台，确认
+    # 标题与正文指纹都在。接口见 `read_back()`；不支持回读的平台返回
+    # supported=False，上层如实记 `verified=False`，不假装验证过。
+
+    # 平台是否支持发布后回读，以及回读方式是协议还是页面
+    readback_mode = ""        # "" = 不支持；"api" = 纯协议；"page" = 需浏览器
+
+    def read_back(self, pub: dict, article: dict = None) -> dict:
+        """回读平台上的一篇已发布内容，返回可判定的证据。
+
+        返回结构（所有键都可能缺，调用方按 `supported` 先判断）：
+            {"supported": bool,
+             "found": bool,           # 平台上确实存在这篇
+             "title": str,            # 平台侧标题
+             "body": str,             # 平台侧正文（纯文本或 markdown）
+             "url": str,              # 平台侧可访问地址
+             "detail": str}           # 失败原因/补充说明
+
+        约定：**读不到 ≠ 验证通过**。网络异常、403、超时都返回
+        found=False 并在 detail 里写原因，绝不静默当成 success。
+
+        需要浏览器的平台不必各自实现这个：`read_back` 走不开浏览器的路径，
+        页面类平台用下面的 `read_back_in_page`，由 `_with_adapter` 把 page 递进来。
+        """
+        return {"supported": False, "found": False, "detail":
+                f"[{self.name}] 该平台暂未实现发布后回读"}
+
+    def read_back_in_page(self, page, pub: dict, article: dict = None) -> dict:
+        """页面类回读的通用实现：打开已发布地址，读标题与正文。
+
+        默认能覆盖绝大多数平台——发布出去的页面本身就是一个可读证据。
+        1. 打开 post_url（或 edit_url 的只读形态）
+        2. 读 <title> / h1 作标题，读 body 纯文本作正文
+        3. 用与编辑器回读同一套 content_evidence / title_evidence 判定
+
+        平台有更精确的接口时可以覆盖本方法（比如读 JSON API），但不能为了
+        省事返回 found=True——那是把假成功换个地方重演。
+        """
+        url = (pub or {}).get("post_url") or ""
+        if not url:
+            return {"supported": True, "found": False,
+                    "detail": "没有 post_url，无法打开页面回读"}
+        try:
+            page.goto(url, timeout=45000, wait_until="domcontentloaded")
+            time.sleep(1.5)
+        except Exception as e:
+            return {"supported": True, "found": False,
+                    "detail": f"打开发布页失败：{type(e).__name__}: {str(e)[:120]}"}
+        cur = page.url or url
+        # 被重定向到登录页/404 页：这是"读不到"，不是"内容在"
+        low = cur.lower()
+        for bad, why in (("login", "被重定向到登录页（登录态失效）"),
+                         ("signin", "被重定向到登录页（登录态失效）"),
+                         ("404", "页面 404")):
+            if bad in low:
+                return {"supported": True, "found": False, "detail": why, "url": cur}
+        body = self.body_text(page)
+        if not body or len(body.strip()) < 30:
+            return {"supported": True, "found": False,
+                    "detail": "页面正文为空或过短（可能未渲染/被墙/需要登录）",
+                    "url": cur}
+        title = ""
+        try:
+            title = page.title() or ""
+        except Exception:
+            title = ""
+        if not title:
+            title = self.read_text(page, "h1")
+        return {"supported": True, "found": True, "title": title,
+                "body": body, "url": cur, "detail": ""}
+
+    def verify_readback(self, pub: dict, article: dict) -> tuple:
+        """回读 + 比对，返回 (ok, evidence)。
+
+        ok 的判据：平台侧确实存在 + 标题匹配（前缀，平台会截断）+ 正文关键片段命中。
+        正文比对复用 content_evidence，口径与编辑器回读完全一致。
+        """
+        ev = self.read_back(pub, article)
+        if not ev.get("supported"):
+            return None, ev          # None = 该平台没有回读能力，交给上层记"未验证"
+        if not ev.get("found"):
+            return False, ev
+        t_ok, t_detail = title_evidence(
+            (article or {}).get("title", ""), ev.get("title", ""))
+        if not t_ok:
+            ev["detail"] = "回读到内容但标题不符：" + t_detail
+            return False, ev
+        c_ok, c_detail = content_evidence(
+            (article or {}).get("content_md", ""), ev.get("body", ""))
+        if not c_ok:
+            ev["detail"] = "回读到内容但正文不符：" + c_detail
+            return False, ev
+        ev["detail"] = "回读通过：标题与正文都在平台上"
+        return True, ev
 
     # ---------------- 通用工具 ----------------
 

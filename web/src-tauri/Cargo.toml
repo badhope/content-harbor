@@ -1,6 +1,6 @@
 [package]
 name = "harbor"
-version = "0.14.2"
+version = "0.15.0"
 description = "港 Harbor —— AI 多平台内容发布中枢（桌面版）"
 authors = ["harbor"]
 edition = "2024"

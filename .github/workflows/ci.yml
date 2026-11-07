@@ -1,9 +1,11 @@
 # CI —— 与本地 `scripts/check_all.sh` 的八道门禁对齐。
 #
-# 只保留真正有价值的检查：语法、静态、测试、构建、密钥扫描。
-# 刻意的取舍：
+# 检查项：语法、静态、测试、构建、密钥扫描、容器编排、桌面打包。
+# 刻意取舍：
 #   - pip-audit 不做阻塞项（依赖披露有滞后，阻塞会让日常提交无故变红）；
-#   - 不上 Docker / Tauri 构建：本机与 runner 都未验证过，放着只会长期红；
+#   - 前端固定 pnpm 9（package.json 的 packageManager 已锁定），锁文件 lockfileVersion 9.0；
+#   - docker-smoke / desktop-build 此前被注释为"未验证所以不上"，现已在 0.15.0 本机实跑
+#     通过后纳管，证据见 docs/verification/2026-11-07-release-gates.md；
 #   - concurrency 取消同分支旧运行，避免排队浪费额度。
 name: CI
 
@@ -68,6 +70,113 @@ jobs:
         run: pnpm test
       - name: Build (must land under FastAPI /static)
         run: pnpm build
+
+  docker-smoke:
+    name: Docker (compose up + health + API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose config validity
+        run: docker compose -f deploy/docker-compose.yml config --quiet
+        env:
+          SECRET_KEY: ci-smoke-secret-key-not-for-production
+          HARBOR_API_TOKEN: ci-smoke-token-not-for-production
+      - name: Build and start backend
+        run: docker compose -f deploy/docker-compose.yml up -d --build backend
+        env:
+          SECRET_KEY: ci-smoke-secret-key-not-for-production
+          HARBOR_API_TOKEN: ci-smoke-token-not-for-production
+      - name: Wait for healthcheck
+        run: |
+          # 容器只 expose 8000，不发布到宿主机；从容器内部探活，
+          # 顺便验证镜像里 curl + /health 都真的可用（compose healthcheck 同一命令）。
+          for i in $(seq 1 60); do
+            if docker compose -f deploy/docker-compose.yml exec -T backend \
+                 curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
+              echo "healthy after $((i*2))s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "backend never became healthy"
+          docker compose -f deploy/docker-compose.yml ps
+          docker compose -f deploy/docker-compose.yml logs --no-color --tail=80
+          exit 1
+      - name: Authenticated API call inside container
+        run: |
+          docker compose -f deploy/docker-compose.yml exec -T backend sh -lc '
+            python - <<"PY"
+          import json, os, urllib.request
+          token = os.environ["HARBOR_API_TOKEN"]
+          req = urllib.request.Request("http://127.0.0.1:8000/api/v1/hub/status",
+                                       headers={"Authorization": "Bearer " + token})
+          with urllib.request.urlopen(req, timeout=10) as r:
+              body = json.loads(r.read())
+          assert isinstance(body, dict) and body, body
+          print("authenticated api ok, keys:", sorted(body)[:8])
+          PY
+          '
+      - name: Teardown
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml down -v
+
+  desktop-build:
+    name: Desktop (Tauri bundle on Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            web/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('web/src-tauri/Cargo.lock') }}
+      - name: Install frontend deps
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Stage sidecar placeholder
+        shell: pwsh
+        working-directory: web
+        # 完整 PyInstaller 产物体积大且与 CI 无关；这里只验证 Tauri 侧车解析与打包链路，
+        # 用同名的 PowerShell 占位脚本代替真实后端（真实产物由 scripts/build_sidecar.ps1 本机构建）
+        run: |
+          $dir = "src-tauri\binaries"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Copy-Item "src-tauri\binaries\harbor-backend-x86_64-pc-windows-msvc.exe" "$dir\harbor-backend-x86_64-pc-windows-msvc.exe" -ErrorAction SilentlyContinue
+      - name: Build NSIS bundle
+        working-directory: web
+        run: pnpm tauri build --bundles nsis
+      - name: Build MSI bundle
+        working-directory: web
+        run: pnpm tauri build --bundles msi
+      - name: Verify artifacts exist
+        shell: pwsh
+        working-directory: web
+        run: |
+          $nsis = Get-ChildItem "src-tauri\target\release\bundle\nsis\*.exe" -ErrorAction SilentlyContinue
+          $msi  = Get-ChildItem "src-tauri\target\release\bundle\msi\*.msi"  -ErrorAction SilentlyContinue
+          if (-not $nsis) { throw "NSIS installer missing" }
+          if (-not $msi)  { throw "MSI installer missing" }
+          $nsis | ForEach-Object { "NSIS: $($_.Name) $([math]::Round($_.Length/1MB,1)) MB" }
+          $msi  | ForEach-Object { "MSI : $($_.Name) $([math]::Round($_.Length/1MB,1)) MB" }
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: harbor-desktop-windows
+          path: |
+            web/src-tauri/target/release/bundle/nsis/*.exe
+            web/src-tauri/target/release/bundle/msi/*.msi
+          retention-days: 14
 
   hygiene:
     name: Version + secret scan

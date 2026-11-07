@@ -132,6 +132,8 @@ export const api = {
     http.post('/sync/pending', { account }),
 
   publications: (articleId) => http.get('/publications', { params: { article_id: articleId } }),
+  // 发布后回读（0.15.0）：对已发布实例重新核一次平台上是否真存在
+  verifyPublication: (pubId) => http.post(`/publications/${pubId}/verify`),
   // 需要人工处理的发布实例（掘金草稿等人点"确定并发布"）
   pendingHuman: () => http.get('/pending-human'),
 

@@ -198,7 +198,7 @@ Read this before trusting any claim above.
 | [Roadmap](docs/ROADMAP.md) | Shipped, next, backlog, out of scope |
 | [Platform guide](PLATFORM_CONNECTION.md) | Per-platform credentials and CLI |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | Module boundaries and data flow |
-| [Verification records](docs/verification/) | Dated evidence for manual checks |
+| [Verification records](docs/verification/index.md) | Dated evidence from real platforms, installers and deployments |
 | [Audit reports](docs/audit/AUDIT.md) | Historical defect audits and fixes |
 | [Contributing](CONTRIBUTING.md) | How to send a change |
 | [Security](SECURITY.md) | Reporting vulnerabilities |
