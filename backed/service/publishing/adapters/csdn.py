@@ -195,75 +195,96 @@ class CSDNAdapter(PlatformAdapter):
                 except Exception:
                     pass
 
-    def _select_tag(self, page, tag_name):
-        """在 CSDN 发布弹窗里选择文章标签。
+    def _select_tag(self, page, tag_names):
+        """在 CSDN 发布弹窗里精确保留指定的多个标签。
 
-        血泪教训（2026-09-20，探针 61~68 验证）：
-          选完标签**绝对不要点任何 .modal__close-button**——DOM 顺序上第一个
-          close-button 是整个发布弹窗的关闭按钮，点了=把弹窗关了，
-          后面点"发布文章"全是空操作（按钮已经不存在了）。
-          标签面板保持打开没关系，JS 直接点发布按钮不受浮层遮挡影响。
+        真机摸清的行为（2026-11-08，实锤到线上文章才暴露）：
 
-        步骤：
-        1. 在弹窗范围内找"添加文章标签"按钮（弹窗里有两个 tag__btn-tag，
-           另一个是"新建分类专栏"，必须按文字区分，不能 .first 了事）
-        2. 点面板里的 span.el-tag（优先精确匹配 tag_name，否则点第一个推荐标签）
-        3. 不关面板，直接返回
+        1. **打开标签面板时，CSDN 会预选 5 个推荐标签**（上次是
+           人工智能/语言模型/Gemini/谷歌/深度学习，这一次又是别的）。
+           旧实现"点一个就收工"，结果线上文章的标签是 CSDN 猜的
+           `#ide`，而不是我们指定 `Python` —— 用户在文章页一眼就能看出不对。
+        2. 标签最多 8 个（面板右下角"还可添加 N 个标签"）。
+        3. 面板里有搜索框，placeholder 明写
+           「请输入文字搜索，Enter键入可添加自定义标签」——键入后回车即可
+           精确添加，不依赖推荐列表里恰好有这个词。
 
-        返回 True 成功，False 失败（调用方兜底不选标签直接发）。
+        所以正确顺序是：**先清空所有已选 → 再逐个键入+回车添加**。
+        只按名字点推荐项是不行的：推荐列表里没有的词永远加不上，而有预选时
+        个数又会超标。
+
+        返回实际生效的标签名列表（供上层回读校验用）。
         """
         import time as _time
+        wanted = [t.strip() for t in (tag_names or []) if t and t.strip()]
+        if not wanted:
+            return []
+
+        def chips():
+            return page.evaluate("""() => {
+                const box = document.querySelector('.form-tag-box');
+                if (!box) return [];
+                return [...box.querySelectorAll('.el-tag')]
+                    .map(e => (e.innerText || '').trim()).filter(Boolean);
+            }""")
+
+        # 打开发布弹窗里的「添加文章标签」面板
         try:
             btns = page.locator('.modal__inner-2 button.tag__btn-tag')
-            target_btn = None
+            opened = False
             for i in range(btns.count()):
                 if "添加文章标签" in btns.nth(i).inner_text():
-                    target_btn = i
+                    btns.nth(i).click(timeout=5000)
+                    opened = True
                     break
-            if target_btn is None:
-                return False
-            btns.nth(target_btn).click(timeout=5000)
-            _time.sleep(4)
+            if not opened:
+                return []
+            _time.sleep(3)
         except Exception:
-            return False
+            return []
 
-        # 点 el-tag：优先精确匹配，匹配不到点第一个推荐标签（保证"至少一个标签"）
-        try:
-            tags = page.locator('.modal__inner-2 span.el-tag')
-            n = tags.count()
-            if n == 0:
-                return False
-            clicked = False
-            if tag_name:
-                for i in range(n):
-                    txt = tags.nth(i).inner_text().strip()
-                    if txt and txt.lower() == tag_name.lower():
-                        tags.nth(i).click(timeout=5000)
-                        clicked = True
-                        break
-            if not clicked:
-                tags.nth(0).click(timeout=5000)
-            _time.sleep(2)
-            # 选完把标签面板收掉。旧实现特意不关（怕误点整个弹窗的 close），
-            # 但实测的后果是：面板是一个覆盖半个弹窗的浮层，它挡住"文章类型/
-            # 可见范围/文章模板"这些单选，Playwright 点击会被拦截，且截图里
-            # 根本看不到下面填了什么——用户要求的"截图确认没问题"就做不到。
-            # 正确做法：点标签面板**自己**标题栏里的关闭图标（.tag-modal 内的
-            # close），而不是页面上第一个 .modal__close-button（那是整个弹窗的）。
+        # 清空预选标签（这是关键：不清就会把平台的推荐当成自己的标签发出去）
+        page.evaluate("""() => {
+            const box = document.querySelector('.form-tag-box');
+            if (!box) return 0;
+            let n = 0;
+            for (let round = 0; round < 12; round++) {
+                const chip = box.querySelector('.el-tag');
+                if (!chip) break;
+                const close = chip.querySelector('.el-tag__close, .el-icon-close, i');
+                if (close) { close.click(); n++; } else { chip.remove(); n++; }
+            }
+            return n;
+        }""")
+        _time.sleep(1.5)
+
+        # 逐个添加：键入 → 等下拉 → 回车
+        for name in wanted[:8]:
             try:
-                # 标签浮层容器实测是 `.mark_selection_box`（不是 .tag-modal），
-                # 关闭按钮是它内部的 `.modal__close-button.button`。
-                # 用 scope 限定，避免误点整个发布弹窗的关闭按钮。
-                panel_close = page.locator(
-                    '.mark_selection_box .modal__close-button').first
-                if panel_close.count() and panel_close.is_visible():
-                    panel_close.click(timeout=3000)
-                    _time.sleep(1)
+                inp = page.locator('.mark_selection_box input').first
+                if not inp.count():
+                    break
+                inp.click()
+                _time.sleep(0.6)
+                page.keyboard.type(name, delay=70)
+                _time.sleep(2.0)
+                page.keyboard.press("Enter")
+                _time.sleep(1.5)
             except Exception:
-                pass   # 关不掉也不至于失败：后面点发布用的是 JS click，不受遮挡
-            return True
+                continue
+
+        got = chips()
+
+        # 收掉标签面板（不收会遮住下面的单选，截图也看不见）
+        try:
+            panel_close = page.locator(
+                '.mark_selection_box .modal__close-button').first
+            if panel_close.count() and panel_close.is_visible():
+                panel_close.click(timeout=3000)
+                _time.sleep(1)
         except Exception:
-            return False
+            pass
+        return got
 
     def _fill_publish_form(self, page, article, options):
         """把 CSDN 发布弹窗的每一项都填上，并逐项回报结果。
@@ -302,27 +323,24 @@ class CSDNAdapter(PlatformAdapter):
             else:
                 failed.append(f"{name}({why})" if why else name)
 
-        # ---- 1) 文章标签（必填）----
-        tag_name = options.get("tag_category") or ""
-        if not tag_name:
-            tags = options.get("tags") or []
-            tag_name = tags[0] if tags else ""
+        # ---- 1) 文章标签（必填，最多 8 个）----
+        # 必须按"清空预选 → 逐个键入回车"来做，并按回读到的**真实标签名**判定。
+        # 旧实现只点一个推荐项，线上文章的标签会是平台猜的 `#ide`（2026-11-08
+        # 在文章页实锤），而我们的 settings_filled 里却写着"文章标签 ✅"。
+        tags = options.get("tags") or []
+        if isinstance(tags, str):
+            tags = [t.strip() for t in tags.split(",") if t.strip()]
         try:
-            self._select_tag(page, tag_name)
-            _time.sleep(1)
-            # 校验：`.form-tag-box`（文章标签那一行）里出现已选标签 chip 才算真选上。
-            # 旧实现查的是全局 `.tag-item`/`[class*=selected]`，CSDN 的 chip 是
-            # Element-Plus 的 `.el-tag`，且只挂在 .form-tag-box 下——选择器错了
-            # 会让"其实已经选上"被误报成失败（实测截图里 python 芯片明明在）。
-            picked = page.evaluate("""() => {
-                const box = document.querySelector('.form-tag-box');
-                if (!box) return '';
-                const chips = box.querySelectorAll('.el-tag');
-                return chips.length ? Array.from(chips).map(c => (c.innerText||'').trim())
-                                                 .filter(Boolean).join(',') : '';
-            }""")
-            rec("文章标签", True if picked else False,
-                "" if picked else f"未检测到已选标签（尝试 {tag_name!r}）")
+            got = self._select_tag(page, tags)
+            got_set = {g.strip() for g in got}
+            missing = [t for t in tags[:8] if t.strip() not in got_set]
+            if got and not missing:
+                rec("文章标签", True)
+                filled[-1] = f"文章标签={','.join(got)}"
+            elif got:
+                rec("文章标签", False, f"缺少 {','.join(missing)}（实得 {','.join(got)}）")
+            else:
+                rec("文章标签", False, "一个标签都没选上")
         except Exception as e:   # aqg: top-level boundary（单项失败不阻断其余项）
             rec("文章标签", False, str(e)[:60])
 
@@ -816,14 +834,17 @@ class CSDNAdapter(PlatformAdapter):
         aid = ""
         captcha_kind = None
         deadline = time.time() + 40
+        # 判定"发布成功"的唯一可靠信号是整页跳到 creation/success/<id>。
+        # 旧实现还接受 `articleId=` —— 那是个致命误判：编辑页 URL 本身就是
+        # `/md/?articleId=xxx`，所以「弹出没关、什么都没发出去」也会命中，
+        # 于是把草稿记成已发布（2026-11-08 真机实锤：文章 170271615 线上
+        # 状态是「草稿」，库里却是 status=ok / draft_only=0）。
+        # 现在只认 success 页；停在编辑页 = 没发出去。
         while time.time() < deadline:
             time.sleep(1.5)
             url = page.url
             if "creation/success/" in url:
                 aid = url.rstrip("/").split("/")[-1]
-                break
-            if "articleId=" in url:
-                aid = url.split("articleId=")[-1].split("&")[0]
                 break
             # 体检 B2 修复（QA 标质力 2026-09-21）：发布链路加验证码检测，
             # 弹验证码时明确报类型，而不是傻等 40s 后报"发布未完成"
@@ -831,21 +852,24 @@ class CSDNAdapter(PlatformAdapter):
             if kind:
                 captcha_kind = kind
                 break
-            # 弹窗还在=没发出去；再给一次点击（偶发首次点击被前置检查卡住）
-            modal_open = page.evaluate(
-                "() => !!document.querySelector('.modal__button-bar')")
-            if not modal_open and "editor.csdn.net" not in url:
-                aid = url.rstrip("/").split("/")[-1]
-                break
+            # 「弹窗消失」不能当成发布成功：点了取消、或前端校验把弹窗收掉，
+            # 都会让弹窗消失，但文章仍然是草稿。这里只在**已经离开编辑器**时
+            # 才继续观察，最终判定仍然只认 success 页（或下面按标题对账）。
+            # 2026-11-08 真机：正是这一支把"停在编辑页"判成了已发布。
         if not aid:
-            # 体检 B6 对账修复（2026-09-21 实战验证）：失败前先按标题对一次账——
-            # 文章可能实际已发出（比如验证码检测恰好误判在成功跳转前后），
-            # 直接按标题查列表，命中就当成功，避免重复发布浪费每日额度
+            # 按标题对账：只在**确认文章已经公开发布**时才认。
+            # 旧实现只要列表里标题匹配就当成成功——但 CSDN 的列表里同时包含
+            # 草稿，于是"发失败、只剩草稿"也被记成 ok（2026-11-08 实锤）。
+            # 这里额外要求该条目的状态不是草稿；拿不到状态时宁可判失败。
             try:
-                for a in self.list_articles(page, limit=10):
-                    if (a.get("title") or "").strip() == article["title"].strip():
-                        aid = a["post_id"]
-                        break
+                for a in self.list_articles(page, limit=15):
+                    if (a.get("title") or "").strip() != article["title"].strip():
+                        continue
+                    st = str(a.get("status") or a.get("state") or "").lower()
+                    if st in ("draft", "草稿", "0"):
+                        continue          # 是草稿，不算发布成功
+                    aid = a["post_id"]
+                    break
             except Exception:
                 pass
         if not aid:
@@ -875,6 +899,87 @@ class CSDNAdapter(PlatformAdapter):
                 # 有必填项没填上时给警告（不静默）
                 **({"warning": "发布设置未填满：" + form["detail"]}
                    if form.get("failed") else {})}
+
+    def read_back_in_page(self, page, pub, article=None):
+        """CSDN 专用回读：除了标题正文，还要验**发布状态**和**标签**。
+
+        为什么必须单独写（2026-11-08 在文章页实锤两件事）：
+
+        1. **状态可能是草稿。** 发布链路误把"停在编辑页"当成成功，文章实际
+           只是草稿。通用回读只比标题和正文——而草稿页也有标题和正文，
+           于是照样判 verified。必须显式读页面上的状态词。
+        2. **标签可能是平台猜的。** 打开标签面板时 CSDN 会预选 5 个推荐标签，
+           旧实现只点一个就发布，线上标签成了 `#ide`，而回读只看正文自然发现
+           不了。这里把正文底部 `.article-footer-category-segment` 里的
+           `标签` 组读出来，跟文章 tags 逐一比对。
+
+        仍然遵守基类契约：读不到就是 found=False，绝不为了"好看"返回 True。
+        """
+        ev = super().read_back_in_page(page, pub, article)
+        if not ev.get("found"):
+            return ev
+
+        # 状态：公开/私密/审核中/草稿
+        try:
+            state = page.evaluate("""() => {
+                const words = ['公开', '私密', '草稿', '审核中', '仅我可见',
+                               '粉丝可见', 'VIP可见', '待审核'];
+                for (const el of document.querySelectorAll('span,em,div,a')) {
+                    const t = (el.innerText || '').trim();
+                    if (words.includes(t) && el.getBoundingClientRect().width > 0) {
+                        return t;
+                    }
+                }
+                return '';
+            }""")
+        except Exception:
+            state = ""
+        ev["state"] = state
+        if state in ("草稿", "审核中", "待审核"):
+            ev["found"] = False
+            ev["detail"] = f"文章状态是「{state}」，不是公开发布"
+            return ev
+
+        # 标签：读底部标签组，跟目标比对
+        want = []
+        tags_raw = (article or {}).get("tags") or ""
+        if isinstance(tags_raw, str):
+            want = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        if want:
+            try:
+                got = page.evaluate("""() => {
+                    const seg = document.querySelector('.article-footer-category-segment');
+                    if (!seg) return [];
+                    for (const g of seg.querySelectorAll('.article-footer-category-group')) {
+                        const label = (g.querySelector('.article-footer-label') || {}).innerText || '';
+                        if (!label.trim().startsWith('标签')) continue;
+                        return [...g.querySelectorAll(
+                            '.article-footer-pill-list a, .article-footer-pill-list span')]
+                            .map(e => (e.innerText || '').trim().replace(/^#/, ''))
+                            .filter(Boolean);
+                    }
+                    return [];
+                }""")
+            except Exception:
+                got = []
+            ev["tags"] = got
+            got_low = {g.strip().lower() for g in got}
+            missing = [t for t in want if t.strip().lower() not in got_low]
+            if missing:
+                ev["found"] = False
+                ev["detail"] = (f"标签不符：期望 {want}，实际 {got}"
+                                f"（缺 {missing}）")
+                return ev
+
+        # 基类已经写了一句"标题与正文都对得上"。这里补上状态和标签，
+        # 让 verified 的证据链完整——否则用户看到的仍是"只验了正文"的旧说法。
+        extra = []
+        if state:
+            extra.append(f"状态={state}")
+        if ev.get("tags"):
+            extra.append(f"标签={','.join(ev['tags'])}")
+        ev["detail"] = "回读通过：标题、正文" + ("、" + "、".join(extra) if extra else "") + "都对得上"
+        return ev
 
     # ---------------- 原地更新 ----------------
 

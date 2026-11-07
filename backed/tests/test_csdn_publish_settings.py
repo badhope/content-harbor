@@ -180,3 +180,65 @@ def test_update_verifies_published_page():
     text = src.read_text(encoding="utf-8")
     assert "更新未生效" in text, "更新后没有线上回读校验"
     assert "update 返回 True 但线上没变" not in text
+
+
+# ---------------- 发布成功判定 / 标签精确性 回归 ----------------
+
+def test_success_requires_success_page_not_articleid():
+    """发布成功的唯一信号是 creation/success/<id>。
+
+    2026-11-08 真机实锤的假成功：旧实现只要 URL 里有 `articleId=` 就判成功，
+    但编辑页 URL 本身就是 `/md/?articleId=xxx`。于是"弹窗没关、根本没发出去"
+    被判成已发布，库里 status=ok 而线上状态是「草稿」。
+    """
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / "service" / "publishing"
+            / "adapters" / "csdn.py").read_text(encoding="utf-8")
+    assert '"articleId=" in url' not in text, \
+        "还在用 articleId= 判定发布成功——编辑页 URL 自带它，会误判草稿为已发布"
+    assert 'creation/success/' in text
+
+
+def test_draft_not_counted_as_publish_success():
+    """按标题对账时必须排除草稿，否则"只建了草稿"会被记成发布成功。"""
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / "service" / "publishing"
+            / "adapters" / "csdn.py").read_text(encoding="utf-8")
+    assert 'st in ("draft", "草稿", "0")' in text, \
+        "标题对账没排除草稿状态"
+
+
+def test_tag_selection_clears_preselected():
+    """选标签前必须清空 CSDN 预选的 5 个推荐标签，并按真实 chip 名回读。
+
+    打开标签面板时 CSDN 会自动勾上 5 个推荐项。旧实现只点一个就收工，
+    线上文章标签变成平台猜的 `#ide`，而 settings_filled 里还写着"文章标签 ✅"。
+    这条用源码断言（行为断言需要一个能跑 JS 的 page，成本不划算；
+    真实行为已在文章 170272269 上验证：#Python #Markdown #自动化）。
+    """
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / "service" / "publishing"
+            / "adapters" / "csdn.py").read_text(encoding="utf-8")
+    # 清空预选
+    assert "el-tag__close" in text, "没有清空预选标签的逻辑"
+    # 逐个键入回车添加，而不是"匹配不到就点第一个推荐"
+    assert "Enter" in text, "没有用回车添加自定义标签"
+    # 返回真实 chip 供上层比对
+    assert "got = chips()" in text, "_select_tag 没回读真实标签名"
+    # 不允许再出现"没匹配到就点第一个"的兜底
+    assert "tags.nth(0).click" not in text,         "还在用「匹配不到就点第一个推荐标签」——会把平台的猜测发出去"
+
+
+def test_csdn_readback_checks_state_and_tags():
+    """CSDN 回读必须校验发布状态与标签，不只看标题正文。
+
+    草稿页也有标题和正文，只比正文会把草稿判成 verified。
+    """
+    from service.publishing.adapters.csdn import CSDNAdapter
+    assert hasattr(CSDNAdapter, "read_back_in_page"), "CSDN 没有专用回读"
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / "service" / "publishing"
+            / "adapters" / "csdn.py").read_text(encoding="utf-8")
+    assert "文章状态是「" in text, "回读没检查草稿状态"
+    assert "article-footer-category-segment" in text, "回读没读页面标签"
+    assert "标签不符" in text, "回读没比对标签"

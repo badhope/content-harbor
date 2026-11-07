@@ -226,7 +226,11 @@ class PublishOpsMixin:
                         if not (t_ok and c_ok):
                             ok = False
                             ev["detail"] = (t_detail if not t_ok else c_detail)
-                        else:
+                        elif not ev.get("detail"):
+                            # 适配器自己可能已经给了更详细的通过说明（比如 CSDN
+                            # 会补上"状态=公开、标签=..."）。有就保留，别覆盖成
+                            # 一句笼统的"标题与正文都对得上"——那会让用户以为
+                            # 只验了正文。
                             ev["detail"] = "回读通过：页面上的标题与正文都对得上"
                 except Exception as e:
                     ev = {"supported": True, "found": False,
