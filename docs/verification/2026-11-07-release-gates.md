@@ -113,7 +113,7 @@ Fix: declare `packages: ["."]` (this repo is a single-package workspace) and pin
 Verified by running the full frontend gate on pnpm 9: install → lint (0 errors) →
 77 tests → build.
 
-## 5. Docker — not verified on this machine, and why
+## 5. Docker — not verified on this machine, verified in CI instead
 
 `docker` CLI 29.9.2 is installed but no engine can run here:
 
@@ -125,13 +125,64 @@ Verified by running the full frontend gate on pnpm 9: install → lint (0 errors
   known defects (wrong build context, wrong data volume, missing `HUB_DATA_DIR`) were
   fixed in 0.14.2.
 
-Because the engine cannot run here, container verification is executed by the new
+Because the engine cannot run here, container verification is executed by the
 `docker-smoke` CI job on `ubuntu-latest` (compose config → build → up → healthcheck
-from inside the container → authenticated API call → teardown). This job has not yet
-produced a green run at the time of writing this record; the first run after this
-commit is the evidence. Nothing in this file claims the container ran locally.
+from inside the container → authenticated API call → teardown).
 
-## 6. What is still not verified
+The first run of this job (at `990a03d`) failed — but not because the container was
+unhealthy. `docker-compose.yml` interpolates `${SECRET_KEY:?...}` on **every** compose
+invocation, and the `exec` / `ps` / `logs` / `down` steps did not carry the two variables,
+so the probe never entered the container at all:
+
+```
+backend never became healthy
+error while interpolating services.backend.environment.HARBOR_API_TOKEN: required variable HARBOR_API_TOKEN is missing a value
+```
+
+The fix (commit `b1b6888`) gives every compose step the interpolation variables. The
+next run went green end to end:
+
+```
+healthy after 4s
+authenticated api ok, keys: ['accounts', 'articles', 'auth_sweep', 'pending_sync',
+  'publications', 'published', 'published_articles']
+```
+
+Nothing in this file claims the container ran locally. The container evidence is the CI
+run, and it is green.
+
+## 6. Desktop packaging — verified locally and in CI
+
+Local install/launch/uninstall evidence is in section 3. The `desktop-build` CI job
+(Windows runner) exercises the same packaging chain on a clean machine.
+
+Its first run (at `990a03d`) failed at the Tauri build script:
+
+```
+error: failed to run custom build command for `harbor v0.15.0`
+  resource path `binaries\harbor-backend-x86_64-pc-windows-msvc.exe` doesn't exist
+```
+
+Root cause: the "stage sidecar placeholder" step used
+`Copy-Item ... -ErrorAction SilentlyContinue` on a file that is not in the repository
+(the real ~50 MB PyInstaller sidecar is built locally by `scripts/build_sidecar.ps1`),
+the copy silently no-op'd, and `tauri-build`'s `copy_binaries` then failed the build.
+The fix (`b1b6888`) compiles a minimal PE placeholder with `rustc` instead, which is a
+real executable and satisfies the resource check without shipping the heavy artifact.
+
+The next run produced both bundles and uploaded them as artifacts:
+
+```
+staged=src-tauri\binaries\harbor-backend-x86_64-pc-windows-msvc.exe (123904 bytes)
+NSIS: 内容港 Harbor_0.15.0_x64-setup.exe 4.5 MB
+MSI : 内容港 Harbor_0.15.0_x64_zh-CN.msi 6 MB
+```
+
+The CI bundles are smaller than the local ones (4.5 MB vs 53.3 MB) because the CI
+placeholder sidecar is 124 KB while the local one is a full PyInstaller build — the
+packaging chain is what CI verifies, not the sidecar's contents.
+
+## 7. What is still not verified
 
 - Browser-driven platforms (知乎 / CSDN / 掘金 / B站 / 头条 / 开源中国 / 小红书): these
   need interactive logins and were not driven end-to-end this round. Their adapters
@@ -139,5 +190,6 @@ commit is the evidence. Nothing in this file claims the container ran locally.
 - `devto` and `telegraph` protocol adapters: implement read-back, covered by unit tests,
   but not published against a live account this round (no API key / telegra.ph is not
   reachable from this network).
-- The `desktop-build` CI job (Windows runner) and `docker-smoke` job: first green run
-  pending.
+- The real PyInstaller sidecar is only exercised by the local desktop build and install
+  (section 3); the CI desktop job validates the Tauri packaging chain with a placeholder
+  sidecar, so a regression inside the backend binary itself would not be caught there.
