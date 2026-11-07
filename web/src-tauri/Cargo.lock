@@ -1260,7 +1260,7 @@ dependencies = [
 
 [[package]]
 name = "harbor"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "reqwest 0.12.28",
  "serde",

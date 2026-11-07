@@ -4,9 +4,18 @@
 
 ## [Unreleased]
 
-### Added
+### Fixed
 
-- Nothing yet.
+- **CI 的两个新 job 首次运行即红，且都是真缺陷。** `docker-smoke`：compose 每次
+  调用都重新插值 `${SECRET_KEY:?...}`，而 `exec` / `ps` / `logs` / `down` 四个步骤
+  没带这两个变量，探活直接报 `required variable SECRET_KEY is missing a value`。
+  `desktop-build`：侧车占位步骤用 `Copy-Item ... -ErrorAction SilentlyContinue`
+  复制一个仓库里不存在的文件，静默失败后 `tauri-build` 的 `copy_binaries` 报
+  `resource path binaries\harbor-backend-... doesn't exist`。前者给全部 compose
+  步骤补上插值变量，后者改为用 `rustc` 现场编译一个最小 PE 占位。
+- **`web/src-tauri/Cargo.lock` 的 `harbor` 版本停留在 0.14.2。** `Cargo.toml` 已是
+  0.15.0，锁文件没跟上；`scripts/bump_version.py --check` 只校验五个清单文件，
+  覆盖不到锁文件。已同步，并补一条回归测试锁文件版本一致性的门禁说明。
 
 ## [0.15.0] - 2026-11-07（发布后回读：让"成功"等于平台上真有这篇）
 

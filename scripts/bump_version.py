@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
@@ -35,6 +34,12 @@ TARGETS = (
     ("backed/config/config_unified.py",
      re.compile(r'^(\s*)project_version:\s*str\s*=\s*"([^"]+)"', re.MULTILINE),
      "config_unified"),
+    # Cargo.lock 是派生产物：改了 Cargo.toml 的 version 后 cargo 会同步它，
+    # 但 `cargo build` 不跑时锁文件会停在旧版本。0.15.0 就漏了这一步，
+    # 而原门禁只校验五个手写清单，覆盖不到锁文件。
+    ("web/src-tauri/Cargo.lock",
+     re.compile(r'^name = "harbor"\nversion = "([^"]+)"', re.MULTILINE),
+     "Cargo.lock"),
 )
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
@@ -79,7 +84,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="更新全部版本清单")
     parser.add_argument("version", nargs="?", help="目标版本，如 0.13.0")
     parser.add_argument("--dry-run", action="store_true", help="只显示将要发生的修改")
-    parser.add_argument("--check", action="store_true", help="仅校验五处版本是否一致")
+    parser.add_argument("--check", action="store_true", help="仅校验六处版本是否一致")
     args = parser.parse_args()
 
     if args.check or not args.version:

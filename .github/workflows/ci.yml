@@ -87,6 +87,11 @@ jobs:
           SECRET_KEY: ci-smoke-secret-key-not-for-production
           HARBOR_API_TOKEN: ci-smoke-token-not-for-production
       - name: Wait for healthcheck
+        # compose 每次调用都会重新插值，exec/ps/logs 与 config 一样需要这两个
+        # 变量；漏掉就报 "required variable SECRET_KEY is missing a value"。
+        env:
+          SECRET_KEY: ci-smoke-secret-key-not-for-production
+          HARBOR_API_TOKEN: ci-smoke-token-not-for-production
         run: |
           # 容器只 expose 8000，不发布到宿主机；从容器内部探活，
           # 顺便验证镜像里 curl + /health 都真的可用（compose healthcheck 同一命令）。
@@ -102,6 +107,9 @@ jobs:
           docker compose -f deploy/docker-compose.yml logs --no-color --tail=80
           exit 1
       - name: Authenticated API call inside container
+        env:
+          SECRET_KEY: ci-smoke-secret-key-not-for-production
+          HARBOR_API_TOKEN: ci-smoke-token-not-for-production
         run: |
           docker compose -f deploy/docker-compose.yml exec -T backend sh -lc '
             python - <<"PY"
@@ -117,6 +125,9 @@ jobs:
           '
       - name: Teardown
         if: always()
+        env:
+          SECRET_KEY: ci-smoke-secret-key-not-for-production
+          HARBOR_API_TOKEN: ci-smoke-token-not-for-production
         run: docker compose -f deploy/docker-compose.yml down -v
 
   desktop-build:
@@ -147,12 +158,20 @@ jobs:
       - name: Stage sidecar placeholder
         shell: pwsh
         working-directory: web
-        # 完整 PyInstaller 产物体积大且与 CI 无关；这里只验证 Tauri 侧车解析与打包链路，
-        # 用同名的 PowerShell 占位脚本代替真实后端（真实产物由 scripts/build_sidecar.ps1 本机构建）
+        # 完整 PyInstaller 产物 ~50 MB 且与 CI 无关；这里只验证 Tauri 侧车解析与打包链路，
+        # 用 rustc 现场编译一个最小可执行 PE 占位（真实产物由 scripts/build_sidecar.ps1
+        # 本机构建）。占位必须是真 PE：tauri-build 的 copy_binaries 会检查文件存在性，
+        # 缺失时 harbor crate 的 build script 直接失败（resource path ... doesn't exist）。
         run: |
           $dir = "src-tauri\binaries"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          Copy-Item "src-tauri\binaries\harbor-backend-x86_64-pc-windows-msvc.exe" "$dir\harbor-backend-x86_64-pc-windows-msvc.exe" -ErrorAction SilentlyContinue
+          $target = Join-Path $dir "harbor-backend-x86_64-pc-windows-msvc.exe"
+          $stub = Join-Path $env:RUNNER_TEMP "harbor-sidecar-stub.rs"
+          Set-Content -Path $stub -Value 'fn main() { std::process::exit(0); }' -Encoding utf8
+          rustc -O --target x86_64-pc-windows-msvc $stub -o $target
+          if ($LASTEXITCODE -ne 0) { throw "rustc failed to build sidecar placeholder (code=$LASTEXITCODE)" }
+          if (-not (Test-Path $target)) { throw "sidecar placeholder missing: $target" }
+          "staged=$target ($((Get-Item $target).Length) bytes)"
       - name: Build NSIS bundle
         working-directory: web
         run: pnpm tauri build --bundles nsis
