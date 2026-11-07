@@ -43,7 +43,13 @@ EVENT_TYPES = {
 
 # ---------------- 对外接口 -----------------
 
-_dispatch_q = deque()
+# 派发队列上限：webhook 端点慢时（每个 8s 超时、串行投递），事件会堆在
+# 内存里。无界 deque 在"用户配了一个挂掉的 webhook + 频繁发布"场景下
+# 会一直涨到 OOM。这里保留最近 1000 条，超出丢最老的（并计数，
+# 让运维能看到"确实丢了事件"而不是悄无声息）。
+_DISPATCH_MAX = 1000
+_dispatch_q = deque(maxlen=_DISPATCH_MAX)
+_dispatch_dropped = 0
 _dispatch_cv = threading.Condition()
 _dispatcher_running = False
 
@@ -112,10 +118,20 @@ def delete_webhook(wid, conn=None):
 # ---------------- 异步 Webhook 派发 -----------------
 
 def _enqueue_webhook(evt):
-    """把事件推入异步派发队列。"""
+    """把事件推入异步派发队列（超过上限时丢最老的并计数）。"""
+    global _dispatch_dropped
     with _dispatch_cv:
+        if len(_dispatch_q) >= _DISPATCH_MAX:
+            _dispatch_dropped += 1
         _dispatch_q.append(evt)
         _dispatch_cv.notify()
+
+
+def dispatch_queue_stats() -> dict:
+    """派发队列状态（排障用：积压多少、丢了多少）。"""
+    with _dispatch_cv:
+        return {"queued": len(_dispatch_q), "max": _DISPATCH_MAX,
+                "dropped": _dispatch_dropped}
 
 
 def _dispatch_async(evt):
@@ -129,7 +145,13 @@ def _dispatch_async(evt):
         return
     payload = json.dumps(evt, ensure_ascii=False, default=str)
     for wid, url, secret_enc, evts_json, fail_count in rows:
-        evts = json.loads(evts_json) if evts_json else ["*"]
+        # json.loads 必须在 try 内：events 列损坏（手工改库、旧版本写入非法
+        # JSON）会让异常冒到 _dispatcher_loop，把整个派发线程打死，之后
+        # 所有 webhook 静默停止且没有任何提示。
+        try:
+            evts = json.loads(evts_json) if evts_json else ["*"]
+        except (TypeError, ValueError):
+            evts = ["*"]     # 订阅表损坏时退化为"全订阅"，宁可多投也不漏
         if "*" not in evts and evt["type"] not in evts:
             continue
         try:
@@ -217,7 +239,14 @@ def _dispatcher_loop():
             if _dispatch_q:
                 evt = _dispatch_q.popleft()
         if evt:
-            _dispatch_async(evt)
+            # 单条事件派发失败绝不能杀掉派发线程：线程死后 _dispatcher_running
+            # 仍为 True、_dispatcher_thread 非空，start_dispatcher 又是幂等的，
+            # 于是"永远不再派发"且无法自愈。
+            try:
+                _dispatch_async(evt)
+            except Exception:
+                import logging as _logging
+                _logging.getLogger(__name__).exception("webhook 派发单条异常（已继续）")
 
 
 def start_dispatcher():

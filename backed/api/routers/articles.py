@@ -13,6 +13,34 @@ router = APIRouter()
 
 # ---- 入参模型 ----
 
+# 输入上限：不是业务规则，是"别让坏数据把 UI 和平台发布搞崩"的护栏。
+# 实测过：10 万字标题、含 NUL 的标题、纯空格标题都能直接入库，
+# 前端渲染卡死、平台侧提交被拒，而用户完全不知道是哪个字段的问题。
+MAX_TITLE_CHARS = 300
+MAX_SUMMARY_CHARS = 2000
+MAX_TAGS_CHARS = 2000
+MAX_CONTENT_BYTES = 2 * 1024 * 1024
+
+
+def _clean_text(value, field, max_chars=None, required=False):
+    """去首尾空白 + 拒绝控制字符 + 长度上限。返回清洗后的值。"""
+    if value is None:
+        value = ""
+    if not isinstance(value, str):
+        value = str(value)
+    # NUL 与其它 C0 控制字符（制表/换行/回车除外）：会破坏 JSON、日志与平台提交
+    allowed_controls = {chr(9), chr(10), chr(13)}
+    bad = [c for c in value if ord(c) < 32 and c not in allowed_controls]
+    if bad:
+        raise HTTPException(422, f"{field} 含非法控制字符（如 \\x00）")
+    value = value.strip()
+    if required and not value:
+        raise HTTPException(422, f"{field} 不能为空")
+    if max_chars is not None and len(value) > max_chars:
+        raise HTTPException(422, f"{field} 过长（{len(value)} > {max_chars} 字）")
+    return value
+
+
 class ArticleIn(BaseModel):
     title: str
     content_md: str = ""
@@ -99,7 +127,14 @@ def _emit_article_event(event_type: str, aid: int, **extra):
 
 @router.post("/articles")
 def create_article(a: ArticleIn):
-    aid = get_hub().create(**a.model_dump())
+    data = a.model_dump()
+    data["title"] = _clean_text(data.get("title"), "标题", MAX_TITLE_CHARS, required=True)
+    data["summary"] = _clean_text(data.get("summary"), "摘要", MAX_SUMMARY_CHARS)
+    data["tags"] = _clean_text(data.get("tags"), "标签", MAX_TAGS_CHARS)
+    content = data.get("content_md") or ""
+    if len(content.encode("utf-8")) > MAX_CONTENT_BYTES:
+        raise HTTPException(422, f"正文超过 {MAX_CONTENT_BYTES // 1024 // 1024}MB 上限")
+    aid = get_hub().create(**data)
     _emit_article_event("article.created", aid, title=a.title)
     return {"id": aid}
 
@@ -115,6 +150,17 @@ def get_article(aid: int):
 @router.put("/articles/{aid}")
 def update_article(aid: int, patch: ArticlePatch):
     data = {k: v for k, v in patch.model_dump().items() if v is not None}
+    # 更新同样要校验：否则"先建合法文章、再 PUT 成 10 万字标题"绕过创建时的检查
+    if "title" in data:
+        data["title"] = _clean_text(data["title"], "标题", MAX_TITLE_CHARS, required=True)
+    if "summary" in data:
+        data["summary"] = _clean_text(data["summary"], "摘要", MAX_SUMMARY_CHARS)
+    if "tags" in data:
+        data["tags"] = _clean_text(data["tags"], "标签", MAX_TAGS_CHARS)
+    if "content_md" in data:
+        raw = data["content_md"] or ""
+        if len(raw.encode("utf-8")) > MAX_CONTENT_BYTES:
+            raise HTTPException(422, f"正文超过 {MAX_CONTENT_BYTES // 1024 // 1024}MB 上限")
     ok, pending = get_hub().edit(aid, **data)
     if ok:
         # 带 pending_sync 一起走事件：多端同时开着时，"哪里还没同步"能立刻更新，
