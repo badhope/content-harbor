@@ -42,7 +42,7 @@
           @keydown.enter.prevent="$emit('open', a.id)"
           @keydown.space.prevent="$emit('open', a.id)"
         >
-          <div class="t">{{ a.title }}</div>
+          <div class="t" :title="a.title">{{ a.title }}</div>
           <div class="m">
             <el-tag size="small" :type="tagType(a.status)" effect="dark">{{ statusText(a.status) }}</el-tag>
             <el-tag v-if="a.source === 'ai'" size="small" type="primary" effect="plain">AI</el-tag>
@@ -161,6 +161,15 @@ const fmt = (ts) => fmtShort(ts)
 </script>
 
 <style scoped>
+/* 标题截断：.t 此前没有任何样式，10 万字标题会把列表项撑到不可用
+   （实测后端已限制 300 字，但历史数据与导入内容仍可能超长）。
+   单行省略 + title 属性保留完整文本供悬停查看。 */
+.t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
 .filter-bar {
   display: flex;
   flex-direction: column;

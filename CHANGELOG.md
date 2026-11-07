@@ -2,6 +2,72 @@
 
 ---
 
+## [0.14.2] - 2026-11-07（深挖修复：任务状态机假成功 + 部署链路）
+
+独立代码审计 + 黑盒验证驱动，每条先复现再改。
+
+### Fixed — Critical
+
+- **发布失败被判成功。** `publish`/`update` 返回 `results` 列表（每项带 `ok`），
+  而 `TaskManager` 只认 `(False, msg)` 二元组，列表直接落进"完成"分支。于是
+  「所有平台都未登录失败」也标 `ok` 并发 `publish.ok` 事件——前端与 webhook
+  都看到假成功，平台侧什么都没有。
+- **worker 线程无异常兜底。** `_loop` 里一次意外的 `SQLITE_BUSY`／磁盘满就
+  永久打死唯一消费者，之后所有任务停在 `pending` 且无健康检查。
+- **重启不回收 `running`。** 进程被 kill 后任务永远卡在 `running`，既不重试
+  也不清理。`TaskManager` 构造时把残留 `running` 放回 `pending`。
+
+### Fixed — Major
+
+- **`prune_tasks` 吞掉积压任务。** 旧过滤条件 `status != 'waiting_human'` 会把
+  积压的 `pending` 一起删——超过 200 条时排在后面的待执行任务静默消失。
+- **浏览器池 LRU 关掉正在用的实例。** 淘汰时不检查 `_busy` 占用，并发超过
+  `POOL_MAX` 个平台必然误杀，对方正在跑的发布直接 `Target closed`。
+- **webhook store 独立连接争抢写锁。** `busy_timeout` 只有 5s（主库 30s），
+  且每次 CRUD 新建连接，并发时直接 `database is locked`。
+- **调度表达式不校验。** `not a cron`／`99 99 99 99 99`／空串全部 200 创建，
+  任务被兜底静默排到 24 小时后，用户永远等不到也看不到错误。
+- **输入校验缺失。** 空标题、纯空格标题、10 万字标题、含 NUL 的标题全部
+  入库；后果是前端渲染卡死、平台侧提交被拒。
+- **事件派发线程可被一条坏数据打死。** `json.loads(events)` 在 try 之外。
+  同时派发队列无界，webhook 挂掉时事件堆在内存会 OOM。
+- **版本历史无限增长。** `prune_versions` 只有测试在调，实测连续编辑 40 次
+  留下 40 个完整正文副本。
+- **媒体库只进不出。** 删文章后配图永久占盘且无入口清理。新增孤儿扫描／清理
+  与「媒体库」设置面板。
+
+### Added — Desktop
+
+- **Tauri 桌面版真正跑通（Windows 实测）。** `tauri build --no-bundle` 编译
+  成功；首次运行报 `os error 3`——代码手写
+  `resource_dir()/binaries/<triple>.exe`，而 Tauri 2 实际把 externalBin 放在
+  主程序同级并去掉 triple 后缀。改为按主程序目录解析。
+- 新增 `scripts/stage_sidecar.py`：把 PyInstaller 产物按 Tauri 要求命名后
+  拷到 `binaries/`。缺这步 `tauri build` 直接报 binary not found。
+- 实测链路：`harbor.exe` → sidecar 自动拉起 → 绑定回环端口 →
+  `/api/v1/hub/health` 返回 ok → 数据目录建在 `%APPDATA%`。
+
+### Fixed — Deployment
+
+- **nginx `client_max_body_size 10M` < 后端 15MB 上限**：传 12MB 图先被 nginx
+  413，错误页与后端提示不一致。
+- **HSTS 无条件下发**：默认监听 80，无条件 HSTS 会让浏览器一年内无法降级。
+- **静态资源 location 覆盖安全头**（nginx `add_header` 不继承）：js/css/png
+  裸奔。
+
+### Changed
+
+- 前端文章列表标题加单行省略（此前无样式，超长标题撑破布局）。
+
+### Verification
+
+- 后端 651 passed、前端 77 passed、ruff 0 错、八道 exit=0
+- 新装端到端 17/17（含本轮所有修复点的正反断言）
+- exe 重建后 7/7（输入校验／SSRF／调度／安全头／错误不泄漏）
+- Tauri：编译 + 启动 + sidecar 健康，Windows 实测
+
+---
+
 ## [0.14.1] - 2026-11-07（安全审计：8 项真实漏洞修复）
 
 用 43 项黑盒攻击（真实 HTTP，非读代码推断）驱动的一轮安全收口。
